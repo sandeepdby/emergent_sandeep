@@ -252,7 +252,7 @@ const EndorsementsPage = () => {
                   <SelectValue placeholder="All Relationships" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Relationships</SelectItem>
+                  <SelectItem value="all">All Relationships</SelectItem>
                   <SelectItem value="Employee">Employee</SelectItem>
                   <SelectItem value="Spouse">Spouse</SelectItem>
                   <SelectItem value="Kids">Kids</SelectItem>
