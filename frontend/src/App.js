@@ -183,14 +183,6 @@ const LoginRegisterPage = ({ onLogin }) => {
             Create New Account
           </button>
         </div>
-        
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-center text-gray-500 mb-2">Demo Credentials:</p>
-          <div className="text-xs text-gray-600 space-y-1">
-            <p><strong>HR:</strong> hr@test.com / password123</p>
-            <p><strong>Admin:</strong> admin@test.com / password123</p>
-          </div>
-        </div>
       </div>
     </div>
   );
