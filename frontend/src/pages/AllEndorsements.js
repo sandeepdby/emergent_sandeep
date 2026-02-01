@@ -146,7 +146,10 @@ const EndorsementsPage = () => {
       return;
     }
     try {
-      await axios.delete(`${API}/endorsements/${endorsementId}`);
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API}/endorsements/${endorsementId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       toast.success("Endorsement deleted successfully");
       fetchEndorsements();
       fetchStats();
