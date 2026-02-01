@@ -53,8 +53,8 @@ const EndorsementsPage = () => {
       setLoading(true);
       let url = `${API}/endorsements`;
       const params = new URLSearchParams();
-      if (filters.policy_number) params.append("policy_number", filters.policy_number);
-      if (filters.relationship_type) params.append("relationship_type", filters.relationship_type);
+      if (filters.policy_number && filters.policy_number !== "all") params.append("policy_number", filters.policy_number);
+      if (filters.relationship_type && filters.relationship_type !== "all") params.append("relationship_type", filters.relationship_type);
       
       if (params.toString()) {
         url += `?${params.toString()}`;
