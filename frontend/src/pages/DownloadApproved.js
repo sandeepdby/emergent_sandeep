@@ -1,6 +1,6 @@
 import React from "react";
 import axios from "axios";
-import { API } from "../App";
+import { API } from "../auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
