@@ -736,7 +736,7 @@ async def download_approved_endorsements(
     policy_number: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Download approved endorsements as Excel file"""
+    """Download approved endorsements as Excel file with complete details"""
     query = {"status": EndorsementStatus.APPROVED.value}
     if policy_number:
         query["policy_number"] = policy_number
@@ -746,15 +746,39 @@ async def download_approved_endorsements(
     if not endorsements:
         raise HTTPException(status_code=404, detail="No approved endorsements found")
     
-    df = pd.DataFrame(endorsements)
+    # Get all unique policy IDs
+    policy_ids = list(set([e['policy_id'] for e in endorsements]))
     
-    columns = [
-        'policy_number', 'member_name', 'relationship_type', 'endorsement_type',
-        'endorsement_date', 'effective_date', 'days_from_inception', 
-        'days_in_policy_year', 'remaining_days', 'prorata_premium', 
-        'status', 'approval_date', 'remarks'
-    ]
-    df = df[[col for col in columns if col in df.columns]]
+    # Fetch all relevant policies
+    policies = await db.policies.find({"id": {"$in": policy_ids}}, {"_id": 0}).to_list(1000)
+    policy_map = {p['id']: p for p in policies}
+    
+    # Enrich endorsements with policy data
+    enriched_data = []
+    for e in endorsements:
+        policy = policy_map.get(e['policy_id'], {})
+        enriched_data.append({
+            'Policy Number': e.get('policy_number', ''),
+            'Policy Holder': policy.get('policy_holder_name', ''),
+            'Policy Inception Date': policy.get('inception_date', ''),
+            'Policy Expiry Date': policy.get('expiry_date', ''),
+            'Annual Premium Per Life': policy.get('annual_premium_per_life', 0),
+            'Member Name': e.get('member_name', ''),
+            'Relationship Type': e.get('relationship_type', ''),
+            'Endorsement Type': e.get('endorsement_type', ''),
+            'Endorsement Date': e.get('endorsement_date', ''),
+            'Effective Date': e.get('effective_date', ''),
+            'Days from Inception': e.get('days_from_inception', 0),
+            'Days in Policy Year': e.get('days_in_policy_year', 0),
+            'Remaining Days': e.get('remaining_days', 0),
+            'Pro-rata Premium': e.get('prorata_premium', 0),
+            'Status': e.get('status', ''),
+            'Approval Date': e.get('approval_date', ''),
+            'Approved By': e.get('approved_by', ''),
+            'Remarks': e.get('remarks', '')
+        })
+    
+    df = pd.DataFrame(enriched_data)
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
