@@ -125,7 +125,10 @@ const EndorsementsPage = () => {
           endorsement_date: formData.endorsement_date,
           effective_date: formData.effective_date || formData.endorsement_date,
         };
-        await axios.put(`${API}/endorsements/${editingEndorsement.id}`, updateData);
+        const token = localStorage.getItem('token');
+        await axios.put(`${API}/endorsements/${editingEndorsement.id}`, updateData, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         toast.success("Endorsement updated successfully");
       }
       setIsDialogOpen(false);
