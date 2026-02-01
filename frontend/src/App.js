@@ -2,15 +2,17 @@ import React, { useState, useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import LoginPage from "./pages/LoginPage";
-import HRDashboard from "./pages/HRDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-// Auth Context
+// Auth Context - must be defined before importing other components
 export const AuthContext = React.createContext(null);
+
+// Import pages after AuthContext is defined
+import LoginPage from "./pages/LoginPage";
+import HRDashboard from "./pages/HRDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   const [user, setUser] = useState(null);
