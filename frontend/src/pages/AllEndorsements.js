@@ -54,6 +54,7 @@ const EndorsementsPage = () => {
   const fetchEndorsements = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem('token');
       let url = `${API}/endorsements`;
       const params = new URLSearchParams();
       if (filters.policy_number && filters.policy_number !== "all") params.append("policy_number", filters.policy_number);
@@ -63,7 +64,9 @@ const EndorsementsPage = () => {
         url += `?${params.toString()}`;
       }
       
-      const response = await axios.get(url);
+      const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setEndorsements(response.data);
     } catch (error) {
       console.error("Error fetching endorsements:", error);
