@@ -1,16 +1,13 @@
-import React, { useState, useEffect, createContext } from "react";
+import React, { useState, useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthContext, API } from "./auth";
 import LoginPage from "./pages/LoginPage";
 import HRDashboard from "./pages/HRDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
-
-// Create Auth Context
-export const AuthContext = createContext(null);
+export { API, AuthContext };
 
 function App() {
   const [user, setUser] = useState(null);
