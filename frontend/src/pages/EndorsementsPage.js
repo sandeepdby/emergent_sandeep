@@ -88,7 +88,7 @@ const EndorsementsPage = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ policy_number: "", relationship_type: "" });
+    setFilters({ policy_number: "all", relationship_type: "all" });
     setTimeout(() => fetchEndorsements(), 100);
   };
 
