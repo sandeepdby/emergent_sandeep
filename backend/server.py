@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import StreamingResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,6 +14,8 @@ from datetime import datetime, timezone, date
 import pandas as pd
 import io
 from enum import Enum
+import jwt
+from passlib.context import CryptContext
 
 
 ROOT_DIR = Path(__file__).parent
@@ -23,14 +26,23 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
-app = FastAPI()
+# JWT and Password settings
+SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
 
-# Create a router with the /api prefix
+# Create the main app
+app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
 
 # Enums
+class UserRole(str, Enum):
+    HR = "HR"
+    ADMIN = "Admin"
+
+
 class RelationshipType(str, Enum):
     EMPLOYEE = "Employee"
     SPOUSE = "Spouse"
@@ -42,7 +54,13 @@ class RelationshipType(str, Enum):
 class EndorsementType(str, Enum):
     ADDITION = "Addition"
     DELETION = "Deletion"
-    MODIFICATION = "Modification"
+    CORRECTION = "Correction"
+
+
+class EndorsementStatus(str, Enum):
+    PENDING = "Pending"
+    APPROVED = "Approved"
+    REJECTED = "Rejected"
 
 
 class PolicyStatus(str, Enum):
@@ -51,12 +69,37 @@ class PolicyStatus(str, Enum):
     CANCELLED = "Cancelled"
 
 
+# Authentication Models
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    role: UserRole
+    full_name: str
+    email: str
+
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    username: str
+    full_name: str
+    email: str
+    role: UserRole
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 # Policy Models
 class PolicyCreate(BaseModel):
     policy_number: str
     policy_holder_name: str
-    inception_date: str  # Format: YYYY-MM-DD
-    expiry_date: str  # Format: YYYY-MM-DD
+    inception_date: str
+    expiry_date: str
     annual_premium_per_life: float
     total_lives_covered: int = 0
     status: PolicyStatus = PolicyStatus.ACTIVE
@@ -82,8 +125,9 @@ class EndorsementCreate(BaseModel):
     member_name: str
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
-    endorsement_date: str  # Format: YYYY-MM-DD
-    effective_date: Optional[str] = None  # Format: YYYY-MM-DD, defaults to endorsement_date
+    endorsement_date: str
+    effective_date: Optional[str] = None
+    remarks: Optional[str] = None
 
 
 class Endorsement(BaseModel):
@@ -101,6 +145,11 @@ class Endorsement(BaseModel):
     days_in_policy_year: int
     remaining_days: int
     prorata_premium: float
+    status: EndorsementStatus = EndorsementStatus.PENDING
+    submitted_by: str  # user_id
+    approved_by: Optional[str] = None
+    approval_date: Optional[str] = None
+    remarks: Optional[str] = None
     import_batch_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -111,6 +160,12 @@ class EndorsementUpdate(BaseModel):
     endorsement_type: Optional[EndorsementType] = None
     endorsement_date: Optional[str] = None
     effective_date: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class EndorsementApproval(BaseModel):
+    status: EndorsementStatus
+    remarks: Optional[str] = None
 
 
 class ImportResult(BaseModel):
@@ -122,27 +177,59 @@ class ImportResult(BaseModel):
 
 
 # Helper Functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def decode_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except:
+        return None
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+    
+    user_id = payload.get("user_id")
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    if isinstance(user.get('created_at'), str):
+        user['created_at'] = datetime.fromisoformat(user['created_at'])
+    
+    return User(**user)
+
+
 def calculate_prorata_premium(
     inception_date_str: str,
     expiry_date_str: str,
     endorsement_date_str: str,
     annual_premium: float
 ) -> tuple:
-    """
-    Calculate pro-rata premium based on policy dates and endorsement date
-    Returns: (days_from_inception, days_in_policy_year, remaining_days, prorata_premium)
-    """
     try:
         inception_date = datetime.strptime(inception_date_str, "%Y-%m-%d").date()
         expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
         endorsement_date = datetime.strptime(endorsement_date_str, "%Y-%m-%d").date()
         
-        # Calculate days
         days_in_policy_year = (expiry_date - inception_date).days
         days_from_inception = (endorsement_date - inception_date).days
         remaining_days = (expiry_date - endorsement_date).days
         
-        # Pro-rata calculation
         if days_in_policy_year > 0 and remaining_days >= 0:
             prorata_premium = (annual_premium * remaining_days) / days_in_policy_year
         else:
@@ -155,16 +242,10 @@ def calculate_prorata_premium(
 
 
 def parse_date(date_str: str) -> str:
-    """
-    Parse date from various formats and return YYYY-MM-DD
-    Supports: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD
-    """
     if pd.isna(date_str):
         return None
     
     date_str = str(date_str).strip()
-    
-    # Try different formats
     formats = ["%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%Y/%m/%d", "%d.%m.%Y"]
     
     for fmt in formats:
@@ -174,7 +255,6 @@ def parse_date(date_str: str) -> str:
         except ValueError:
             continue
     
-    # Try pandas to_datetime as fallback
     try:
         parsed_date = pd.to_datetime(date_str)
         return parsed_date.strftime("%Y-%m-%d")
@@ -186,15 +266,72 @@ def parse_date(date_str: str) -> str:
 
 @api_router.get("/")
 async def root():
-    return {"message": "InsureHub - Endorsement Management System"}
+    return {"message": "InsureHub - Endorsement Portal with Approval Workflow"}
+
+
+# ==================== AUTHENTICATION ENDPOINTS ====================
+
+@api_router.post("/auth/register")
+async def register_user(user_data: UserCreate):
+    """Register a new user (HR or Admin)"""
+    existing = await db.users.find_one({"username": user_data.username}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    user = User(
+        username=user_data.username,
+        full_name=user_data.full_name,
+        email=user_data.email,
+        role=user_data.role
+    )
+    
+    doc = user.model_dump()
+    doc['password_hash'] = get_password_hash(user_data.password)
+    doc['created_at'] = doc['created_at'].isoformat()
+    
+    await db.users.insert_one(doc)
+    return {"message": "User registered successfully", "user": user}
+
+
+@api_router.post("/auth/login")
+async def login(credentials: UserLogin):
+    """Login and get access token"""
+    user = await db.users.find_one({"username": credentials.username}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if not verify_password(credentials.password, user['password_hash']):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    token = create_access_token({"user_id": user['id'], "role": user['role']})
+    
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": user['id'],
+            "username": user['username'],
+            "full_name": user['full_name'],
+            "email": user['email'],
+            "role": user['role']
+        }
+    }
+
+
+@api_router.get("/auth/me", response_model=User)
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
+    """Get current logged-in user info"""
+    return current_user
 
 
 # ==================== POLICY ENDPOINTS ====================
 
 @api_router.post("/policies", response_model=Policy)
-async def create_policy(policy_data: PolicyCreate):
-    """Create a new insurance policy"""
-    # Check if policy number already exists
+async def create_policy(policy_data: PolicyCreate, current_user: User = Depends(get_current_user)):
+    """Create a new insurance policy (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can create policies")
+    
     existing = await db.policies.find_one({"policy_number": policy_data.policy_number}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Policy number already exists")
@@ -208,7 +345,7 @@ async def create_policy(policy_data: PolicyCreate):
 
 
 @api_router.get("/policies", response_model=List[Policy])
-async def get_policies():
+async def get_policies(current_user: User = Depends(get_current_user)):
     """Get all policies"""
     policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
     
@@ -220,7 +357,7 @@ async def get_policies():
 
 
 @api_router.get("/policies/{policy_id}", response_model=Policy)
-async def get_policy(policy_id: str):
+async def get_policy(policy_id: str, current_user: User = Depends(get_current_user)):
     """Get a specific policy by ID"""
     policy = await db.policies.find_one({"id": policy_id}, {"_id": 0})
     if not policy:
@@ -233,8 +370,11 @@ async def get_policy(policy_id: str):
 
 
 @api_router.put("/policies/{policy_id}", response_model=Policy)
-async def update_policy(policy_id: str, policy_data: PolicyCreate):
-    """Update a policy"""
+async def update_policy(policy_id: str, policy_data: PolicyCreate, current_user: User = Depends(get_current_user)):
+    """Update a policy (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can update policies")
+    
     existing = await db.policies.find_one({"id": policy_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Policy not found")
@@ -250,14 +390,14 @@ async def update_policy(policy_id: str, policy_data: PolicyCreate):
 
 
 @api_router.delete("/policies/{policy_id}")
-async def delete_policy(policy_id: str):
-    """Delete a policy"""
+async def delete_policy(policy_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a policy (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete policies")
+    
     result = await db.policies.delete_one({"id": policy_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Policy not found")
-    
-    # Also delete all endorsements for this policy
-    await db.endorsements.delete_many({"policy_id": policy_id})
     
     return {"message": "Policy deleted successfully"}
 
@@ -265,17 +405,14 @@ async def delete_policy(policy_id: str):
 # ==================== ENDORSEMENT ENDPOINTS ====================
 
 @api_router.post("/endorsements", response_model=Endorsement)
-async def create_endorsement(endorsement_data: EndorsementCreate):
-    """Create a new endorsement"""
-    # Find policy
+async def create_endorsement(endorsement_data: EndorsementCreate, current_user: User = Depends(get_current_user)):
+    """Create a new endorsement (HR can submit, goes to Pending status)"""
     policy = await db.policies.find_one({"policy_number": endorsement_data.policy_number}, {"_id": 0})
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {endorsement_data.policy_number} not found")
     
-    # Default effective date to endorsement date if not provided
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
-    # Calculate pro-rata premium
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
         policy['expiry_date'],
@@ -294,25 +431,16 @@ async def create_endorsement(endorsement_data: EndorsementCreate):
         days_from_inception=days_from_inception,
         days_in_policy_year=days_in_policy_year,
         remaining_days=remaining_days,
-        prorata_premium=prorata_premium
+        prorata_premium=prorata_premium,
+        status=EndorsementStatus.PENDING,
+        submitted_by=current_user.id,
+        remarks=endorsement_data.remarks
     )
     
     doc = endorsement.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.endorsements.insert_one(doc)
-    
-    # Update policy total lives covered
-    if endorsement_data.endorsement_type == EndorsementType.ADDITION:
-        await db.policies.update_one(
-            {"id": policy['id']},
-            {"$inc": {"total_lives_covered": 1}}
-        )
-    elif endorsement_data.endorsement_type == EndorsementType.DELETION:
-        await db.policies.update_one(
-            {"id": policy['id']},
-            {"$inc": {"total_lives_covered": -1}}
-        )
     
     return endorsement
 
@@ -321,16 +449,22 @@ async def create_endorsement(endorsement_data: EndorsementCreate):
 async def get_endorsements(
     policy_number: Optional[str] = None,
     relationship_type: Optional[RelationshipType] = None,
-    import_batch_id: Optional[str] = None
+    status: Optional[EndorsementStatus] = None,
+    current_user: User = Depends(get_current_user)
 ):
     """Get all endorsements with optional filters"""
     query = {}
+    
+    # HR users can only see their own submissions
+    if current_user.role == UserRole.HR:
+        query["submitted_by"] = current_user.id
+    
     if policy_number:
         query["policy_number"] = policy_number
     if relationship_type:
         query["relationship_type"] = relationship_type
-    if import_batch_id:
-        query["import_batch_id"] = import_batch_id
+    if status:
+        query["status"] = status
     
     endorsements = await db.endorsements.find(query, {"_id": 0}).to_list(10000)
     
@@ -342,7 +476,7 @@ async def get_endorsements(
 
 
 @api_router.get("/endorsements/{endorsement_id}", response_model=Endorsement)
-async def get_endorsement(endorsement_id: str):
+async def get_endorsement(endorsement_id: str, current_user: User = Depends(get_current_user)):
     """Get a specific endorsement by ID"""
     endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if not endorsement:
@@ -355,21 +489,24 @@ async def get_endorsement(endorsement_id: str):
 
 
 @api_router.put("/endorsements/{endorsement_id}", response_model=Endorsement)
-async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate):
-    """Update an endorsement"""
+async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate, current_user: User = Depends(get_current_user)):
+    """Update an endorsement (only if Pending status)"""
     existing = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Endorsement not found")
     
-    # Get policy for recalculation
+    # HR can only edit their own pending endorsements
+    if current_user.role == UserRole.HR:
+        if existing['submitted_by'] != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only edit your own endorsements")
+        if existing['status'] != EndorsementStatus.PENDING.value:
+            raise HTTPException(status_code=403, detail="You can only edit pending endorsements")
+    
     policy = await db.policies.find_one({"id": existing['policy_id']}, {"_id": 0})
     
-    # Prepare update
     update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
     
-    # Recalculate if dates changed
     endorsement_date = update_dict.get('endorsement_date', existing['endorsement_date'])
-    effective_date = update_dict.get('effective_date', existing['effective_date'])
     
     if 'endorsement_date' in update_dict:
         days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
@@ -394,49 +531,89 @@ async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate
 
 
 @api_router.delete("/endorsements/{endorsement_id}")
-async def delete_endorsement(endorsement_id: str):
+async def delete_endorsement(endorsement_id: str, current_user: User = Depends(get_current_user)):
     """Delete an endorsement"""
     endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if not endorsement:
         raise HTTPException(status_code=404, detail="Endorsement not found")
     
+    # HR can only delete their own pending endorsements
+    if current_user.role == UserRole.HR:
+        if endorsement['submitted_by'] != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only delete your own endorsements")
+        if endorsement['status'] != EndorsementStatus.PENDING.value:
+            raise HTTPException(status_code=403, detail="You can only delete pending endorsements")
+    
     result = await db.endorsements.delete_one({"id": endorsement_id})
     
-    # Update policy total lives covered
-    if endorsement['endorsement_type'] == EndorsementType.ADDITION.value:
-        await db.policies.update_one(
-            {"id": endorsement['policy_id']},
-            {"$inc": {"total_lives_covered": -1}}
-        )
-    elif endorsement['endorsement_type'] == EndorsementType.DELETION.value:
-        await db.policies.update_one(
-            {"id": endorsement['policy_id']},
-            {"$inc": {"total_lives_covered": 1}}
-        )
-    
     return {"message": "Endorsement deleted successfully"}
+
+
+@api_router.post("/endorsements/{endorsement_id}/approve", response_model=Endorsement)
+async def approve_reject_endorsement(
+    endorsement_id: str, 
+    approval: EndorsementApproval, 
+    current_user: User = Depends(get_current_user)
+):
+    """Approve or reject an endorsement (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can approve/reject endorsements")
+    
+    endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
+    if not endorsement:
+        raise HTTPException(status_code=404, detail="Endorsement not found")
+    
+    if endorsement['status'] != EndorsementStatus.PENDING.value:
+        raise HTTPException(status_code=400, detail="Endorsement is already processed")
+    
+    update_data = {
+        "status": approval.status.value,
+        "approved_by": current_user.id,
+        "approval_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    }
+    
+    if approval.remarks:
+        update_data["remarks"] = approval.remarks
+    
+    await db.endorsements.update_one({"id": endorsement_id}, {"$set": update_data})
+    
+    # Update policy lives covered if approved
+    if approval.status == EndorsementStatus.APPROVED:
+        if endorsement['endorsement_type'] == EndorsementType.ADDITION.value:
+            await db.policies.update_one(
+                {"id": endorsement['policy_id']},
+                {"$inc": {"total_lives_covered": 1}}
+            )
+        elif endorsement['endorsement_type'] == EndorsementType.DELETION.value:
+            await db.policies.update_one(
+                {"id": endorsement['policy_id']},
+                {"$inc": {"total_lives_covered": -1}}
+            )
+    
+    updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
+    if isinstance(updated_endorsement['created_at'], str):
+        updated_endorsement['created_at'] = datetime.fromisoformat(updated_endorsement['created_at'])
+    
+    return updated_endorsement
 
 
 # ==================== EXCEL IMPORT ENDPOINTS ====================
 
 @api_router.post("/endorsements/import", response_model=ImportResult)
-async def import_endorsements_from_excel(file: UploadFile = File(...)):
-    """
-    Import endorsements from Excel file
-    Expected columns: Policy Number, Member Name, Relationship Type, Endorsement Type, Endorsement Date, Effective Date
-    """
+async def import_endorsements_from_excel(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Import endorsements from Excel file"""
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported")
     
     try:
-        # Read Excel file
         contents = await file.read()
         df = pd.read_excel(io.BytesIO(contents))
         
-        # Normalize column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
-        # Validate required columns
         required_columns = ['policy_number', 'member_name', 'relationship_type', 'endorsement_type', 'endorsement_date']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
@@ -445,57 +622,49 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
                 detail=f"Missing required columns: {', '.join(missing_columns)}"
             )
         
-        # Generate batch ID
         import_batch_id = str(uuid.uuid4())
         
-        # Process rows
         success_count = 0
         error_count = 0
         errors = []
         
         for index, row in df.iterrows():
             try:
-                # Parse policy number
                 policy_number = str(row['policy_number']).strip()
                 
-                # Find policy
                 policy = await db.policies.find_one({"policy_number": policy_number}, {"_id": 0})
                 if not policy:
                     errors.append({
-                        "row": index + 2,  # +2 for header and 0-index
+                        "row": index + 2,
                         "error": f"Policy {policy_number} not found"
                     })
                     error_count += 1
                     continue
                 
-                # Parse member name
                 member_name = str(row['member_name']).strip()
                 
-                # Parse relationship type
                 relationship_str = str(row['relationship_type']).strip()
                 try:
                     relationship_type = RelationshipType(relationship_str)
                 except ValueError:
                     errors.append({
                         "row": index + 2,
-                        "error": f"Invalid relationship type: {relationship_str}. Must be one of: Employee, Spouse, Kids, Mother, Father"
+                        "error": f"Invalid relationship type: {relationship_str}"
                     })
                     error_count += 1
                     continue
                 
-                # Parse endorsement type
                 endorsement_type_str = str(row['endorsement_type']).strip()
                 try:
                     endorsement_type = EndorsementType(endorsement_type_str)
                 except ValueError:
                     errors.append({
                         "row": index + 2,
-                        "error": f"Invalid endorsement type: {endorsement_type_str}. Must be one of: Addition, Deletion, Modification"
+                        "error": f"Invalid endorsement type: {endorsement_type_str}"
                     })
                     error_count += 1
                     continue
                 
-                # Parse endorsement date
                 endorsement_date = parse_date(row['endorsement_date'])
                 if not endorsement_date:
                     errors.append({
@@ -505,14 +674,12 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
                     error_count += 1
                     continue
                 
-                # Parse effective date (optional)
-                effective_date = endorsement_date  # Default to endorsement date
+                effective_date = endorsement_date
                 if 'effective_date' in df.columns and pd.notna(row['effective_date']):
                     parsed_effective = parse_date(row['effective_date'])
                     if parsed_effective:
                         effective_date = parsed_effective
                 
-                # Calculate pro-rata premium
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
                     policy['inception_date'],
                     policy['expiry_date'],
@@ -520,7 +687,6 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
                     policy['annual_premium_per_life']
                 )
                 
-                # Create endorsement
                 endorsement = Endorsement(
                     policy_id=policy['id'],
                     policy_number=policy_number,
@@ -533,6 +699,8 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
                     days_in_policy_year=days_in_policy_year,
                     remaining_days=remaining_days,
                     prorata_premium=prorata_premium,
+                    status=EndorsementStatus.PENDING,
+                    submitted_by=current_user.id,
                     import_batch_id=import_batch_id
                 )
                 
@@ -540,18 +708,6 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
                 doc['created_at'] = doc['created_at'].isoformat()
                 
                 await db.endorsements.insert_one(doc)
-                
-                # Update policy total lives covered
-                if endorsement_type == EndorsementType.ADDITION:
-                    await db.policies.update_one(
-                        {"id": policy['id']},
-                        {"$inc": {"total_lives_covered": 1}}
-                    )
-                elif endorsement_type == EndorsementType.DELETION:
-                    await db.policies.update_one(
-                        {"id": policy['id']},
-                        {"$inc": {"total_lives_covered": -1}}
-                    )
                 
                 success_count += 1
                 
@@ -575,49 +731,61 @@ async def import_endorsements_from_excel(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
 
 
-@api_router.get("/endorsements/import/{import_batch_id}/results")
-async def download_import_results(import_batch_id: str):
-    """Download import results as Excel file"""
-    endorsements = await db.endorsements.find(
-        {"import_batch_id": import_batch_id}, 
-        {"_id": 0}
-    ).to_list(10000)
+@api_router.get("/endorsements/download/approved")
+async def download_approved_endorsements(
+    policy_number: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Download approved endorsements as Excel file"""
+    query = {"status": EndorsementStatus.APPROVED.value}
+    if policy_number:
+        query["policy_number"] = policy_number
+    
+    endorsements = await db.endorsements.find(query, {"_id": 0}).to_list(10000)
     
     if not endorsements:
-        raise HTTPException(status_code=404, detail="Import batch not found")
+        raise HTTPException(status_code=404, detail="No approved endorsements found")
     
-    # Convert to DataFrame
     df = pd.DataFrame(endorsements)
     
-    # Select and reorder columns
     columns = [
         'policy_number', 'member_name', 'relationship_type', 'endorsement_type',
         'endorsement_date', 'effective_date', 'days_from_inception', 
-        'days_in_policy_year', 'remaining_days', 'prorata_premium'
+        'days_in_policy_year', 'remaining_days', 'prorata_premium', 
+        'status', 'approval_date', 'remarks'
     ]
-    df = df[columns]
+    df = df[[col for col in columns if col in df.columns]]
     
-    # Create Excel file in memory
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Import Results')
+        df.to_excel(writer, index=False, sheet_name='Approved Endorsements')
     output.seek(0)
+    
+    filename = f"approved_endorsements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=import_results_{import_batch_id}.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 
 @api_router.get("/endorsements/stats/summary")
-async def get_endorsements_summary():
+async def get_endorsements_summary(current_user: User = Depends(get_current_user)):
     """Get summary statistics for endorsements"""
-    total_endorsements = await db.endorsements.count_documents({})
+    query = {}
+    if current_user.role == UserRole.HR:
+        query["submitted_by"] = current_user.id
+    
+    total_endorsements = await db.endorsements.count_documents(query)
+    pending = await db.endorsements.count_documents({**query, "status": EndorsementStatus.PENDING.value})
+    approved = await db.endorsements.count_documents({**query, "status": EndorsementStatus.APPROVED.value})
+    rejected = await db.endorsements.count_documents({**query, "status": EndorsementStatus.REJECTED.value})
+    
     total_policies = await db.policies.count_documents({})
     
-    # Count by relationship type
     pipeline = [
+        {"$match": query},
         {"$group": {
             "_id": "$relationship_type",
             "count": {"$sum": 1},
@@ -626,8 +794,8 @@ async def get_endorsements_summary():
     ]
     by_relationship = await db.endorsements.aggregate(pipeline).to_list(100)
     
-    # Count by endorsement type
     pipeline = [
+        {"$match": query},
         {"$group": {
             "_id": "$endorsement_type",
             "count": {"$sum": 1}
@@ -637,6 +805,9 @@ async def get_endorsements_summary():
     
     return {
         "total_endorsements": total_endorsements,
+        "pending": pending,
+        "approved": approved,
+        "rejected": rejected,
         "total_policies": total_policies,
         "by_relationship_type": by_relationship,
         "by_endorsement_type": by_type
