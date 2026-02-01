@@ -786,6 +786,112 @@ async def import_endorsements_from_excel(
         raise HTTPException(status_code=400, detail=f"Error processing Excel file: {str(e)}")
 
 
+@api_router.get("/endorsements/template/download")
+async def download_import_template(current_user: User = Depends(get_current_user)):
+    """Download Excel template for importing endorsements"""
+    
+    # Create sample data for template
+    template_data = [
+        {
+            'Policy Number': 'POL001',
+            'Policy Holder': 'Test Company Ltd',
+            'Policy Inception Date': '2025-01-01',
+            'Policy Expiry Date': '2025-12-31',
+            'Annual Premium Per Life': 5000,
+            'Member Name': 'John Doe',
+            'Relationship Type': 'Employee',
+            'Endorsement Type': 'Addition',
+            'Endorsement Date': '2025-02-01',
+            'Effective Date': '2025-02-01',
+            'Remarks': 'Sample endorsement - replace with actual data'
+        },
+        {
+            'Policy Number': 'POL001',
+            'Policy Holder': 'Test Company Ltd',
+            'Policy Inception Date': '2025-01-01',
+            'Policy Expiry Date': '2025-12-31',
+            'Annual Premium Per Life': 5000,
+            'Member Name': 'Jane Doe',
+            'Relationship Type': 'Spouse',
+            'Endorsement Type': 'Addition',
+            'Endorsement Date': '2025-02-01',
+            'Effective Date': '2025-02-01',
+            'Remarks': 'Spouse coverage - replace with actual data'
+        },
+        {
+            'Policy Number': 'POL001',
+            'Policy Holder': 'Test Company Ltd',
+            'Policy Inception Date': '2025-01-01',
+            'Policy Expiry Date': '2025-12-31',
+            'Annual Premium Per Life': 5000,
+            'Member Name': 'Jack Doe',
+            'Relationship Type': 'Kids',
+            'Endorsement Type': 'Addition',
+            'Endorsement Date': '2025-02-05',
+            'Effective Date': '2025-02-05',
+            'Remarks': 'Child coverage - replace with actual data'
+        }
+    ]
+    
+    df = pd.DataFrame(template_data)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Endorsement Import Template')
+        
+        # Add instructions sheet
+        instructions = pd.DataFrame({
+            'Column Name': [
+                'Policy Number',
+                'Policy Holder',
+                'Policy Inception Date',
+                'Policy Expiry Date',
+                'Annual Premium Per Life',
+                'Member Name',
+                'Relationship Type',
+                'Endorsement Type',
+                'Endorsement Date',
+                'Effective Date',
+                'Remarks'
+            ],
+            'Description': [
+                'Unique policy identifier (Required)',
+                'Company/Organization name (Required if new policy)',
+                'Policy start date in YYYY-MM-DD format (Required if new policy)',
+                'Policy end date in YYYY-MM-DD format (Required if new policy)',
+                'Annual premium amount per person (Required if new policy)',
+                'Full name of the member (Required)',
+                'Employee, Spouse, Kids, Mother, or Father (Required)',
+                'Addition, Deletion, or Correction (Required)',
+                'Date when endorsement was received (Required)',
+                'Date from which endorsement is effective (Optional)',
+                'Additional notes or comments (Optional)'
+            ],
+            'Example': [
+                'POL001',
+                'ABC Corporation',
+                '2025-01-01',
+                '2025-12-31',
+                '5000',
+                'John Doe',
+                'Employee',
+                'Addition',
+                '2025-02-01',
+                '2025-02-01',
+                'New employee addition'
+            ]
+        })
+        instructions.to_excel(writer, index=False, sheet_name='Instructions')
+    
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=endorsement_import_template.xlsx"}
+    )
+
+
 @api_router.get("/endorsements/download/approved")
 async def download_approved_endorsements(
     policy_number: Optional[str] = None,
