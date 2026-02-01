@@ -1,80 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import { FileSpreadsheet, ClipboardList, Layers } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-// Import pages
-import PoliciesPage from "./pages/PoliciesPage";
-import EndorsementsPage from "./pages/EndorsementsPage";
-import ImportPage from "./pages/ImportPage";
+import LoginPage from "./pages/LoginPage";
+import HRDashboard from "./pages/HRDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-const Navigation = () => {
-  const location = useLocation();
-  
-  const navItems = [
-    { path: "/", label: "Policies", icon: Layers },
-    { path: "/endorsements", label: "Endorsements", icon: ClipboardList },
-    { path: "/import", label: "Import Excel", icon: FileSpreadsheet },
-  ];
-
-  return (
-    <nav className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex">
-            <div className="flex-shrink-0 flex items-center">
-              <h1 className="text-2xl font-bold text-blue-600" data-testid="app-title">InsureHub</h1>
-              <span className="ml-2 text-sm text-gray-500">Aarogya Assist</span>
-            </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
-                    className={cn(
-                      "inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium",
-                      isActive
-                        ? "border-blue-500 text-gray-900"
-                        : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                    )}
-                  >
-                    <Icon className="w-4 h-4 mr-2" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
-};
+// Auth Context
+export const AuthContext = React.createContext(null);
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      setUser(JSON.parse(userData));
+    }
+    setLoading(false);
+  }, []);
+
+  const login = (token, userData) => {
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+  };
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
   return (
-    <div className="App min-h-screen bg-gray-50">
-      <BrowserRouter>
-        <Navigation />
-        <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <AuthContext.Provider value={{ user, login, logout }}>
+      <div className="App min-h-screen bg-gray-50">
+        <BrowserRouter>
           <Routes>
-            <Route path="/" element={<PoliciesPage />} />
-            <Route path="/endorsements" element={<EndorsementsPage />} />
-            <Route path="/import" element={<ImportPage />} />
+            <Route path="/login" element={!user ? <LoginPage /> : <Navigate to={user.role === 'Admin' ? '/admin' : '/hr'} />} />
+            <Route path="/hr/*" element={user && user.role === 'HR' ? <HRDashboard /> : <Navigate to="/login" />} />
+            <Route path="/admin/*" element={user && user.role === 'Admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
+            <Route path="/" element={<Navigate to={user ? (user.role === 'Admin' ? '/admin' : '/hr') : '/login'} />} />
           </Routes>
-        </div>
-      </BrowserRouter>
-      <Toaster />
-    </div>
+        </BrowserRouter>
+        <Toaster />
+      </div>
+    </AuthContext.Provider>
   );
 }
 
