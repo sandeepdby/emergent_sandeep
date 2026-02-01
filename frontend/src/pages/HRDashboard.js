@@ -2,7 +2,7 @@ import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, FileSpreadsheet, ClipboardList, Plus } from "lucide-react";
-import { AuthContext } from "../App";
+import { AuthContext } from "../auth";
 import SubmitEndorsement from "./SubmitEndorsement";
 import MyEndorsements from "./MyEndorsements";
 import ImportEndorsements from "./ImportEndorsements";
