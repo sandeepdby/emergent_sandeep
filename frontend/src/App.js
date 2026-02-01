@@ -1,14 +1,9 @@
-import React, { useState, useEffect, createContext } from "react";
+import React, { useState, useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import axios from "axios";
-
-// Create context
-export const AuthContext = createContext(null);
-
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-export const API = `${BACKEND_URL}/api`;
+import { AuthContext, API } from "./auth";
 
 // ==================== LOGIN/REGISTER COMPONENT ====================
 const LoginRegisterPage = ({ onLogin }) => {
