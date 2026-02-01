@@ -2,15 +2,16 @@ import React, { useState, useEffect, createContext } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
+import axios from "axios";
 
-// Create context here first
+// Create context
 export const AuthContext = createContext(null);
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-// Simple Login Component
-const LoginComponent = ({ onLogin }) => {
+// ==================== LOGIN/REGISTER COMPONENT ====================
+const LoginRegisterPage = ({ onLogin }) => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
@@ -22,18 +23,10 @@ const LoginComponent = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
-      });
-      
-      if (!response.ok) throw new Error('Login failed');
-      
-      const data = await response.json();
-      onLogin(data.access_token, data.user);
+      const response = await axios.post(`${API}/auth/login`, credentials);
+      onLogin(response.data.access_token, response.data.user);
     } catch (error) {
-      alert('Login failed: ' + error.message);
+      alert('Login failed: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }
@@ -43,19 +36,12 @@ const LoginComponent = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await fetch(`${API}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registerData)
-      });
-      
-      if (!response.ok) throw new Error('Registration failed');
-      
+      await axios.post(`${API}/auth/register`, registerData);
       alert('Registration successful! Please login.');
       setShowRegister(false);
       setRegisterData({ username: "", password: "", full_name: "", email: "", role: "HR" });
     } catch (error) {
-      alert('Registration failed: ' + error.message);
+      alert('Registration failed: ' + (error.response?.data?.detail || error.message));
     } finally {
       setLoading(false);
     }
@@ -73,7 +59,7 @@ const LoginComponent = ({ onLogin }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
               <input
                 type="text"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.full_name}
                 onChange={(e) => setRegisterData({...registerData, full_name: e.target.value})}
                 required
@@ -84,7 +70,7 @@ const LoginComponent = ({ onLogin }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
                 type="email"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.email}
                 onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
                 required
@@ -95,7 +81,7 @@ const LoginComponent = ({ onLogin }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
               <input
                 type="text"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.username}
                 onChange={(e) => setRegisterData({...registerData, username: e.target.value})}
                 required
@@ -106,7 +92,7 @@ const LoginComponent = ({ onLogin }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
               <input
                 type="password"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.password}
                 onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
                 required
@@ -117,7 +103,7 @@ const LoginComponent = ({ onLogin }) => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.role}
                 onChange={(e) => setRegisterData({...registerData, role: e.target.value})}
               >
@@ -165,7 +151,7 @@ const LoginComponent = ({ onLogin }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
             <input
               type="text"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your username"
               value={credentials.username}
               onChange={(e) => setCredentials({...credentials, username: e.target.value})}
@@ -177,7 +163,7 @@ const LoginComponent = ({ onLogin }) => {
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
             <input
               type="password"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Enter your password"
               value={credentials.password}
               onChange={(e) => setCredentials({...credentials, password: e.target.value})}
@@ -215,47 +201,10 @@ const LoginComponent = ({ onLogin }) => {
   );
 };
 
-// Simple Dashboard placeholder
-const Dashboard = ({ user, onLogout }) => {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-blue-600">InsureHub - {user.role} Portal</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-700">{user.full_name}</span>
-            <button
-              onClick={onLogout}
-              className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-      
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-xl font-bold mb-4">Welcome, {user.full_name}!</h2>
-          <p className="text-gray-600">Role: <strong>{user.role}</strong></p>
-          <p className="text-gray-600">Email: {user.email}</p>
-          
-          <div className="mt-6 p-4 bg-blue-50 rounded border border-blue-200">
-            <p className="text-sm text-blue-800">
-              ✅ Login system is working!<br/>
-              ✅ User registration is working!<br/>
-              ✅ Full portal features are in the code and ready.
-            </p>
-            <p className="text-sm text-blue-800 mt-2">
-              The complete HR and Admin portals with all endorsement features are implemented.
-              This is a simplified view to confirm authentication is working.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+// ==================== IMPORT ACTUAL PORTAL COMPONENTS ====================
+// These are already created in the codebase
+import HRDashboard from "./pages/HRDashboard";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -292,12 +241,15 @@ function App() {
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
-      <div className="App">
-        {!user ? (
-          <LoginComponent onLogin={login} />
-        ) : (
-          <Dashboard user={user} onLogout={logout} />
-        )}
+      <div className="App min-h-screen bg-gray-50">
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={!user ? <LoginRegisterPage onLogin={login} /> : <Navigate to={user.role === 'Admin' ? '/admin' : '/hr'} />} />
+            <Route path="/hr/*" element={user && user.role === 'HR' ? <HRDashboard /> : <Navigate to="/login" />} />
+            <Route path="/admin/*" element={user && user.role === 'Admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
+            <Route path="/" element={<Navigate to={user ? (user.role === 'Admin' ? '/admin' : '/hr') : '/login'} />} />
+          </Routes>
+        </BrowserRouter>
         <Toaster />
       </div>
     </AuthContext.Provider>
