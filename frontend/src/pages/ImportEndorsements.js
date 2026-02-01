@@ -115,23 +115,64 @@ class ImportEndorsements extends React.Component {
     }
   };
 
-  handleDownloadTemplate = () => {
-    const csvContent = "Policy Number,Policy Holder,Policy Inception Date,Policy Expiry Date,Annual Premium Per Life,Member Name,Relationship Type,Endorsement Type,Endorsement Date,Effective Date,Remarks\n" +
-      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,John Doe,Employee,Addition,2025-02-01,2025-02-01,New employee addition\n" +
-      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,Jane Doe,Spouse,Addition,2025-02-01,2025-02-01,Spouse coverage\n" +
-      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,Jack Doe,Kids,Addition,2025-02-05,2025-02-05,Child coverage";
+  handleDownloadTemplate = async () => {
+    try {
+      // Create Excel template with all fields
+      const token = localStorage.getItem('token');
+      
+      // Instead of CSV, create a proper request to backend for Excel template
+      // Or create it client-side using a library
+      
+      // For now, let's create a simple Excel-like structure
+      const templateData = [
+        {
+          'Policy Number': 'POL001',
+          'Policy Holder': 'Test Company Ltd',
+          'Policy Inception Date': '2025-01-01',
+          'Policy Expiry Date': '2025-12-31',
+          'Annual Premium Per Life': 5000,
+          'Member Name': 'John Doe',
+          'Relationship Type': 'Employee',
+          'Endorsement Type': 'Addition',
+          'Endorsement Date': '2025-02-01',
+          'Effective Date': '2025-02-01',
+          'Remarks': 'Sample endorsement'
+        },
+        {
+          'Policy Number': 'POL001',
+          'Policy Holder': 'Test Company Ltd',
+          'Policy Inception Date': '2025-01-01',
+          'Policy Expiry Date': '2025-12-31',
+          'Annual Premium Per Life': 5000,
+          'Member Name': 'Jane Doe',
+          'Relationship Type': 'Spouse',
+          'Endorsement Type': 'Addition',
+          'Endorsement Date': '2025-02-01',
+          'Effective Date': '2025-02-01',
+          'Remarks': 'Spouse coverage'
+        }
+      ];
+      
+      // Request Excel template from backend
+      const response = await axios.get(`${API}/endorsements/template/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "endorsement_import_template.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
 
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", "endorsement_import_template.csv");
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-
-    toast.success("Template downloaded successfully");
+      toast.success("Excel template downloaded successfully");
+    } catch (error) {
+      console.error("Error downloading template:", error);
+      toast.error("Failed to download template");
+    }
   };
 
   renderErrors() {
