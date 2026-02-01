@@ -132,15 +132,12 @@ const ImportPage = () => {
   };
 
   const handleDownloadTemplate = () => {
-    const template = [
-      ["Policy Number", "Member Name", "Relationship Type", "Endorsement Type", "Endorsement Date", "Effective Date"],
-      ["POL001", "John Doe", "Employee", "Addition", "2025-01-15", "2025-01-15"],
-      ["POL001", "Jane Doe", "Spouse", "Addition", "2025-01-15", "2025-01-15"],
-      ["POL001", "Jack Doe", "Kids", "Addition", "2025-01-20", "2025-01-20"],
-    ];
+    const csvContent = "Policy Number,Member Name,Relationship Type,Endorsement Type,Endorsement Date,Effective Date\n" +
+      "POL001,John Doe,Employee,Addition,2025-01-15,2025-01-15\n" +
+      "POL001,Jane Doe,Spouse,Addition,2025-01-15,2025-01-15\n" +
+      "POL001,Jack Doe,Kids,Addition,2025-01-20,2025-01-20";
 
-    let csv = template.map(row => row.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
