@@ -21,13 +21,13 @@ const Navigation = ({ onLogout, user }) => {
   return (
     <nav className="bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex">
-            <div className="flex-shrink-0 flex items-center">
+        <div className="flex justify-between items-center h-16">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
               <h1 className="text-2xl font-bold text-indigo-600">InsureHub</h1>
-              <span className="ml-2 text-sm text-gray-500">Admin Portal</span>
+              <span className="text-xs text-gray-500">Admin Portal</span>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <div className="ml-6 flex space-x-4">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -35,10 +35,10 @@ const Navigation = ({ onLogout, user }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
+                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t ${
                       isActive
-                        ? "border-indigo-500 text-gray-900"
-                        : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+                        ? "border-indigo-500 text-indigo-600 bg-indigo-50"
+                        : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
                   >
                     <Icon className="w-4 h-4 mr-2" />
