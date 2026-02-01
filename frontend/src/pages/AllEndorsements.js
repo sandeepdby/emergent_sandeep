@@ -41,7 +41,10 @@ const EndorsementsPage = () => {
 
   const fetchPolicies = async () => {
     try {
-      const response = await axios.get(`${API}/policies`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/policies`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setPolicies(response.data);
     } catch (error) {
       console.error("Error fetching policies:", error);
