@@ -116,10 +116,10 @@ class ImportEndorsements extends React.Component {
   };
 
   handleDownloadTemplate = () => {
-    const csvContent = "Policy Number,Member Name,Relationship Type,Endorsement Type,Endorsement Date,Effective Date\n" +
-      "POL001,John Doe,Employee,Addition,2025-02-01,2025-02-01\n" +
-      "POL001,Jane Doe,Spouse,Addition,2025-02-01,2025-02-01\n" +
-      "POL001,Jack Doe,Kids,Addition,2025-02-05,2025-02-05";
+    const csvContent = "Policy Number,Policy Holder,Policy Inception Date,Policy Expiry Date,Annual Premium Per Life,Member Name,Relationship Type,Endorsement Type,Endorsement Date,Effective Date,Remarks\n" +
+      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,John Doe,Employee,Addition,2025-02-01,2025-02-01,New employee addition\n" +
+      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,Jane Doe,Spouse,Addition,2025-02-01,2025-02-01,Spouse coverage\n" +
+      "POL001,Test Company Ltd,2025-01-01,2025-12-31,5000,Jack Doe,Kids,Addition,2025-02-05,2025-02-05,Child coverage";
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
