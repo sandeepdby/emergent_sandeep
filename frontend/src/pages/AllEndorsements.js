@@ -78,7 +78,10 @@ const EndorsementsPage = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get(`${API}/endorsements/stats/summary`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/endorsements/stats/summary`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setStats(response.data);
     } catch (error) {
       console.error("Error fetching stats:", error);
