@@ -233,7 +233,7 @@ const EndorsementsPage = () => {
                   <SelectValue placeholder="All Policies" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Policies</SelectItem>
+                  <SelectItem value="all">All Policies</SelectItem>
                   {policies.map((policy) => (
                     <SelectItem key={policy.id} value={policy.policy_number}>
                       {policy.policy_number} - {policy.policy_holder_name}
