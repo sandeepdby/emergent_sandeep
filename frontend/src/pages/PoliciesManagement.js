@@ -33,7 +33,10 @@ const PoliciesPage = () => {
   const fetchPolicies = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API}/policies`);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/policies`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       setPolicies(response.data);
     } catch (error) {
       console.error("Error fetching policies:", error);
@@ -46,6 +49,7 @@ const PoliciesPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('token');
       const payload = {
         ...formData,
         annual_premium_per_life: parseFloat(formData.annual_premium_per_life),
@@ -53,10 +57,14 @@ const PoliciesPage = () => {
       };
 
       if (editingPolicy) {
-        await axios.put(`${API}/policies/${editingPolicy.id}`, payload);
+        await axios.put(`${API}/policies/${editingPolicy.id}`, payload, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         toast.success("Policy updated successfully");
       } else {
-        await axios.post(`${API}/policies`, payload);
+        await axios.post(`${API}/policies`, payload, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
         toast.success("Policy created successfully");
       }
 
@@ -87,7 +95,10 @@ const PoliciesPage = () => {
       return;
     }
     try {
-      await axios.delete(`${API}/policies/${policyId}`);
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API}/policies/${policyId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       toast.success("Policy deleted successfully");
       fetchPolicies();
     } catch (error) {
