@@ -19,8 +19,8 @@ const EndorsementsPage = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingEndorsement, setEditingEndorsement] = useState(null);
   const [filters, setFilters] = useState({
-    policy_number: "",
-    relationship_type: "",
+    policy_number: "all",
+    relationship_type: "all",
   });
   const [stats, setStats] = useState(null);
 
