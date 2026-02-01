@@ -170,15 +170,23 @@ class ImportEndorsements extends React.Component {
             <Alert>
               <FileText className="h-4 w-4" />
               <div className="ml-2">
-                <h4 className="font-semibold mb-2">Excel File Format:</h4>
+                <h4 className="font-semibold mb-2">Excel File Format (All Fields):</h4>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li><strong>Policy Number</strong> - Must exist in the system</li>
+                  <li><strong>Policy Number</strong> - Unique policy identifier</li>
+                  <li><strong>Policy Holder</strong> - Company/Organization name</li>
+                  <li><strong>Policy Inception Date</strong> - Policy start date (YYYY-MM-DD)</li>
+                  <li><strong>Policy Expiry Date</strong> - Policy end date (YYYY-MM-DD)</li>
+                  <li><strong>Annual Premium Per Life</strong> - Yearly premium amount</li>
                   <li><strong>Member Name</strong> - Name of the member</li>
                   <li><strong>Relationship Type</strong> - Employee, Spouse, Kids, Mother, or Father</li>
                   <li><strong>Endorsement Type</strong> - Addition, Deletion, or Correction</li>
-                  <li><strong>Endorsement Date</strong> - Date when endorsement received (YYYY-MM-DD or DD/MM/YYYY)</li>
+                  <li><strong>Endorsement Date</strong> - When endorsement received (YYYY-MM-DD or DD/MM/YYYY)</li>
                   <li><strong>Effective Date</strong> - (Optional) Defaults to Endorsement Date</li>
+                  <li><strong>Remarks</strong> - (Optional) Additional notes</li>
                 </ul>
+                <p className="mt-2 text-xs text-blue-600">
+                  <strong>Note:</strong> If policy exists, system uses existing details. If policy doesn't exist, it will be created from the Excel data.
+                </p>
               </div>
             </Alert>
 
