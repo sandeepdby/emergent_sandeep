@@ -604,7 +604,9 @@ async def import_endorsements_from_excel(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    """Import endorsements from Excel file"""
+    """
+    Import endorsements from Excel file with complete policy and endorsement details
+    """
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported")
     
@@ -614,6 +616,7 @@ async def import_endorsements_from_excel(
         
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
+        # Required columns for endorsement
         required_columns = ['policy_number', 'member_name', 'relationship_type', 'endorsement_type', 'endorsement_date']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
@@ -632,39 +635,84 @@ async def import_endorsements_from_excel(
             try:
                 policy_number = str(row['policy_number']).strip()
                 
+                # Check if policy exists
                 policy = await db.policies.find_one({"policy_number": policy_number}, {"_id": 0})
-                if not policy:
-                    errors.append({
-                        "row": index + 2,
-                        "error": f"Policy {policy_number} not found"
-                    })
-                    error_count += 1
-                    continue
                 
+                # If policy doesn't exist and we have policy details in Excel, create it
+                if not policy:
+                    # Check if Excel has policy details
+                    has_policy_details = all([
+                        'policy_holder' in df.columns,
+                        'policy_inception_date' in df.columns,
+                        'policy_expiry_date' in df.columns,
+                        'annual_premium_per_life' in df.columns
+                    ])
+                    
+                    if has_policy_details and pd.notna(row.get('policy_holder')):
+                        # Create policy from Excel data
+                        inception_date = parse_date(row['policy_inception_date'])
+                        expiry_date = parse_date(row['policy_expiry_date'])
+                        
+                        if not inception_date or not expiry_date:
+                            errors.append({
+                                "row": index + 2,
+                                "error": f"Invalid policy dates for new policy {policy_number}"
+                            })
+                            error_count += 1
+                            continue
+                        
+                        new_policy = Policy(
+                            policy_number=policy_number,
+                            policy_holder_name=str(row['policy_holder']).strip(),
+                            inception_date=inception_date,
+                            expiry_date=expiry_date,
+                            annual_premium_per_life=float(row['annual_premium_per_life']),
+                            total_lives_covered=0,
+                            status=PolicyStatus.ACTIVE
+                        )
+                        
+                        policy_doc = new_policy.model_dump()
+                        policy_doc['created_at'] = policy_doc['created_at'].isoformat()
+                        await db.policies.insert_one(policy_doc)
+                        
+                        policy = policy_doc
+                        logging.info(f"Created new policy: {policy_number}")
+                    else:
+                        errors.append({
+                            "row": index + 2,
+                            "error": f"Policy {policy_number} not found and policy details not provided in Excel"
+                        })
+                        error_count += 1
+                        continue
+                
+                # Parse member name
                 member_name = str(row['member_name']).strip()
                 
+                # Parse relationship type
                 relationship_str = str(row['relationship_type']).strip()
                 try:
                     relationship_type = RelationshipType(relationship_str)
                 except ValueError:
                     errors.append({
                         "row": index + 2,
-                        "error": f"Invalid relationship type: {relationship_str}"
+                        "error": f"Invalid relationship type: {relationship_str}. Must be one of: Employee, Spouse, Kids, Mother, Father"
                     })
                     error_count += 1
                     continue
                 
+                # Parse endorsement type
                 endorsement_type_str = str(row['endorsement_type']).strip()
                 try:
                     endorsement_type = EndorsementType(endorsement_type_str)
                 except ValueError:
                     errors.append({
                         "row": index + 2,
-                        "error": f"Invalid endorsement type: {endorsement_type_str}"
+                        "error": f"Invalid endorsement type: {endorsement_type_str}. Must be one of: Addition, Deletion, Correction"
                     })
                     error_count += 1
                     continue
                 
+                # Parse endorsement date
                 endorsement_date = parse_date(row['endorsement_date'])
                 if not endorsement_date:
                     errors.append({
@@ -674,12 +722,17 @@ async def import_endorsements_from_excel(
                     error_count += 1
                     continue
                 
+                # Parse effective date (optional)
                 effective_date = endorsement_date
                 if 'effective_date' in df.columns and pd.notna(row['effective_date']):
                     parsed_effective = parse_date(row['effective_date'])
                     if parsed_effective:
                         effective_date = parsed_effective
                 
+                # Get remarks if provided
+                remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row['remarks']) else None
+                
+                # Calculate pro-rata premium
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
                     policy['inception_date'],
                     policy['expiry_date'],
@@ -687,6 +740,7 @@ async def import_endorsements_from_excel(
                     policy['annual_premium_per_life']
                 )
                 
+                # Create endorsement
                 endorsement = Endorsement(
                     policy_id=policy['id'],
                     policy_number=policy_number,
@@ -701,6 +755,7 @@ async def import_endorsements_from_excel(
                     prorata_premium=prorata_premium,
                     status=EndorsementStatus.PENDING,
                     submitted_by=current_user.id,
+                    remarks=remarks,
                     import_batch_id=import_batch_id
                 )
                 
