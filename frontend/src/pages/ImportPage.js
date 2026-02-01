@@ -276,11 +276,15 @@ const ImportPage = () => {
               <div className="mt-4">
                 <h4 className="font-semibold mb-2 text-red-600">Errors:</h4>
                 <div className="max-h-60 overflow-y-auto space-y-2">
-                  {importResult.errors.map((error, index) => (
-                    <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md" data-testid={`error-item-${index}`}>
-                      <span className="font-semibold">Row {error.row}:</span> {error.error}
-                    </div>
-                  ))}
+                  {importResult.errors.map((error, index) => {
+                    const errorRow = error.row;
+                    const errorMessage = error.error;
+                    return (
+                      <div key={index} className="p-3 bg-red-50 border border-red-200 rounded-md" data-testid={`error-item-${index}`}>
+                        <span className="font-semibold">Row {errorRow}:</span> {errorMessage}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
