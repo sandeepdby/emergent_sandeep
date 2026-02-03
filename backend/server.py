@@ -474,7 +474,8 @@ async def create_endorsement(endorsement_data: EndorsementCreate, current_user: 
         policy['inception_date'],
         policy['expiry_date'],
         endorsement_data.endorsement_date,
-        policy['annual_premium_per_life']
+        policy['annual_premium_per_life'],
+        endorsement_data.endorsement_type.value
     )
     
     endorsement = Endorsement(
