@@ -118,6 +118,7 @@ class PolicyCreate(BaseModel):
     policy_holder_name: str
     inception_date: str
     expiry_date: str
+    policy_type: PolicyType = PolicyType.GROUP_HEALTH
     annual_premium_per_life: float
     total_lives_covered: int = 0
     status: PolicyStatus = PolicyStatus.ACTIVE
@@ -131,6 +132,7 @@ class Policy(BaseModel):
     policy_holder_name: str
     inception_date: str
     expiry_date: str
+    policy_type: PolicyType = PolicyType.GROUP_HEALTH
     annual_premium_per_life: float
     total_lives_covered: int
     status: PolicyStatus
