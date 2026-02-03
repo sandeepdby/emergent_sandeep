@@ -572,13 +572,16 @@ async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate
     update_dict = {k: v for k, v in update_data.model_dump().items() if v is not None}
     
     endorsement_date = update_dict.get('endorsement_date', existing['endorsement_date'])
+    endorsement_type = update_dict.get('endorsement_type', existing['endorsement_type'])
     
-    if 'endorsement_date' in update_dict:
+    # Recalculate premium if date or type changed
+    if 'endorsement_date' in update_dict or 'endorsement_type' in update_dict:
         days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
             policy['inception_date'],
             policy['expiry_date'],
             endorsement_date,
-            policy['annual_premium_per_life']
+            policy['annual_premium_per_life'],
+            endorsement_type
         )
         
         update_dict['days_from_inception'] = days_from_inception
