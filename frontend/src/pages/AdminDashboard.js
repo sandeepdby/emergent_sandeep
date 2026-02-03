@@ -1,21 +1,25 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList } from "lucide-react";
+import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail } from "lucide-react";
 import { AuthContext } from "../auth";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
 import PoliciesManagement from "./PoliciesManagement";
 import DownloadApproved from "./DownloadApproved";
+import AnalyticsDashboard from "./AnalyticsDashboard";
+import EmailSettings from "./EmailSettings";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
   
   const navItems = [
+    { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/admin/approve", label: "Pending Approvals", icon: CheckSquare },
     { path: "/admin/all-endorsements", label: "All Endorsements", icon: ClipboardList },
     { path: "/admin/policies", label: "Policies", icon: Layers },
-    { path: "/admin/download", label: "Download Approved", icon: Download },
+    { path: "/admin/download", label: "Download", icon: Download },
+    { path: "/admin/email", label: "Email", icon: Mail },
   ];
 
   return (
@@ -27,7 +31,7 @@ const Navigation = ({ onLogout, user }) => {
               <h1 className="text-2xl font-bold text-indigo-600">InsureHub</h1>
               <span className="text-xs text-gray-500">Admin Portal</span>
             </div>
-            <div className="ml-6 flex space-x-4">
+            <div className="ml-6 flex space-x-1 overflow-x-auto">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -35,13 +39,13 @@ const Navigation = ({ onLogout, user }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t ${
+                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t whitespace-nowrap ${
                       isActive
                         ? "border-indigo-500 text-indigo-600 bg-indigo-50"
                         : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
                   >
-                    <Icon className="w-4 h-4 mr-2" />
+                    <Icon className="w-4 h-4 mr-1" />
                     {item.label}
                   </Link>
                 );
@@ -75,11 +79,13 @@ class AdminDashboard extends React.Component {
         <Navigation onLogout={logout} user={user} />
         <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
+            <Route path="/analytics" element={<AnalyticsDashboard />} />
             <Route path="/approve" element={<ApproveEndorsements />} />
             <Route path="/all-endorsements" element={<AllEndorsements />} />
             <Route path="/policies" element={<PoliciesManagement />} />
             <Route path="/download" element={<DownloadApproved />} />
-            <Route path="/" element={<Navigate to="/admin/approve" />} />
+            <Route path="/email" element={<EmailSettings />} />
+            <Route path="/" element={<Navigate to="/admin/analytics" />} />
           </Routes>
         </div>
       </div>
