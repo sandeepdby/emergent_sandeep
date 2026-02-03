@@ -1081,29 +1081,44 @@ async def download_approved_endorsements(
     policies = await db.policies.find({"id": {"$in": policy_ids}}, {"_id": 0}).to_list(1000)
     policy_map = {p['id']: p for p in policies}
     
-    # Enrich endorsements with policy data
+    # Get all unique user IDs for approved_by lookup
+    user_ids = list(set([e.get('approved_by') for e in endorsements if e.get('approved_by')]))
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    user_map = {u['id']: u.get('full_name', u.get('username', '')) for u in users}
+    
+    # Enrich endorsements with policy data and all new fields
     enriched_data = []
     for e in endorsements:
         policy = policy_map.get(e['policy_id'], {})
+        approved_by_name = user_map.get(e.get('approved_by', ''), '')
+        
         enriched_data.append({
             'Policy Number': e.get('policy_number', ''),
             'Policy Holder': policy.get('policy_holder_name', ''),
             'Policy Inception Date': policy.get('inception_date', ''),
             'Policy Expiry Date': policy.get('expiry_date', ''),
+            'Type of Policy': policy.get('policy_type', 'Group Health'),
             'Annual Premium Per Life': policy.get('annual_premium_per_life', 0),
+            'Employee ID': e.get('employee_id', ''),
             'Member Name': e.get('member_name', ''),
+            'DOB': e.get('dob', ''),
+            'Age': e.get('age', ''),
+            'Gender': e.get('gender', ''),
             'Relationship Type': e.get('relationship_type', ''),
             'Endorsement Type': e.get('endorsement_type', ''),
+            'Date of Joining': e.get('date_of_joining', ''),
+            'Coverage Type': e.get('coverage_type', ''),
+            'Suminsured': e.get('sum_insured', ''),
             'Endorsement Date': e.get('endorsement_date', ''),
             'Effective Date': e.get('effective_date', ''),
+            'Remarks': e.get('remarks', ''),
             'Days from Inception': e.get('days_from_inception', 0),
             'Days in Policy Year': e.get('days_in_policy_year', 0),
             'Remaining Days': e.get('remaining_days', 0),
             'Pro-rata Premium': e.get('prorata_premium', 0),
             'Status': e.get('status', ''),
             'Approval Date': e.get('approval_date', ''),
-            'Approved By': e.get('approved_by', ''),
-            'Remarks': e.get('remarks', '')
+            'Approved By': approved_by_name
         })
     
     df = pd.DataFrame(enriched_data)
