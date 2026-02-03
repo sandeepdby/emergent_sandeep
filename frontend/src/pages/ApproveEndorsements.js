@@ -122,9 +122,11 @@ class ApproveEndorsements extends React.Component {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Policy</TableHead>
+                      <TableHead>Employee ID</TableHead>
                       <TableHead>Member</TableHead>
                       <TableHead>Relationship</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Coverage</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead>Pro-rata Premium</TableHead>
                       <TableHead>Remarks</TableHead>
@@ -135,6 +137,7 @@ class ApproveEndorsements extends React.Component {
                     {endorsements.map((endorsement) => (
                       <TableRow key={endorsement.id}>
                         <TableCell className="font-medium">{endorsement.policy_number}</TableCell>
+                        <TableCell>{endorsement.employee_id || "-"}</TableCell>
                         <TableCell>{endorsement.member_name}</TableCell>
                         <TableCell>
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${this.getRelationshipColor(endorsement.relationship_type)}`}>
@@ -142,10 +145,11 @@ class ApproveEndorsements extends React.Component {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={endorsement.endorsement_type === "Addition" ? "default" : "secondary"}>
+                          <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : "secondary"}>
                             {endorsement.endorsement_type}
                           </Badge>
                         </TableCell>
+                        <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
                         <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
                         <TableCell className="font-semibold">₹{endorsement.prorata_premium.toLocaleString()}</TableCell>
                         <TableCell className="text-sm text-gray-500">{endorsement.remarks || "-"}</TableCell>
