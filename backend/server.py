@@ -1437,6 +1437,362 @@ async def get_endorsements_summary(current_user: User = Depends(get_current_user
     }
 
 
+# ==================== BULK APPROVAL ENDPOINTS ====================
+
+@api_router.post("/endorsements/bulk-approve")
+async def bulk_approve_endorsements(
+    request: BulkApprovalRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
+    """Bulk approve or reject multiple endorsements (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can approve/reject endorsements")
+    
+    success_count = 0
+    failed_ids = []
+    processed_endorsements = []
+    
+    for endorsement_id in request.endorsement_ids:
+        endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
+        if not endorsement:
+            failed_ids.append({"id": endorsement_id, "error": "Not found"})
+            continue
+        
+        if endorsement.get('status') != EndorsementStatus.PENDING.value:
+            failed_ids.append({"id": endorsement_id, "error": "Already processed"})
+            continue
+        
+        update_data = {
+            "status": request.status.value,
+            "approved_by": current_user.id,
+            "approval_date": datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        }
+        
+        if request.remarks:
+            update_data["remarks"] = request.remarks
+        
+        await db.endorsements.update_one({"id": endorsement_id}, {"$set": update_data})
+        
+        # Update policy lives covered if approved
+        if request.status == EndorsementStatus.APPROVED:
+            if endorsement.get('endorsement_type') == EndorsementType.ADDITION.value:
+                await db.policies.update_one(
+                    {"id": endorsement['policy_id']},
+                    {"$inc": {"total_lives_covered": 1}}
+                )
+            elif endorsement.get('endorsement_type') == EndorsementType.DELETION.value:
+                await db.policies.update_one(
+                    {"id": endorsement['policy_id']},
+                    {"$inc": {"total_lives_covered": -1}}
+                )
+        
+        processed_endorsements.append(endorsement)
+        success_count += 1
+    
+    # Send email notification for bulk approval (in background)
+    if processed_endorsements and SMTP_USERNAME:
+        # Get submitter emails
+        submitter_ids = list(set([e.get('submitted_by') for e in processed_endorsements if e.get('submitted_by')]))
+        submitters = await db.users.find({"id": {"$in": submitter_ids}}, {"_id": 0}).to_list(100)
+        submitter_emails = [u.get('email') for u in submitters if u.get('email')]
+        
+        if submitter_emails:
+            subject = f"Endorsements {request.status.value} - {success_count} endorsements processed"
+            body = f"""
+            <h2>Endorsement Status Update</h2>
+            <p>Dear User,</p>
+            <p>{success_count} endorsement(s) have been <strong>{request.status.value}</strong> by {current_user.full_name}.</p>
+            <p>Remarks: {request.remarks or 'No remarks'}</p>
+            <p>Please log in to the portal to view details.</p>
+            <br>
+            <p>Best regards,<br>InsureHub Team</p>
+            """
+            background_tasks.add_task(send_email_notification, submitter_emails, subject, body)
+    
+    return {
+        "success_count": success_count,
+        "failed_count": len(failed_ids),
+        "failed_ids": failed_ids,
+        "status": request.status.value
+    }
+
+
+# ==================== EMAIL ENDPOINTS ====================
+
+@api_router.post("/email/send")
+async def send_custom_email(
+    email_request: EmailRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
+    """Send custom email with optional attachments"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can send emails")
+    
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        raise HTTPException(status_code=400, detail="Email not configured. Please set SMTP credentials.")
+    
+    attachments = []
+    
+    # Generate attachments if requested
+    if email_request.attach_excel or email_request.attach_pdf:
+        query = {"status": EndorsementStatus.APPROVED.value}
+        if email_request.policy_number:
+            query["policy_number"] = email_request.policy_number
+        
+        endorsements = await db.endorsements.find(query, {"_id": 0}).to_list(10000)
+        
+        if endorsements:
+            policy_ids = list(set([e['policy_id'] for e in endorsements]))
+            policies = await db.policies.find({"id": {"$in": policy_ids}}, {"_id": 0}).to_list(1000)
+            policy_map = {p['id']: p for p in policies}
+            
+            if email_request.attach_excel:
+                # Generate Excel
+                excel_buffer = await generate_excel_for_email(endorsements, policy_map)
+                attachments.append((f"approved_endorsements_{datetime.now().strftime('%Y%m%d')}.xlsx", excel_buffer))
+            
+            if email_request.attach_pdf:
+                # Generate PDF
+                pdf_buffer = generate_pdf_report(endorsements, policy_map, "summary")
+                attachments.append((f"endorsements_report_{datetime.now().strftime('%Y%m%d')}.pdf", pdf_buffer))
+    
+    # Send email in background
+    background_tasks.add_task(
+        send_email_notification,
+        email_request.to_emails,
+        email_request.subject,
+        email_request.body,
+        email_request.cc_emails,
+        email_request.bcc_emails,
+        email_request.from_email,
+        attachments
+    )
+    
+    return {"message": "Email queued for delivery", "recipients": len(email_request.to_emails)}
+
+
+async def generate_excel_for_email(endorsements: List[dict], policy_map: dict) -> bytes:
+    """Generate Excel bytes for email attachment"""
+    user_ids = list(set([e.get('approved_by') for e in endorsements if e.get('approved_by')]))
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "password_hash": 0}).to_list(1000)
+    user_map = {u['id']: u.get('full_name', u.get('username', '')) for u in users}
+    
+    enriched_data = []
+    for e in endorsements:
+        policy = policy_map.get(e['policy_id'], {})
+        approved_by_name = user_map.get(e.get('approved_by', ''), '')
+        premium_type = get_premium_type(e.get('endorsement_type', ''))
+        
+        enriched_data.append({
+            'Policy Number': e.get('policy_number', ''),
+            'Policy Holder': policy.get('policy_holder_name', ''),
+            'Type of Policy': policy.get('policy_type', 'Group Health'),
+            'Employee ID': e.get('employee_id', ''),
+            'Member Name': e.get('member_name', ''),
+            'DOB': e.get('dob', ''),
+            'Age': e.get('age', ''),
+            'Gender': e.get('gender', ''),
+            'Relationship Type': e.get('relationship_type', ''),
+            'Endorsement Type': e.get('endorsement_type', ''),
+            'Coverage Type': e.get('coverage_type', ''),
+            'Suminsured': e.get('sum_insured', ''),
+            'Endorsement Date': e.get('endorsement_date', ''),
+            'Effective Date': e.get('effective_date', ''),
+            'Remaining Days': e.get('remaining_days', 0),
+            'Premium Type': premium_type,
+            'Pro-rata Premium': e.get('prorata_premium', 0),
+            'Status': e.get('status', ''),
+            'Approval Date': e.get('approval_date', ''),
+            'Approved By': approved_by_name,
+            'Remarks': e.get('remarks', '')
+        })
+    
+    df = pd.DataFrame(enriched_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Approved Endorsements')
+    output.seek(0)
+    return output.getvalue()
+
+
+@api_router.get("/email/config")
+async def get_email_config(current_user: User = Depends(get_current_user)):
+    """Get email configuration status (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view email config")
+    
+    return {
+        "configured": bool(SMTP_USERNAME and SMTP_PASSWORD),
+        "smtp_server": SMTP_SERVER,
+        "smtp_port": SMTP_PORT,
+        "default_from_email": DEFAULT_FROM_EMAIL or SMTP_USERNAME or "Not configured"
+    }
+
+
+@api_router.post("/email/config")
+async def update_email_config(config: EmailConfig, current_user: User = Depends(get_current_user)):
+    """Update email configuration (stores in database)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can update email config")
+    
+    # Store in database for persistence
+    await db.settings.update_one(
+        {"key": "email_config"},
+        {"$set": {
+            "key": "email_config",
+            "smtp_server": config.smtp_server,
+            "smtp_port": config.smtp_port,
+            "smtp_username": config.smtp_username,
+            "smtp_password": config.smtp_password,
+            "default_from_email": config.default_from_email,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": current_user.id
+        }},
+        upsert=True
+    )
+    
+    return {"message": "Email configuration updated successfully"}
+
+
+# ==================== PDF EXPORT ENDPOINTS ====================
+
+@api_router.get("/endorsements/download/pdf")
+async def download_endorsements_pdf(
+    report_type: str = "detailed",  # "detailed" or "summary"
+    policy_number: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Download approved endorsements as PDF report"""
+    query = {"status": EndorsementStatus.APPROVED.value}
+    if policy_number:
+        query["policy_number"] = policy_number
+    
+    endorsements = await db.endorsements.find(query, {"_id": 0}).to_list(10000)
+    
+    if not endorsements:
+        raise HTTPException(status_code=404, detail="No approved endorsements found")
+    
+    policy_ids = list(set([e['policy_id'] for e in endorsements]))
+    policies = await db.policies.find({"id": {"$in": policy_ids}}, {"_id": 0}).to_list(1000)
+    policy_map = {p['id']: p for p in policies}
+    
+    pdf_content = generate_pdf_report(endorsements, policy_map, report_type)
+    
+    filename = f"endorsements_{report_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ==================== ENHANCED DASHBOARD STATS ====================
+
+@api_router.get("/dashboard/analytics")
+async def get_dashboard_analytics(current_user: User = Depends(get_current_user)):
+    """Get comprehensive dashboard analytics for charts"""
+    query = {}
+    if current_user.role == UserRole.HR:
+        query["submitted_by"] = current_user.id
+    
+    # Basic stats
+    total = await db.endorsements.count_documents(query)
+    pending = await db.endorsements.count_documents({**query, "status": EndorsementStatus.PENDING.value})
+    approved = await db.endorsements.count_documents({**query, "status": EndorsementStatus.APPROVED.value})
+    rejected = await db.endorsements.count_documents({**query, "status": EndorsementStatus.REJECTED.value})
+    
+    # By endorsement type with premium
+    by_type_pipeline = [
+        {"$match": query},
+        {"$group": {
+            "_id": "$endorsement_type",
+            "count": {"$sum": 1},
+            "total_premium": {"$sum": "$prorata_premium"}
+        }}
+    ]
+    by_type = await db.endorsements.aggregate(by_type_pipeline).to_list(100)
+    
+    # By relationship type
+    by_relationship_pipeline = [
+        {"$match": query},
+        {"$group": {
+            "_id": "$relationship_type",
+            "count": {"$sum": 1}
+        }}
+    ]
+    by_relationship = await db.endorsements.aggregate(by_relationship_pipeline).to_list(100)
+    
+    # By policy
+    by_policy_pipeline = [
+        {"$match": query},
+        {"$group": {
+            "_id": "$policy_number",
+            "count": {"$sum": 1},
+            "total_premium": {"$sum": "$prorata_premium"}
+        }},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]
+    by_policy = await db.endorsements.aggregate(by_policy_pipeline).to_list(10)
+    
+    # Monthly trend (last 12 months)
+    twelve_months_ago = datetime.now(timezone.utc).replace(day=1) - pd.DateOffset(months=11)
+    monthly_pipeline = [
+        {"$match": {
+            **query,
+            "created_at": {"$gte": twelve_months_ago.isoformat()}
+        }},
+        {"$addFields": {
+            "month": {"$substr": ["$created_at", 0, 7]}
+        }},
+        {"$group": {
+            "_id": "$month",
+            "count": {"$sum": 1},
+            "total_premium": {"$sum": "$prorata_premium"}
+        }},
+        {"$sort": {"_id": 1}}
+    ]
+    monthly_trend = await db.endorsements.aggregate(monthly_pipeline).to_list(12)
+    
+    # Premium summary
+    premium_pipeline = [
+        {"$match": {**query, "status": EndorsementStatus.APPROVED.value}},
+        {"$group": {
+            "_id": None,
+            "total_charge": {
+                "$sum": {"$cond": [{"$gt": ["$prorata_premium", 0]}, "$prorata_premium", 0]}
+            },
+            "total_refund": {
+                "$sum": {"$cond": [{"$lt": ["$prorata_premium", 0]}, {"$abs": "$prorata_premium"}, 0]}
+            },
+            "net_premium": {"$sum": "$prorata_premium"}
+        }}
+    ]
+    premium_summary = await db.endorsements.aggregate(premium_pipeline).to_list(1)
+    premium_data = premium_summary[0] if premium_summary else {"total_charge": 0, "total_refund": 0, "net_premium": 0}
+    
+    return {
+        "status_distribution": {
+            "total": total,
+            "pending": pending,
+            "approved": approved,
+            "rejected": rejected
+        },
+        "by_endorsement_type": by_type,
+        "by_relationship_type": by_relationship,
+        "by_policy": by_policy,
+        "monthly_trend": monthly_trend,
+        "premium_summary": {
+            "total_charge": premium_data.get("total_charge", 0),
+            "total_refund": premium_data.get("total_refund", 0),
+            "net_premium": premium_data.get("net_premium", 0)
+        }
+    }
+
+
 # Include the router in the main app
 app.include_router(api_router)
 
