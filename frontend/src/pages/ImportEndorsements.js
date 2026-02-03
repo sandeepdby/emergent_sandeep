@@ -213,17 +213,25 @@ class ImportEndorsements extends React.Component {
               <div className="ml-2">
                 <h4 className="font-semibold mb-2">Excel File Format (All Fields):</h4>
                 <ul className="list-disc list-inside space-y-1 text-sm">
-                  <li><strong>Policy Number</strong> - Unique policy identifier</li>
+                  <li><strong>Policy Number</strong> - Unique policy identifier (Required)</li>
                   <li><strong>Policy Holder</strong> - Company/Organization name</li>
                   <li><strong>Policy Inception Date</strong> - Policy start date (YYYY-MM-DD)</li>
                   <li><strong>Policy Expiry Date</strong> - Policy end date (YYYY-MM-DD)</li>
+                  <li><strong>Type of Policy</strong> - Group Health, Group Accident, or Group Term</li>
                   <li><strong>Annual Premium Per Life</strong> - Yearly premium amount</li>
-                  <li><strong>Member Name</strong> - Name of the member</li>
-                  <li><strong>Relationship Type</strong> - Employee, Spouse, Kids, Mother, or Father</li>
-                  <li><strong>Endorsement Type</strong> - Addition, Deletion, or Correction</li>
-                  <li><strong>Endorsement Date</strong> - When endorsement received (YYYY-MM-DD or DD/MM/YYYY)</li>
-                  <li><strong>Effective Date</strong> - (Optional) Defaults to Endorsement Date</li>
-                  <li><strong>Remarks</strong> - (Optional) Additional notes</li>
+                  <li><strong>Employee ID</strong> - Unique employee identifier</li>
+                  <li><strong>Member Name</strong> - Name of the member (Required)</li>
+                  <li><strong>DOB</strong> - Date of Birth (YYYY-MM-DD)</li>
+                  <li><strong>Age</strong> - Age of the member</li>
+                  <li><strong>Gender</strong> - Male, Female, or Other</li>
+                  <li><strong>Relationship Type</strong> - Employee, Spouse, Kids, Mother, or Father (Required)</li>
+                  <li><strong>Endorsement Type</strong> - Addition, Deletion, Correction, or Midterm addition (Required)</li>
+                  <li><strong>Date of Joining</strong> - When member joined the organization</li>
+                  <li><strong>Coverage Type</strong> - Floater or Non-Floater</li>
+                  <li><strong>Suminsured</strong> - Sum insured/Coverage amount</li>
+                  <li><strong>Endorsement Date</strong> - When endorsement received (Required)</li>
+                  <li><strong>Effective Date</strong> - From when endorsement is effective</li>
+                  <li><strong>Remarks</strong> - Additional notes</li>
                 </ul>
                 <p className="mt-2 text-xs text-blue-600">
                   <strong>Note:</strong> If policy exists, system uses existing details. If policy doesn't exist, it will be created from the Excel data.
