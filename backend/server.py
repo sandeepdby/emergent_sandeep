@@ -180,7 +180,7 @@ class Endorsement(BaseModel):
     remaining_days: int
     prorata_premium: float
     status: EndorsementStatus = EndorsementStatus.PENDING
-    submitted_by: str  # user_id
+    submitted_by: Optional[str] = None  # user_id - optional for legacy data
     approved_by: Optional[str] = None
     approval_date: Optional[str] = None
     remarks: Optional[str] = None
