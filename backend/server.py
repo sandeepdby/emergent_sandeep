@@ -709,11 +709,21 @@ async def import_endorsements_from_excel(
                             error_count += 1
                             continue
                         
+                        # Parse policy type if provided
+                        policy_type_val = PolicyType.GROUP_HEALTH
+                        if 'type_of_policy' in df.columns and pd.notna(row.get('type_of_policy')):
+                            policy_type_str = str(row['type_of_policy']).strip()
+                            try:
+                                policy_type_val = PolicyType(policy_type_str)
+                            except ValueError:
+                                pass  # Use default
+                        
                         new_policy = Policy(
                             policy_number=policy_number,
                             policy_holder_name=str(row['policy_holder']).strip(),
                             inception_date=inception_date,
                             expiry_date=expiry_date,
+                            policy_type=policy_type_val,
                             annual_premium_per_life=float(row['annual_premium_per_life']),
                             total_lives_covered=0,
                             status=PolicyStatus.ACTIVE
@@ -733,8 +743,35 @@ async def import_endorsements_from_excel(
                         error_count += 1
                         continue
                 
+                # Parse employee ID
+                employee_id = None
+                if 'employee_id' in df.columns and pd.notna(row.get('employee_id')):
+                    employee_id = str(row['employee_id']).strip()
+                
                 # Parse member name
                 member_name = str(row['member_name']).strip()
+                
+                # Parse DOB
+                dob = None
+                if 'dob' in df.columns and pd.notna(row.get('dob')):
+                    dob = parse_date(row['dob'])
+                
+                # Parse age
+                age = None
+                if 'age' in df.columns and pd.notna(row.get('age')):
+                    try:
+                        age = int(row['age'])
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Parse gender
+                gender = None
+                if 'gender' in df.columns and pd.notna(row.get('gender')):
+                    gender_str = str(row['gender']).strip()
+                    try:
+                        gender = Gender(gender_str).value
+                    except ValueError:
+                        pass
                 
                 # Parse relationship type
                 relationship_str = str(row['relationship_type']).strip()
@@ -755,10 +792,37 @@ async def import_endorsements_from_excel(
                 except ValueError:
                     errors.append({
                         "row": index + 2,
-                        "error": f"Invalid endorsement type: {endorsement_type_str}. Must be one of: Addition, Deletion, Correction"
+                        "error": f"Invalid endorsement type: {endorsement_type_str}. Must be one of: Addition, Deletion, Correction, Midterm addition"
                     })
                     error_count += 1
                     continue
+                
+                # Parse date of joining
+                date_of_joining = None
+                if 'date_of_joining' in df.columns and pd.notna(row.get('date_of_joining')):
+                    date_of_joining = parse_date(row['date_of_joining'])
+                
+                # Parse coverage type
+                coverage_type = None
+                if 'coverage_type' in df.columns and pd.notna(row.get('coverage_type')):
+                    coverage_type_str = str(row['coverage_type']).strip()
+                    try:
+                        coverage_type = CoverageType(coverage_type_str).value
+                    except ValueError:
+                        pass
+                
+                # Parse sum insured
+                sum_insured = None
+                if 'suminsured' in df.columns and pd.notna(row.get('suminsured')):
+                    try:
+                        sum_insured = float(row['suminsured'])
+                    except (ValueError, TypeError):
+                        pass
+                elif 'sum_insured' in df.columns and pd.notna(row.get('sum_insured')):
+                    try:
+                        sum_insured = float(row['sum_insured'])
+                    except (ValueError, TypeError):
+                        pass
                 
                 # Parse endorsement date
                 endorsement_date = parse_date(row['endorsement_date'])
@@ -772,13 +836,13 @@ async def import_endorsements_from_excel(
                 
                 # Parse effective date (optional)
                 effective_date = endorsement_date
-                if 'effective_date' in df.columns and pd.notna(row['effective_date']):
+                if 'effective_date' in df.columns and pd.notna(row.get('effective_date')):
                     parsed_effective = parse_date(row['effective_date'])
                     if parsed_effective:
                         effective_date = parsed_effective
                 
                 # Get remarks if provided
-                remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row['remarks']) else None
+                remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row.get('remarks')) else None
                 
                 # Calculate pro-rata premium
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
@@ -792,9 +856,16 @@ async def import_endorsements_from_excel(
                 endorsement = Endorsement(
                     policy_id=policy['id'],
                     policy_number=policy_number,
+                    employee_id=employee_id,
                     member_name=member_name,
+                    dob=dob,
+                    age=age,
+                    gender=gender,
                     relationship_type=relationship_type,
                     endorsement_type=endorsement_type,
+                    date_of_joining=date_of_joining,
+                    coverage_type=coverage_type,
+                    sum_insured=sum_insured,
                     endorsement_date=endorsement_date,
                     effective_date=effective_date,
                     days_from_inception=days_from_inception,
