@@ -133,9 +133,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - **Admin User**: admin@test.com / password123
 
 ## Backlog / Future Enhancements
-- [ ] Bulk approval/rejection
-- [ ] Email notifications on approval/rejection
-- [ ] Audit log for all actions
-- [ ] Dashboard analytics and charts
-- [ ] Export to PDF format
+- [ ] Auto-send email notifications on submission/approval (requires Gmail App Password)
+- [ ] Audit log for all user actions
 - [ ] Multi-policy comparison view
+- [ ] Export templates for different insurers
