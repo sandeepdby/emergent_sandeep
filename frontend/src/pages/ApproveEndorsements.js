@@ -145,13 +145,15 @@ class ApproveEndorsements extends React.Component {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : "secondary"}>
+                          <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : endorsement.endorsement_type === "Deletion" ? "destructive" : "secondary"}>
                             {endorsement.endorsement_type}
                           </Badge>
                         </TableCell>
                         <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
                         <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
-                        <TableCell className="font-semibold">₹{endorsement.prorata_premium.toLocaleString()}</TableCell>
+                        <TableCell className={`font-semibold ${endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {endorsement.prorata_premium < 0 ? `₹${Math.abs(endorsement.prorata_premium).toLocaleString()} (Refund)` : `₹${endorsement.prorata_premium.toLocaleString()}`}
+                        </TableCell>
                         <TableCell className="text-sm text-gray-500">{endorsement.remarks || "-"}</TableCell>
                         <TableCell className="text-right space-x-2">
                           <Button
