@@ -18,9 +18,16 @@ class SubmitEndorsement extends React.Component {
       loading: false,
       formData: {
         policy_number: "",
+        employee_id: "",
         member_name: "",
+        dob: "",
+        age: "",
+        gender: "",
         relationship_type: "",
         endorsement_type: "",
+        date_of_joining: "",
+        coverage_type: "",
+        sum_insured: "",
         endorsement_date: new Date().toISOString().split('T')[0],
         effective_date: "",
         remarks: ""
@@ -50,16 +57,38 @@ class SubmitEndorsement extends React.Component {
     try {
       this.setState({ loading: true });
       const token = localStorage.getItem('token');
-      await axios.post(`${API}/endorsements`, this.state.formData, {
+      
+      // Prepare data, converting empty strings to null for optional fields
+      const submitData = {
+        ...this.state.formData,
+        employee_id: this.state.formData.employee_id || null,
+        dob: this.state.formData.dob || null,
+        age: this.state.formData.age ? parseInt(this.state.formData.age) : null,
+        gender: this.state.formData.gender || null,
+        date_of_joining: this.state.formData.date_of_joining || null,
+        coverage_type: this.state.formData.coverage_type || null,
+        sum_insured: this.state.formData.sum_insured ? parseFloat(this.state.formData.sum_insured) : null,
+        effective_date: this.state.formData.effective_date || null,
+        remarks: this.state.formData.remarks || null
+      };
+      
+      await axios.post(`${API}/endorsements`, submitData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       toast.success("Endorsement submitted successfully and is pending approval");
       this.setState({
         formData: {
           policy_number: "",
+          employee_id: "",
           member_name: "",
+          dob: "",
+          age: "",
+          gender: "",
           relationship_type: "",
           endorsement_type: "",
+          date_of_joining: "",
+          coverage_type: "",
+          sum_insured: "",
           endorsement_date: new Date().toISOString().split('T')[0],
           effective_date: "",
           remarks: ""
@@ -91,7 +120,7 @@ class SubmitEndorsement extends React.Component {
           </CardHeader>
           <CardContent>
             <form onSubmit={this.handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Policy Number *</Label>
                   <Select
@@ -113,6 +142,16 @@ class SubmitEndorsement extends React.Component {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Employee ID</Label>
+                  <Input
+                    value={formData.employee_id}
+                    onChange={(e) => this.updateFormData('employee_id', e.target.value)}
+                    placeholder="Enter employee ID"
+                    data-testid="employee-id-input"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label>Member Name *</Label>
                   <Input
                     value={formData.member_name}
@@ -121,6 +160,44 @@ class SubmitEndorsement extends React.Component {
                     required
                     data-testid="member-name-input"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Date of Birth</Label>
+                  <Input
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => this.updateFormData('dob', e.target.value)}
+                    data-testid="dob-input"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Age</Label>
+                  <Input
+                    type="number"
+                    value={formData.age}
+                    onChange={(e) => this.updateFormData('age', e.target.value)}
+                    placeholder="Enter age"
+                    data-testid="age-input"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Gender</Label>
+                  <Select
+                    value={formData.gender}
+                    onValueChange={(value) => this.updateFormData('gender', value)}
+                  >
+                    <SelectTrigger data-testid="gender-select">
+                      <SelectValue placeholder="Select Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -157,8 +234,46 @@ class SubmitEndorsement extends React.Component {
                       <SelectItem value="Addition">Addition</SelectItem>
                       <SelectItem value="Deletion">Deletion</SelectItem>
                       <SelectItem value="Correction">Correction</SelectItem>
+                      <SelectItem value="Midterm addition">Midterm addition</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Date of Joining</Label>
+                  <Input
+                    type="date"
+                    value={formData.date_of_joining}
+                    onChange={(e) => this.updateFormData('date_of_joining', e.target.value)}
+                    data-testid="date-of-joining-input"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Coverage Type</Label>
+                  <Select
+                    value={formData.coverage_type}
+                    onValueChange={(value) => this.updateFormData('coverage_type', value)}
+                  >
+                    <SelectTrigger data-testid="coverage-type-select">
+                      <SelectValue placeholder="Select Coverage Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Floater">Floater</SelectItem>
+                      <SelectItem value="Non-Floater">Non-Floater</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sum Insured (Coverage)</Label>
+                  <Input
+                    type="number"
+                    value={formData.sum_insured}
+                    onChange={(e) => this.updateFormData('sum_insured', e.target.value)}
+                    placeholder="Enter sum insured"
+                    data-testid="sum-insured-input"
+                  />
                 </div>
 
                 <div className="space-y-2">
