@@ -255,13 +255,15 @@ class MyEndorsements extends React.Component {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : "secondary"}>
+                          <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : endorsement.endorsement_type === "Deletion" ? "destructive" : "secondary"}>
                             {endorsement.endorsement_type}
                           </Badge>
                         </TableCell>
                         <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
                         <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
-                        <TableCell className="font-semibold">₹{endorsement.prorata_premium.toLocaleString()}</TableCell>
+                        <TableCell className={`font-semibold ${endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                          {endorsement.prorata_premium < 0 ? `₹${Math.abs(endorsement.prorata_premium).toLocaleString()} (Refund)` : `₹${endorsement.prorata_premium.toLocaleString()}`}
+                        </TableCell>
                         <TableCell>
                           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${this.getStatusColor(endorsement.status)}`}>
                             {endorsement.status}
