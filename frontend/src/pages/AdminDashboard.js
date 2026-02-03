@@ -27,9 +27,16 @@ const Navigation = ({ onLogout, user }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <h1 className="text-2xl font-bold text-indigo-600">InsureHub</h1>
-              <span className="text-xs text-gray-500">Admin Portal</span>
+            <div className="flex-shrink-0 flex items-center gap-3">
+              <img 
+                src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
+                alt="Aarogya Assist" 
+                className="h-10 w-auto"
+              />
+              <div>
+                <h1 className="text-xl font-bold text-indigo-600">InsureHub</h1>
+                <span className="text-xs text-gray-500">Admin Portal</span>
+              </div>
             </div>
             <div className="ml-6 flex space-x-1 overflow-x-auto">
               {navItems.map((item) => {
