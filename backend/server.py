@@ -1347,6 +1347,7 @@ async def download_approved_endorsements(
     for e in endorsements:
         policy = policy_map.get(e['policy_id'], {})
         approved_by_name = user_map.get(e.get('approved_by', ''), '')
+        premium_type = get_premium_type(e.get('endorsement_type', ''))
         
         enriched_data.append({
             'Policy Number': e.get('policy_number', ''),
@@ -1371,6 +1372,7 @@ async def download_approved_endorsements(
             'Days from Inception': e.get('days_from_inception', 0),
             'Days in Policy Year': e.get('days_in_policy_year', 0),
             'Remaining Days': e.get('remaining_days', 0),
+            'Premium Type': premium_type,
             'Pro-rata Premium': e.get('prorata_premium', 0),
             'Status': e.get('status', ''),
             'Approval Date': e.get('approval_date', ''),
