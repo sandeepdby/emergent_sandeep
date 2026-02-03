@@ -97,7 +97,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] Approval workflow
 - [x] Pro-rata premium calculation
 
-### Session 2 (Latest)
+### Session 2
 - [x] Added Employee ID field to import/export
 - [x] Added Type of Policy field
 - [x] Added DOB, Age, Gender fields
@@ -110,6 +110,23 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] **Premium Calculation for Deletion = Refund (negative value)**
 - [x] **UI displays refund amounts in red with "(Refund)" label**
 - [x] **Excel export preserves negative premium values for deletions**
+
+### Session 3 (Latest)
+- [x] **Added "Premium Type" column (Charge/Refund) to Excel export**
+- [x] **Bulk Approval/Rejection with checkbox selection**
+- [x] **Email Settings page with Gmail SMTP configuration**
+- [x] **Send emails with CC, BCC, and attachment options**
+- [x] **Analytics Dashboard with interactive charts:**
+  - Status Distribution pie chart
+  - Endorsements by Type bar chart
+  - Monthly Trend area chart
+  - Relationship Type distribution
+  - Top Policies breakdown
+  - Premium summary cards (Charge vs Refund)
+- [x] **PDF Export with two options:**
+  - Summary Report (statistics and totals)
+  - Detailed Report (full table format)
+- [x] **Enhanced UI with gradient cards and better visuals**
 
 ## Test Credentials
 - **HR User**: hr@test.com / password123
