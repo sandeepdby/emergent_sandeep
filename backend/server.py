@@ -260,8 +260,15 @@ def calculate_prorata_premium(
     inception_date_str: str,
     expiry_date_str: str,
     endorsement_date_str: str,
-    annual_premium: float
+    annual_premium: float,
+    endorsement_type: str = "Addition"
 ) -> tuple:
+    """
+    Calculate pro-rata premium based on endorsement type.
+    - Addition/Midterm addition: Charge for remaining days (positive premium)
+    - Deletion: Refund for remaining days (negative premium)
+    - Correction: No premium change (zero)
+    """
     try:
         inception_date = datetime.strptime(inception_date_str, "%Y-%m-%d").date()
         expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
@@ -275,6 +282,15 @@ def calculate_prorata_premium(
             prorata_premium = (annual_premium * remaining_days) / days_in_policy_year
         else:
             prorata_premium = 0.0
+        
+        # Apply sign based on endorsement type
+        if endorsement_type == "Deletion":
+            # Deletion = Refund (negative premium)
+            prorata_premium = -abs(prorata_premium)
+        elif endorsement_type == "Correction":
+            # Correction = No premium change
+            prorata_premium = 0.0
+        # Addition and Midterm addition remain positive (charge)
         
         return days_from_inception, days_in_policy_year, remaining_days, round(prorata_premium, 2)
     except Exception as e:
