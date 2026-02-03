@@ -55,6 +55,24 @@ class EndorsementType(str, Enum):
     ADDITION = "Addition"
     DELETION = "Deletion"
     CORRECTION = "Correction"
+    MIDTERM_ADDITION = "Midterm addition"
+
+
+class PolicyType(str, Enum):
+    GROUP_HEALTH = "Group Health"
+    GROUP_ACCIDENT = "Group Accident"
+    GROUP_TERM = "Group Term"
+
+
+class Gender(str, Enum):
+    MALE = "Male"
+    FEMALE = "Female"
+    OTHER = "Other"
+
+
+class CoverageType(str, Enum):
+    FLOATER = "Floater"
+    NON_FLOATER = "Non-Floater"
 
 
 class EndorsementStatus(str, Enum):
