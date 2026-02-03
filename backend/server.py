@@ -142,9 +142,16 @@ class Policy(BaseModel):
 # Endorsement Models
 class EndorsementCreate(BaseModel):
     policy_number: str
+    employee_id: Optional[str] = None
     member_name: str
+    dob: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[Gender] = None
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
+    date_of_joining: Optional[str] = None
+    coverage_type: Optional[CoverageType] = None
+    sum_insured: Optional[float] = None
     endorsement_date: str
     effective_date: Optional[str] = None
     remarks: Optional[str] = None
@@ -156,9 +163,16 @@ class Endorsement(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     policy_id: str
     policy_number: str
+    employee_id: Optional[str] = None
     member_name: str
+    dob: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = None
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
+    date_of_joining: Optional[str] = None
+    coverage_type: Optional[str] = None
+    sum_insured: Optional[float] = None
     endorsement_date: str
     effective_date: str
     days_from_inception: int
@@ -175,9 +189,16 @@ class Endorsement(BaseModel):
 
 
 class EndorsementUpdate(BaseModel):
+    employee_id: Optional[str] = None
     member_name: Optional[str] = None
+    dob: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[Gender] = None
     relationship_type: Optional[RelationshipType] = None
     endorsement_type: Optional[EndorsementType] = None
+    date_of_joining: Optional[str] = None
+    coverage_type: Optional[CoverageType] = None
+    sum_insured: Optional[float] = None
     endorsement_date: Optional[str] = None
     effective_date: Optional[str] = None
     remarks: Optional[str] = None
