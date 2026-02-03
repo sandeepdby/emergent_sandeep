@@ -234,6 +234,33 @@ class ImportResult(BaseModel):
     import_batch_id: str
 
 
+# Email Models
+class EmailRequest(BaseModel):
+    to_emails: List[str]
+    cc_emails: Optional[List[str]] = []
+    bcc_emails: Optional[List[str]] = []
+    subject: str
+    body: str
+    from_email: Optional[str] = None
+    attach_excel: bool = False
+    attach_pdf: bool = False
+    policy_number: Optional[str] = None
+
+
+class EmailConfig(BaseModel):
+    smtp_server: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str
+    smtp_password: str
+    default_from_email: str
+
+
+class BulkApprovalRequest(BaseModel):
+    endorsement_ids: List[str]
+    status: EndorsementStatus
+    remarks: Optional[str] = None
+
+
 # Helper Functions
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
