@@ -107,6 +107,9 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] Added Suminsured (Coverage) field
 - [x] Updated all frontend forms and tables
 - [x] Fixed legacy data handling (submitted_by optional)
+- [x] **Premium Calculation for Deletion = Refund (negative value)**
+- [x] **UI displays refund amounts in red with "(Refund)" label**
+- [x] **Excel export preserves negative premium values for deletions**
 
 ## Test Credentials
 - **HR User**: hr@test.com / password123
