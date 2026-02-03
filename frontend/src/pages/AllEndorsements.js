@@ -416,7 +416,8 @@ const EndorsementsPage = () => {
                   <SelectContent>
                     <SelectItem value="Addition">Addition</SelectItem>
                     <SelectItem value="Deletion">Deletion</SelectItem>
-                    <SelectItem value="Modification">Modification</SelectItem>
+                    <SelectItem value="Correction">Correction</SelectItem>
+                    <SelectItem value="Midterm addition">Midterm addition</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
