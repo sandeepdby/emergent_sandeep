@@ -40,6 +40,9 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 ### Pro-rata Premium Calculation
 - Automatic calculation based on policy dates and annual premium
 - Formula: (Annual Premium × Remaining Days) / Days in Policy Year
+- **Addition/Midterm addition**: Positive premium (charge to client)
+- **Deletion**: Negative premium (refund to client)
+- **Correction**: Zero premium impact
 
 ## Technical Architecture
 
