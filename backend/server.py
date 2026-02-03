@@ -864,12 +864,13 @@ async def import_endorsements_from_excel(
                 # Get remarks if provided
                 remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row.get('remarks')) else None
                 
-                # Calculate pro-rata premium
+                # Calculate pro-rata premium based on endorsement type
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
                     policy['inception_date'],
                     policy['expiry_date'],
                     endorsement_date,
-                    policy['annual_premium_per_life']
+                    policy['annual_premium_per_life'],
+                    endorsement_type.value  # Pass endorsement type for refund calculation
                 )
                 
                 # Create endorsement
