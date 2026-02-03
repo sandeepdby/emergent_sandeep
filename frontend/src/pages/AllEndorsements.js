@@ -311,11 +311,12 @@ const EndorsementsPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Policy</TableHead>
+                    <TableHead>Employee ID</TableHead>
                     <TableHead>Member Name</TableHead>
                     <TableHead>Relationship</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Coverage</TableHead>
                     <TableHead>Endorsement Date</TableHead>
-                    <TableHead>Days from Inception</TableHead>
                     <TableHead>Remaining Days</TableHead>
                     <TableHead>Pro-rata Premium</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -325,6 +326,7 @@ const EndorsementsPage = () => {
                   {endorsements.map((endorsement) => (
                     <TableRow key={endorsement.id} data-testid={`endorsement-row-${endorsement.id}`}>
                       <TableCell className="font-medium">{endorsement.policy_number}</TableCell>
+                      <TableCell>{endorsement.employee_id || "-"}</TableCell>
                       <TableCell>{endorsement.member_name}</TableCell>
                       <TableCell>
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getRelationshipColor(endorsement.relationship_type)}`}>
@@ -332,12 +334,12 @@ const EndorsementsPage = () => {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={endorsement.endorsement_type === "Addition" ? "default" : "destructive"}>
+                        <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : "destructive"}>
                           {endorsement.endorsement_type}
                         </Badge>
                       </TableCell>
+                      <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
                       <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
-                      <TableCell>{endorsement.days_from_inception} days</TableCell>
                       <TableCell>{endorsement.remaining_days} days</TableCell>
                       <TableCell className="font-semibold">₹{endorsement.prorata_premium.toLocaleString()}</TableCell>
                       <TableCell className="text-right">
