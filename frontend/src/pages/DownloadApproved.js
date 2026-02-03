@@ -151,8 +151,10 @@ class DownloadApproved extends React.Component {
                     <p className="font-semibold mb-1">Download Information</p>
                     <ul className="list-disc list-inside space-y-1">
                       <li>Excel file includes all approved endorsements</li>
-                      <li>Contains: Policy Number, Member Name, Relationship, Type, Dates, Pro-rata Premium</li>
-                      <li>Ready to share with insurers and client HR teams</li>
+                      <li>Contains: Policy details, Employee ID, Member info (Name, DOB, Age, Gender)</li>
+                      <li>Includes: Relationship Type, Endorsement Type, Coverage Type, Sum Insured</li>
+                      <li>Calculated fields: Days from Inception, Remaining Days, Pro-rata Premium</li>
+                      <li>Status info: Approval Date and Approved By</li>
                       <li>File format: .xlsx (Microsoft Excel)</li>
                     </ul>
                   </div>
