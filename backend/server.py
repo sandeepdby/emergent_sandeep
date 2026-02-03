@@ -363,6 +363,197 @@ def parse_date(date_str: str) -> str:
         return None
 
 
+def get_premium_type(endorsement_type: str) -> str:
+    """Get premium type label based on endorsement type"""
+    if endorsement_type in ["Addition", "Midterm addition"]:
+        return "Charge"
+    elif endorsement_type == "Deletion":
+        return "Refund"
+    else:
+        return "No Change"
+
+
+async def send_email_notification(
+    to_emails: List[str],
+    subject: str,
+    body: str,
+    cc_emails: List[str] = None,
+    bcc_emails: List[str] = None,
+    from_email: str = None,
+    attachments: List[tuple] = None  # List of (filename, content_bytes)
+):
+    """Send email via Gmail SMTP with attachments support"""
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        logging.warning("Email not configured - SMTP credentials missing")
+        return False
+    
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = from_email or DEFAULT_FROM_EMAIL or SMTP_USERNAME
+        msg['To'] = ', '.join(to_emails)
+        msg['Subject'] = subject
+        
+        if cc_emails:
+            msg['Cc'] = ', '.join(cc_emails)
+        
+        # Add body
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Add attachments
+        if attachments:
+            for filename, content in attachments:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(content)
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
+                msg.attach(part)
+        
+        # Build recipient list
+        all_recipients = to_emails.copy()
+        if cc_emails:
+            all_recipients.extend(cc_emails)
+        if bcc_emails:
+            all_recipients.extend(bcc_emails)
+        
+        # Send email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.sendmail(msg['From'], all_recipients, msg.as_string())
+        
+        logging.info(f"Email sent successfully to {to_emails}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to send email: {e}")
+        return False
+
+
+def generate_pdf_report(endorsements: List[dict], policies: dict, report_type: str = "detailed") -> bytes:
+    """Generate PDF report for endorsements"""
+    buffer = io.BytesIO()
+    
+    if report_type == "summary":
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+    else:
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    # Title
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=30,
+        alignment=1  # Center
+    )
+    elements.append(Paragraph("InsureHub - Approved Endorsements Report", title_style))
+    elements.append(Paragraph(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+    elements.append(Spacer(1, 20))
+    
+    if report_type == "summary":
+        # Summary statistics
+        total_endorsements = len(endorsements)
+        total_additions = sum(1 for e in endorsements if e.get('endorsement_type') in ['Addition', 'Midterm addition'])
+        total_deletions = sum(1 for e in endorsements if e.get('endorsement_type') == 'Deletion')
+        total_premium = sum(e.get('prorata_premium', 0) for e in endorsements)
+        total_charge = sum(e.get('prorata_premium', 0) for e in endorsements if e.get('prorata_premium', 0) > 0)
+        total_refund = abs(sum(e.get('prorata_premium', 0) for e in endorsements if e.get('prorata_premium', 0) < 0))
+        
+        summary_data = [
+            ['Metric', 'Value'],
+            ['Total Endorsements', str(total_endorsements)],
+            ['Additions', str(total_additions)],
+            ['Deletions', str(total_deletions)],
+            ['Total Premium (Charge)', f'₹{total_charge:,.2f}'],
+            ['Total Refund', f'₹{total_refund:,.2f}'],
+            ['Net Premium Impact', f'₹{total_premium:,.2f}'],
+        ]
+        
+        summary_table = Table(summary_data, colWidths=[3*inch, 2*inch])
+        summary_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f0f9ff')),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(summary_table)
+        elements.append(Spacer(1, 30))
+        
+        # Premium breakdown by type
+        elements.append(Paragraph("Premium Breakdown by Endorsement Type", styles['Heading2']))
+        elements.append(Spacer(1, 10))
+        
+        type_breakdown = {}
+        for e in endorsements:
+            etype = e.get('endorsement_type', 'Unknown')
+            if etype not in type_breakdown:
+                type_breakdown[etype] = {'count': 0, 'premium': 0}
+            type_breakdown[etype]['count'] += 1
+            type_breakdown[etype]['premium'] += e.get('prorata_premium', 0)
+        
+        breakdown_data = [['Endorsement Type', 'Count', 'Premium']]
+        for etype, data in type_breakdown.items():
+            premium_str = f'₹{data["premium"]:,.2f}'
+            if data["premium"] < 0:
+                premium_str += ' (Refund)'
+            breakdown_data.append([etype, str(data['count']), premium_str])
+        
+        breakdown_table = Table(breakdown_data, colWidths=[2.5*inch, 1.5*inch, 2*inch])
+        breakdown_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ]))
+        elements.append(breakdown_table)
+        
+    else:
+        # Detailed table
+        headers = ['Policy', 'Employee ID', 'Member', 'Type', 'Premium Type', 'Premium', 'Status']
+        data = [headers]
+        
+        for e in endorsements:
+            premium = e.get('prorata_premium', 0)
+            premium_type = get_premium_type(e.get('endorsement_type', ''))
+            premium_str = f'₹{abs(premium):,.2f}'
+            if premium < 0:
+                premium_str = f'-{premium_str}'
+            
+            data.append([
+                e.get('policy_number', ''),
+                e.get('employee_id', '-'),
+                e.get('member_name', ''),
+                e.get('endorsement_type', ''),
+                premium_type,
+                premium_str,
+                e.get('status', ''),
+            ])
+        
+        table = Table(data, colWidths=[1.2*inch, 1*inch, 1.5*inch, 1*inch, 1*inch, 1*inch, 0.8*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f9ff')]),
+        ]))
+        elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 # API Endpoints
 
 @api_router.get("/")
