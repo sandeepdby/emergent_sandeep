@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileSpreadsheet, ClipboardList, Plus } from "lucide-react";
+import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, Upload } from "lucide-react";
 import { AuthContext } from "../auth";
 import SubmitEndorsement from "./SubmitEndorsement";
 import MyEndorsements from "./MyEndorsements";
@@ -13,7 +13,7 @@ const Navigation = ({ onLogout, user }) => {
   const navItems = [
     { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
     { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
-    { path: "/hr/import", label: "Import Excel", icon: FileSpreadsheet },
+    { path: "/hr/import", label: "Upload File", icon: Upload },
   ];
 
   return (
