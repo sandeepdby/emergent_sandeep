@@ -202,9 +202,9 @@ class ImportEndorsements extends React.Component {
       <div className="space-y-6" data-testid="import-page">
         <Card>
           <CardHeader>
-            <CardTitle>Upload Endorsements from Excel</CardTitle>
+            <CardTitle>Import Endorsements from Excel</CardTitle>
             <CardDescription>
-              Upload an Excel file (.xlsx or .xls) to import endorsements in bulk
+              Import an Excel file (.xlsx or .xls) to add endorsements in bulk
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
