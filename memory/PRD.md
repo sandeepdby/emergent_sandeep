@@ -85,6 +85,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - `DELETE /api/endorsements/{id}` - Delete endorsement
 - `POST /api/endorsements/{id}/approve` - Approve/reject (Admin only)
 - `POST /api/endorsements/import` - Import from Excel
+- `POST /api/endorsements/calculate-premium` - Preview pro-rata premium calculation
 - `GET /api/endorsements/download/approved` - Download approved as Excel
 - `GET /api/endorsements/template/download` - Download import template
 
