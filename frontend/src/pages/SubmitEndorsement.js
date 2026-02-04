@@ -142,6 +142,7 @@ class SubmitEndorsement extends React.Component {
       });
       toast.success("Endorsement submitted successfully and is pending approval");
       this.setState({
+        premiumData: null,
         formData: {
           policy_number: "",
           employee_id: "",
