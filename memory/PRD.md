@@ -128,6 +128,18 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
   - Detailed Report (full table format)
 - [x] **Enhanced UI with gradient cards and better visuals**
 
+### Session 4 (Feb 2026)
+- [x] **Pro-rata Premium Calculator in Submit Endorsement Form:**
+  - Added `/api/endorsements/calculate-premium` endpoint for premium preview
+  - Interactive "Calculate Premium" button in Submit Endorsement form
+  - Real-time display of:
+    - Policy Period
+    - Remaining Days
+    - Premium Type (Charge/Refund/No Change)
+    - Pro-rata Premium amount (₹ formatted)
+  - Color-coded display: Green for charges, Red for refunds
+  - Recalculates when Policy, Endorsement Type, or Date changes
+
 ## Test Credentials
 - **HR User**: hr@test.com / password123
 - **Admin User**: admin@test.com / password123
