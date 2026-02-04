@@ -1466,8 +1466,10 @@ async def get_endorsements_summary(current_user: User = Depends(get_current_user
 
 class PremiumCalculationRequest(BaseModel):
     policy_number: str
-    endorsement_date: str
     endorsement_type: EndorsementType
+    date_of_joining: Optional[str] = None  # For Addition/Midterm addition
+    date_of_leaving: Optional[str] = None   # For Deletion
+    endorsement_date: Optional[str] = None  # Fallback if DOJ/DOL not provided
 
 
 class PremiumCalculationResponse(BaseModel):
@@ -1479,6 +1481,8 @@ class PremiumCalculationResponse(BaseModel):
     annual_premium_per_life: float
     policy_inception_date: str
     policy_expiry_date: str
+    calculation_date: str  # The date used for calculation (DOJ or DOL)
+    calculation_note: str  # Explanation of the calculation
 
 
 @api_router.post("/endorsements/calculate-premium", response_model=PremiumCalculationResponse)
@@ -1486,20 +1490,49 @@ async def calculate_premium_preview(
     request: PremiumCalculationRequest,
     current_user: User = Depends(get_current_user)
 ):
-    """Calculate pro-rata premium preview without creating an endorsement"""
+    """
+    Calculate pro-rata premium preview without creating an endorsement.
+    - Addition/Midterm addition: Uses Date of Joining (DOJ) - Premium = (Expiry - DOJ) / Policy Days * Annual Premium
+    - Deletion: Uses Date of Leaving (DOL) - Refund = (Expiry - DOL) / Policy Days * Annual Premium
+    """
     policy = await db.policies.find_one({"policy_number": request.policy_number}, {"_id": 0})
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {request.policy_number} not found")
     
+    # Determine which date to use based on endorsement type
+    endorsement_type = request.endorsement_type.value
+    
+    if endorsement_type in ["Addition", "Midterm addition"]:
+        if not request.date_of_joining:
+            raise HTTPException(
+                status_code=400, 
+                detail="Date of Joining (DOJ) is required for Addition/Midterm addition premium calculation"
+            )
+        calculation_date = request.date_of_joining
+        calculation_note = f"Premium calculated from Date of Joining ({calculation_date}) to Policy Expiry ({policy['expiry_date']})"
+    elif endorsement_type == "Deletion":
+        if not request.date_of_leaving:
+            raise HTTPException(
+                status_code=400, 
+                detail="Date of Leaving (DOL) is required for Deletion refund calculation"
+            )
+        calculation_date = request.date_of_leaving
+        calculation_note = f"Refund calculated from Date of Leaving ({calculation_date}) to Policy Expiry ({policy['expiry_date']})"
+    else:  # Correction
+        calculation_date = request.endorsement_date or request.date_of_joining or request.date_of_leaving
+        if not calculation_date:
+            raise HTTPException(status_code=400, detail="A date is required for calculation")
+        calculation_note = "Correction - No premium impact"
+    
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
         policy['expiry_date'],
-        request.endorsement_date,
+        calculation_date,
         policy['annual_premium_per_life'],
-        request.endorsement_type.value
+        endorsement_type
     )
     
-    premium_type = get_premium_type(request.endorsement_type.value)
+    premium_type = get_premium_type(endorsement_type)
     
     return PremiumCalculationResponse(
         days_from_inception=days_from_inception,
@@ -1509,7 +1542,9 @@ async def calculate_premium_preview(
         premium_type=premium_type,
         annual_premium_per_life=policy['annual_premium_per_life'],
         policy_inception_date=policy['inception_date'],
-        policy_expiry_date=policy['expiry_date']
+        policy_expiry_date=policy['expiry_date'],
+        calculation_date=calculation_date,
+        calculation_note=calculation_note
     )
 
 
