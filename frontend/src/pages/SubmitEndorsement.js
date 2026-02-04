@@ -377,6 +377,76 @@ class SubmitEndorsement extends React.Component {
                 </div>
               </div>
 
+              {/* Pro-rata Premium Calculation Section */}
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Calculator className="w-5 h-5 text-blue-600" />
+                    <Label className="text-blue-800 font-semibold">Pro-rata Premium Calculation</Label>
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={this.calculatePremium}
+                    disabled={calculatingPremium || !formData.policy_number || !formData.endorsement_date || !formData.endorsement_type}
+                    data-testid="calculate-premium-btn"
+                  >
+                    {calculatingPremium ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Calculating...
+                      </>
+                    ) : (
+                      <>
+                        <Calculator className="w-4 h-4 mr-2" />
+                        Calculate Premium
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                {premiumData ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="bg-white p-3 rounded shadow-sm">
+                      <div className="text-gray-500">Policy Period</div>
+                      <div className="font-medium">{premiumData.policy_inception_date} to {premiumData.policy_expiry_date}</div>
+                    </div>
+                    <div className="bg-white p-3 rounded shadow-sm">
+                      <div className="text-gray-500">Remaining Days</div>
+                      <div className="font-medium text-lg">{premiumData.remaining_days} days</div>
+                    </div>
+                    <div className="bg-white p-3 rounded shadow-sm">
+                      <div className="text-gray-500">Premium Type</div>
+                      <div className={`font-medium text-lg ${
+                        premiumData.premium_type === 'Charge' ? 'text-green-600' : 
+                        premiumData.premium_type === 'Refund' ? 'text-red-600' : 'text-gray-600'
+                      }`}>
+                        {premiumData.premium_type}
+                      </div>
+                    </div>
+                    <div className={`p-3 rounded shadow-sm ${
+                      premiumData.prorata_premium > 0 ? 'bg-green-100' : 
+                      premiumData.prorata_premium < 0 ? 'bg-red-100' : 'bg-gray-100'
+                    }`}>
+                      <div className="text-gray-500">Pro-rata Premium</div>
+                      <div className={`font-bold text-xl flex items-center ${
+                        premiumData.prorata_premium > 0 ? 'text-green-700' : 
+                        premiumData.prorata_premium < 0 ? 'text-red-700' : 'text-gray-700'
+                      }`}>
+                        <IndianRupee className="w-4 h-4" />
+                        {Math.abs(premiumData.prorata_premium).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        {premiumData.prorata_premium < 0 && <span className="text-sm ml-1">(Refund)</span>}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-sm text-center py-4">
+                    Select Policy, Endorsement Type, and Endorsement Date, then click "Calculate Premium" to see the pro-rata premium
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-2">
                 <Label>Remarks</Label>
                 <Textarea
