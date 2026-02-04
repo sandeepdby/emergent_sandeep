@@ -342,9 +342,13 @@ class SubmitEndorsement extends React.Component {
                   <Input
                     type="date"
                     value={formData.date_of_leaving}
-                    onChange={(e) => this.updateFormData('date_of_leaving', e.target.value)}
+                    onChange={(e) => this.handleFieldChangeWithPremiumRecalc('date_of_leaving', e.target.value)}
                     data-testid="date-of-leaving-input"
+                    className={formData.endorsement_type === "Deletion" ? "border-red-300" : ""}
                   />
+                  {formData.endorsement_type === "Deletion" && (
+                    <p className="text-xs text-red-600">Required for refund calculation</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
