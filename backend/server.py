@@ -348,6 +348,40 @@ def calculate_prorata_premium(
         return 0, 0, 0, 0.0
 
 
+# Maximum days allowed between endorsement date and DOJ/DOL
+MAX_ENDORSEMENT_DAYS = 45
+
+
+def validate_endorsement_date_limit(
+    endorsement_date_str: str,
+    effective_date_str: str,
+    endorsement_type: str
+) -> tuple:
+    """
+    Validate that Addition/Deletion endorsements are within 45 days limit.
+    Returns (is_valid, error_message, days_difference)
+    """
+    if endorsement_type == "Correction":
+        return True, None, 0
+    
+    try:
+        endorsement_date = datetime.strptime(endorsement_date_str, "%Y-%m-%d").date()
+        effective_date = datetime.strptime(effective_date_str, "%Y-%m-%d").date()
+        
+        days_diff = abs((endorsement_date - effective_date).days)
+        
+        if days_diff > MAX_ENDORSEMENT_DAYS:
+            if endorsement_type in ["Addition", "Midterm addition"]:
+                return False, f"Addition endorsement not allowed: Date of Joining ({effective_date_str}) is more than {MAX_ENDORSEMENT_DAYS} days from Endorsement Date ({endorsement_date_str}). Difference: {days_diff} days", days_diff
+            elif endorsement_type == "Deletion":
+                return False, f"Deletion endorsement not allowed: Date of Leaving ({effective_date_str}) is more than {MAX_ENDORSEMENT_DAYS} days from Endorsement Date ({endorsement_date_str}). Difference: {days_diff} days", days_diff
+        
+        return True, None, days_diff
+    except Exception as e:
+        logging.error(f"Error validating endorsement date limit: {e}")
+        return False, f"Invalid date format: {str(e)}", 0
+
+
 def parse_date(date_str: str) -> str:
     if pd.isna(date_str):
         return None
