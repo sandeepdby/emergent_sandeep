@@ -1189,11 +1189,40 @@ async def import_endorsements_from_excel(
                 # Addition/Midterm addition: Use Date of Joining (DOJ)
                 # Deletion: Use Date of Leaving (DOL)
                 if endorsement_type.value in ["Addition", "Midterm addition"]:
-                    calculation_date = date_of_joining or endorsement_date
+                    if not date_of_joining:
+                        errors.append({
+                            "row": index + 2,
+                            "error": f"Date of Joining (DOJ) is required for Addition endorsements"
+                        })
+                        error_count += 1
+                        continue
+                    calculation_date = date_of_joining
                 elif endorsement_type.value == "Deletion":
-                    calculation_date = date_of_leaving or endorsement_date
+                    if not date_of_leaving:
+                        errors.append({
+                            "row": index + 2,
+                            "error": f"Date of Leaving (DOL) is required for Deletion endorsements"
+                        })
+                        error_count += 1
+                        continue
+                    calculation_date = date_of_leaving
                 else:  # Correction
                     calculation_date = endorsement_date
+                
+                # Validate 45-day limit for Addition/Deletion
+                if endorsement_type.value != "Correction":
+                    is_valid, error_msg, days_diff = validate_endorsement_date_limit(
+                        endorsement_date,
+                        calculation_date,
+                        endorsement_type.value
+                    )
+                    if not is_valid:
+                        errors.append({
+                            "row": index + 2,
+                            "error": error_msg
+                        })
+                        error_count += 1
+                        continue
                 
                 # Calculate pro-rata premium based on endorsement type
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
