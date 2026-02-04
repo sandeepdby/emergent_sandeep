@@ -751,11 +751,25 @@ async def create_endorsement(endorsement_data: EndorsementCreate, current_user: 
     endorsement_type = endorsement_data.endorsement_type.value
     
     if endorsement_type in ["Addition", "Midterm addition"]:
-        calculation_date = endorsement_data.date_of_joining or endorsement_data.endorsement_date
+        if not endorsement_data.date_of_joining:
+            raise HTTPException(status_code=400, detail="Date of Joining (DOJ) is required for Addition endorsements")
+        calculation_date = endorsement_data.date_of_joining
     elif endorsement_type == "Deletion":
-        calculation_date = endorsement_data.date_of_leaving or endorsement_data.endorsement_date
+        if not endorsement_data.date_of_leaving:
+            raise HTTPException(status_code=400, detail="Date of Leaving (DOL) is required for Deletion endorsements")
+        calculation_date = endorsement_data.date_of_leaving
     else:  # Correction
         calculation_date = endorsement_data.endorsement_date
+    
+    # Validate 45-day limit for Addition/Deletion
+    if endorsement_type != "Correction":
+        is_valid, error_msg, days_diff = validate_endorsement_date_limit(
+            endorsement_data.endorsement_date,
+            calculation_date,
+            endorsement_type
+        )
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
     
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
