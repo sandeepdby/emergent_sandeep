@@ -13,7 +13,7 @@ const Navigation = ({ onLogout, user }) => {
   const navItems = [
     { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
     { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
-    { path: "/hr/import", label: "Upload File", icon: Upload },
+    { path: "/hr/import", label: "Import File", icon: Upload },
   ];
 
   return (
