@@ -78,6 +78,44 @@ class SubmitEndorsement extends React.Component {
     }));
   };
 
+  calculatePremium = async () => {
+    const { policy_number, endorsement_date, endorsement_type } = this.state.formData;
+    
+    if (!policy_number || !endorsement_date || !endorsement_type) {
+      toast.error("Please select Policy, Endorsement Date, and Endorsement Type to calculate premium");
+      return;
+    }
+
+    try {
+      this.setState({ calculatingPremium: true });
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API}/endorsements/calculate-premium`, {
+        policy_number,
+        endorsement_date,
+        endorsement_type
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      this.setState({ premiumData: response.data });
+      toast.success("Premium calculated successfully");
+    } catch (error) {
+      console.error("Error calculating premium:", error);
+      toast.error(error.response?.data?.detail || "Failed to calculate premium");
+      this.setState({ premiumData: null });
+    } finally {
+      this.setState({ calculatingPremium: false });
+    }
+  };
+
+  // Auto-calculate premium when key fields change
+  handleFieldChangeWithPremiumRecalc = (field, value) => {
+    this.setState(prevState => ({
+      formData: { ...prevState.formData, [field]: value },
+      premiumData: null // Clear premium when fields change
+    }));
+  };
+
   handleSubmit = async (e) => {
     e.preventDefault();
     try {
