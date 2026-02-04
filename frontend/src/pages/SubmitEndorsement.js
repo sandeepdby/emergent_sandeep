@@ -412,7 +412,7 @@ class SubmitEndorsement extends React.Component {
                     variant="outline" 
                     size="sm"
                     onClick={this.calculatePremium}
-                    disabled={calculatingPremium || !formData.policy_number || !formData.endorsement_date || !formData.endorsement_type}
+                    disabled={calculatingPremium || !formData.policy_number || !formData.endorsement_type}
                     data-testid="calculate-premium-btn"
                   >
                     {calculatingPremium ? (
@@ -430,42 +430,46 @@ class SubmitEndorsement extends React.Component {
                 </div>
                 
                 {premiumData ? (
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <div className="text-gray-500">Policy Period</div>
-                      <div className="font-medium">{premiumData.policy_inception_date} to {premiumData.policy_expiry_date}</div>
-                    </div>
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <div className="text-gray-500">Remaining Days</div>
-                      <div className="font-medium text-lg">{premiumData.remaining_days} days</div>
-                    </div>
-                    <div className="bg-white p-3 rounded shadow-sm">
-                      <div className="text-gray-500">Premium Type</div>
-                      <div className={`font-medium text-lg ${
-                        premiumData.premium_type === 'Charge' ? 'text-green-600' : 
-                        premiumData.premium_type === 'Refund' ? 'text-red-600' : 'text-gray-600'
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="bg-white p-3 rounded shadow-sm">
+                        <div className="text-gray-500">Policy Period</div>
+                        <div className="font-medium">{premiumData.policy_inception_date} to {premiumData.policy_expiry_date}</div>
+                      </div>
+                      <div className="bg-white p-3 rounded shadow-sm">
+                        <div className="text-gray-500">Calculation Date</div>
+                        <div className="font-medium">{premiumData.calculation_date}</div>
+                      </div>
+                      <div className="bg-white p-3 rounded shadow-sm">
+                        <div className="text-gray-500">Remaining Days</div>
+                        <div className="font-medium text-lg">{premiumData.remaining_days} days</div>
+                      </div>
+                      <div className={`p-3 rounded shadow-sm ${
+                        premiumData.prorata_premium > 0 ? 'bg-green-100' : 
+                        premiumData.prorata_premium < 0 ? 'bg-red-100' : 'bg-gray-100'
                       }`}>
-                        {premiumData.premium_type}
+                        <div className="text-gray-500">Pro-rata {premiumData.premium_type}</div>
+                        <div className={`font-bold text-xl flex items-center ${
+                          premiumData.prorata_premium > 0 ? 'text-green-700' : 
+                          premiumData.prorata_premium < 0 ? 'text-red-700' : 'text-gray-700'
+                        }`}>
+                          <IndianRupee className="w-4 h-4" />
+                          {Math.abs(premiumData.prorata_premium).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          {premiumData.prorata_premium < 0 && <span className="text-sm ml-1">(Refund)</span>}
+                        </div>
                       </div>
                     </div>
-                    <div className={`p-3 rounded shadow-sm ${
-                      premiumData.prorata_premium > 0 ? 'bg-green-100' : 
-                      premiumData.prorata_premium < 0 ? 'bg-red-100' : 'bg-gray-100'
-                    }`}>
-                      <div className="text-gray-500">Pro-rata Premium</div>
-                      <div className={`font-bold text-xl flex items-center ${
-                        premiumData.prorata_premium > 0 ? 'text-green-700' : 
-                        premiumData.prorata_premium < 0 ? 'text-red-700' : 'text-gray-700'
-                      }`}>
-                        <IndianRupee className="w-4 h-4" />
-                        {Math.abs(premiumData.prorata_premium).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        {premiumData.prorata_premium < 0 && <span className="text-sm ml-1">(Refund)</span>}
-                      </div>
+                    <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                      <strong>Formula:</strong> {premiumData.calculation_note}
                     </div>
                   </div>
                 ) : (
                   <div className="text-gray-500 text-sm text-center py-4">
-                    Select Policy, Endorsement Type, and Endorsement Date, then click "Calculate Premium" to see the pro-rata premium
+                    {formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition" 
+                      ? "Select Policy, Endorsement Type, and enter Date of Joining (DOJ) to calculate premium"
+                      : formData.endorsement_type === "Deletion"
+                        ? "Select Policy, Endorsement Type, and enter Date of Leaving (DOL) to calculate refund"
+                        : "Select Policy and Endorsement Type to calculate premium"}
                   </div>
                 )}
               </div>
