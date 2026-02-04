@@ -176,7 +176,7 @@ class SubmitEndorsement extends React.Component {
   };
 
   render() {
-    const { policies, loading, formData } = this.state;
+    const { policies, loading, calculatingPremium, premiumData, formData } = this.state;
 
     return (
       <div className="space-y-6" data-testid="submit-endorsement-page">
@@ -192,7 +192,7 @@ class SubmitEndorsement extends React.Component {
                   <Label>Policy Number *</Label>
                   <Select
                     value={formData.policy_number}
-                    onValueChange={(value) => this.updateFormData('policy_number', value)}
+                    onValueChange={(value) => this.handleFieldChangeWithPremiumRecalc('policy_number', value)}
                     required
                   >
                     <SelectTrigger data-testid="policy-select">
