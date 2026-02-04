@@ -133,13 +133,15 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] **Pro-rata Premium Calculator in Submit Endorsement Form:**
   - Added `/api/endorsements/calculate-premium` endpoint for premium preview
   - Interactive "Calculate Premium" button in Submit Endorsement form
-  - Real-time display of:
-    - Policy Period
-    - Remaining Days
-    - Premium Type (Charge/Refund/No Change)
-    - Pro-rata Premium amount (₹ formatted)
+  - Real-time display of Policy Period, Remaining Days, Premium Type, Pro-rata Premium
   - Color-coded display: Green for charges, Red for refunds
-  - Recalculates when Policy, Endorsement Type, or Date changes
+- [x] **Corrected Premium Calculation Formula:**
+  - **Addition/Midterm addition**: Premium = (Policy Expiry - Date of Joining) / Policy Days × Annual Premium
+  - **Deletion**: Refund = (Policy Expiry - Date of Leaving) / Policy Days × Annual Premium
+- [x] **45-Day Validation Rule:**
+  - Addition/Deletion endorsements blocked if DOJ/DOL is more than 45 days from Endorsement Date
+  - Applied to: Create Endorsement API, Calculate Premium API, Excel Import
+  - Clear error messages showing dates and difference in days
 
 ## Test Credentials
 - **HR User**: hr@test.com / password123
