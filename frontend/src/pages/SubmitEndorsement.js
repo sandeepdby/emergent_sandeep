@@ -79,10 +79,23 @@ class SubmitEndorsement extends React.Component {
   };
 
   calculatePremium = async () => {
-    const { policy_number, endorsement_date, endorsement_type } = this.state.formData;
+    const { policy_number, endorsement_type, date_of_joining, date_of_leaving, endorsement_date } = this.state.formData;
     
-    if (!policy_number || !endorsement_date || !endorsement_type) {
-      toast.error("Please select Policy, Endorsement Date, and Endorsement Type to calculate premium");
+    // Validate based on endorsement type
+    if (!policy_number || !endorsement_type) {
+      toast.error("Please select Policy and Endorsement Type");
+      return;
+    }
+
+    // For Addition: DOJ is required
+    if ((endorsement_type === "Addition" || endorsement_type === "Midterm addition") && !date_of_joining) {
+      toast.error("Please enter Date of Joining (DOJ) to calculate premium for Addition");
+      return;
+    }
+
+    // For Deletion: DOL is required
+    if (endorsement_type === "Deletion" && !date_of_leaving) {
+      toast.error("Please enter Date of Leaving (DOL) to calculate refund for Deletion");
       return;
     }
 
@@ -91,8 +104,10 @@ class SubmitEndorsement extends React.Component {
       const token = localStorage.getItem('token');
       const response = await axios.post(`${API}/endorsements/calculate-premium`, {
         policy_number,
-        endorsement_date,
-        endorsement_type
+        endorsement_type,
+        date_of_joining: date_of_joining || null,
+        date_of_leaving: date_of_leaving || null,
+        endorsement_date: endorsement_date || null
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
