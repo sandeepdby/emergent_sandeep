@@ -285,6 +285,7 @@ class ImportEndorsements extends React.Component {
               onClick={this.handleUpload}
               disabled={!file || uploading || policies.length === 0}
               className="w-full"
+              data-testid="upload-file-btn"
             >
               {uploading ? (
                 <>
@@ -294,7 +295,7 @@ class ImportEndorsements extends React.Component {
               ) : (
                 <>
                   <Upload className="w-4 h-4 mr-2" />
-                  Import Endorsements
+                  Upload File
                 </>
               )}
             </Button>
