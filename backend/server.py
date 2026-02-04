@@ -1195,6 +1195,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Relationship Type': 'Employee',
             'Endorsement Type': 'Addition',
             'Date of Joining': '2025-01-15',
+            'Date of Leaving': '',
             'Coverage Type': 'Non-Floater',
             'Suminsured': 500000,
             'Endorsement Date': '2025-02-01',
@@ -1216,6 +1217,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Relationship Type': 'Spouse',
             'Endorsement Type': 'Addition',
             'Date of Joining': '2025-01-15',
+            'Date of Leaving': '',
             'Coverage Type': 'Floater',
             'Suminsured': 500000,
             'Endorsement Date': '2025-02-01',
@@ -1235,13 +1237,14 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Age': 39,
             'Gender': 'Male',
             'Relationship Type': 'Employee',
-            'Endorsement Type': 'Midterm addition',
-            'Date of Joining': '2025-06-01',
+            'Endorsement Type': 'Deletion',
+            'Date of Joining': '2020-06-01',
+            'Date of Leaving': '2025-06-30',
             'Coverage Type': 'Non-Floater',
             'Suminsured': 300000,
             'Endorsement Date': '2025-06-05',
-            'Effective Date': '2025-06-01',
-            'Remarks': 'Midterm joining - replace with actual data'
+            'Effective Date': '2025-06-30',
+            'Remarks': 'Employee resigned - replace with actual data'
         }
     ]
     
