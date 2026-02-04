@@ -755,7 +755,7 @@ async def get_endorsements(
     status: Optional[EndorsementStatus] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get all endorsements with optional filters"""
+    """Get all endorsements with optional filters, sorted by latest first"""
     query = {}
     
     # HR users can only see their own submissions
@@ -769,7 +769,8 @@ async def get_endorsements(
     if status:
         query["status"] = status
     
-    endorsements = await db.endorsements.find(query, {"_id": 0}).to_list(10000)
+    # Sort by created_at descending (latest first)
+    endorsements = await db.endorsements.find(query, {"_id": 0}).sort("created_at", -1).to_list(10000)
     
     for endorsement in endorsements:
         if isinstance(endorsement['created_at'], str):
