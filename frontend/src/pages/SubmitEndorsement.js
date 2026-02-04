@@ -26,6 +26,7 @@ class SubmitEndorsement extends React.Component {
         relationship_type: "",
         endorsement_type: "",
         date_of_joining: "",
+        date_of_leaving: "",
         coverage_type: "",
         sum_insured: "",
         endorsement_date: new Date().toISOString().split('T')[0],
@@ -52,6 +53,29 @@ class SubmitEndorsement extends React.Component {
     }
   };
 
+  calculateAge = (dob) => {
+    if (!dob) return "";
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age > 0 ? age.toString() : "";
+  };
+
+  handleDobChange = (dob) => {
+    const calculatedAge = this.calculateAge(dob);
+    this.setState(prevState => ({
+      formData: {
+        ...prevState.formData,
+        dob: dob,
+        age: calculatedAge
+      }
+    }));
+  };
+
   handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -66,6 +90,7 @@ class SubmitEndorsement extends React.Component {
         age: this.state.formData.age ? parseInt(this.state.formData.age) : null,
         gender: this.state.formData.gender || null,
         date_of_joining: this.state.formData.date_of_joining || null,
+        date_of_leaving: this.state.formData.date_of_leaving || null,
         coverage_type: this.state.formData.coverage_type || null,
         sum_insured: this.state.formData.sum_insured ? parseFloat(this.state.formData.sum_insured) : null,
         effective_date: this.state.formData.effective_date || null,
@@ -87,6 +112,7 @@ class SubmitEndorsement extends React.Component {
           relationship_type: "",
           endorsement_type: "",
           date_of_joining: "",
+          date_of_leaving: "",
           coverage_type: "",
           sum_insured: "",
           endorsement_date: new Date().toISOString().split('T')[0],
@@ -167,18 +193,20 @@ class SubmitEndorsement extends React.Component {
                   <Input
                     type="date"
                     value={formData.dob}
-                    onChange={(e) => this.updateFormData('dob', e.target.value)}
+                    onChange={(e) => this.handleDobChange(e.target.value)}
                     data-testid="dob-input"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Age</Label>
+                  <Label>Age (Auto-calculated)</Label>
                   <Input
                     type="number"
                     value={formData.age}
                     onChange={(e) => this.updateFormData('age', e.target.value)}
-                    placeholder="Enter age"
+                    placeholder="Auto-calculated from DOB"
+                    readOnly={formData.dob !== ""}
+                    className={formData.dob ? "bg-gray-100" : ""}
                     data-testid="age-input"
                   />
                 </div>
@@ -240,12 +268,22 @@ class SubmitEndorsement extends React.Component {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Date of Joining</Label>
+                  <Label>Date of Joining (DOJ)</Label>
                   <Input
                     type="date"
                     value={formData.date_of_joining}
                     onChange={(e) => this.updateFormData('date_of_joining', e.target.value)}
                     data-testid="date-of-joining-input"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Date of Leaving (DOL)</Label>
+                  <Input
+                    type="date"
+                    value={formData.date_of_leaving}
+                    onChange={(e) => this.updateFormData('date_of_leaving', e.target.value)}
+                    data-testid="date-of-leaving-input"
                   />
                 </div>
 
