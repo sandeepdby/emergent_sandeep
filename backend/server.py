@@ -1591,6 +1591,16 @@ async def calculate_premium_preview(
             raise HTTPException(status_code=400, detail="A date is required for calculation")
         calculation_note = "Correction - No premium impact"
     
+    # Validate 45-day limit for Addition/Deletion
+    if request.endorsement_date and endorsement_type != "Correction":
+        is_valid, error_msg, days_diff = validate_endorsement_date_limit(
+            request.endorsement_date,
+            calculation_date,
+            endorsement_type
+        )
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+    
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
         policy['expiry_date'],
