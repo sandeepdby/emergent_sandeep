@@ -276,16 +276,16 @@ POL001        | Jack Doe    | Kids             | Addition         | 2025-02-05  
 ### Backend API Testing
 ```bash
 # Login as HR
-curl -X POST "https://insurehub-25.preview.emergentagent.com/api/auth/login" \
+curl -X POST "https://endorsehub.preview.emergentagent.com/api/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username": "hr@test.com", "password": "password123"}'
 
 # Get policies (with JWT token)
-curl -X GET "https://insurehub-25.preview.emergentagent.com/api/policies" \
+curl -X GET "https://endorsehub.preview.emergentagent.com/api/policies" \
   -H "Authorization: Bearer {YOUR_TOKEN}"
 
 # Submit endorsement
-curl -X POST "https://insurehub-25.preview.emergentagent.com/api/endorsements" \
+curl -X POST "https://endorsehub.preview.emergentagent.com/api/endorsements" \
   -H "Authorization: Bearer {YOUR_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
@@ -298,7 +298,7 @@ curl -X POST "https://insurehub-25.preview.emergentagent.com/api/endorsements" \
 ```
 
 ### Frontend Testing
-1. Open: https://insurehub-25.preview.emergentagent.com
+1. Open: https://endorsehub.preview.emergentagent.com
 2. Login as HR (hr@test.com / password123)
 3. Submit an endorsement
 4. Import Excel file
@@ -359,7 +359,7 @@ curl -X POST "https://insurehub-25.preview.emergentagent.com/api/endorsements" \
 ## 📦 Deployment
 
 ### Current Deployment
-- **Preview URL**: https://insurehub-25.preview.emergentagent.com
+- **Preview URL**: https://endorsehub.preview.emergentagent.com
 - **Target Domain**: insurehub.aarogya-assist.com (to be linked)
 
 ### Deployment Steps for Custom Domain

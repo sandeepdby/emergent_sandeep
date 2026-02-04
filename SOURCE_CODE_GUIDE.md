@@ -193,7 +193,7 @@ SECRET_KEY=your-secret-key-change-in-production
 #### 15. `/app/frontend/.env`
 **Configuration**:
 ```
-REACT_APP_BACKEND_URL=https://insurehub-25.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://endorsehub.preview.emergentagent.com
 WDS_SOCKET_PORT=443
 ENABLE_HEALTH_CHECK=false
 ```
@@ -417,7 +417,7 @@ tar -czf insurehub_source_code.tar.gz backend/ frontend/ README.md DEPLOYMENT_GU
 ## Deployment Information
 
 ### Current Status
-- **Preview URL**: https://insurehub-25.preview.emergentagent.com
+- **Preview URL**: https://endorsehub.preview.emergentagent.com
 - **Production URL**: insurehub.aarogya-assist.com (if deployed by user)
 
 ### Services Running

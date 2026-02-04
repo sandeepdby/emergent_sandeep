@@ -18,7 +18,7 @@ A **complete, production-ready endorsement management portal** combining:
 ## 🚀 QUICK START GUIDE
 
 ### **1. Access the Application**
-**Current URL**: https://insurehub-25.preview.emergentagent.com
+**Current URL**: https://endorsehub.preview.emergentagent.com
 
 ### **2. Login Credentials**
 
@@ -236,7 +236,7 @@ GET    /api/endorsements/stats/summary      # Statistics
 
 ### **Current Status:**
 - ✅ Application fully built and tested
-- ✅ Running on preview URL: https://insurehub-25.preview.emergentagent.com
+- ✅ Running on preview URL: https://endorsehub.preview.emergentagent.com
 - ⏳ Needs linking to custom domain: insurehub.aarogya-assist.com
 
 ### **Deployment Steps:**
