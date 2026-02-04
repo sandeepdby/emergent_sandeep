@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Calculator, IndianRupee } from "lucide-react";
 
 class SubmitEndorsement extends React.Component {
   constructor(props) {
@@ -16,6 +16,8 @@ class SubmitEndorsement extends React.Component {
     this.state = {
       policies: [],
       loading: false,
+      calculatingPremium: false,
+      premiumData: null,
       formData: {
         policy_number: "",
         employee_id: "",
