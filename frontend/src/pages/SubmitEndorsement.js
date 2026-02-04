@@ -324,17 +324,21 @@ class SubmitEndorsement extends React.Component {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Date of Joining (DOJ)</Label>
+                  <Label>Date of Joining (DOJ) {(formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition") && <span className="text-red-500">*</span>}</Label>
                   <Input
                     type="date"
                     value={formData.date_of_joining}
-                    onChange={(e) => this.updateFormData('date_of_joining', e.target.value)}
+                    onChange={(e) => this.handleFieldChangeWithPremiumRecalc('date_of_joining', e.target.value)}
                     data-testid="date-of-joining-input"
+                    className={(formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition") ? "border-blue-300" : ""}
                   />
+                  {(formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition") && (
+                    <p className="text-xs text-blue-600">Required for premium calculation</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Date of Leaving (DOL)</Label>
+                  <Label>Date of Leaving (DOL) {formData.endorsement_type === "Deletion" && <span className="text-red-500">*</span>}</Label>
                   <Input
                     type="date"
                     value={formData.date_of_leaving}
