@@ -1101,6 +1101,13 @@ async def import_endorsements_from_excel(
                     if parsed_effective:
                         effective_date = parsed_effective
                 
+                # Parse date of leaving (optional)
+                date_of_leaving = None
+                if 'date_of_leaving' in df.columns and pd.notna(row.get('date_of_leaving')):
+                    date_of_leaving = parse_date(row['date_of_leaving'])
+                elif 'dol' in df.columns and pd.notna(row.get('dol')):
+                    date_of_leaving = parse_date(row['dol'])
+                
                 # Get remarks if provided
                 remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row.get('remarks')) else None
                 
@@ -1125,6 +1132,7 @@ async def import_endorsements_from_excel(
                     relationship_type=relationship_type,
                     endorsement_type=endorsement_type,
                     date_of_joining=date_of_joining,
+                    date_of_leaving=date_of_leaving,
                     coverage_type=coverage_type,
                     sum_insured=sum_insured,
                     endorsement_date=endorsement_date,
