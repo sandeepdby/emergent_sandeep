@@ -1383,6 +1383,7 @@ async def download_approved_endorsements(
             'Relationship Type': e.get('relationship_type', ''),
             'Endorsement Type': e.get('endorsement_type', ''),
             'Date of Joining': e.get('date_of_joining', ''),
+            'Date of Leaving': e.get('date_of_leaving', ''),
             'Coverage Type': e.get('coverage_type', ''),
             'Suminsured': e.get('sum_insured', ''),
             'Endorsement Date': e.get('endorsement_date', ''),
