@@ -167,6 +167,7 @@ class EndorsementCreate(BaseModel):
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
     endorsement_date: str
@@ -188,6 +189,7 @@ class Endorsement(BaseModel):
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[str] = None
     sum_insured: Optional[float] = None
     endorsement_date: str
