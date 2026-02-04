@@ -216,6 +216,7 @@ class EndorsementUpdate(BaseModel):
     relationship_type: Optional[RelationshipType] = None
     endorsement_type: Optional[EndorsementType] = None
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
     endorsement_date: Optional[str] = None
