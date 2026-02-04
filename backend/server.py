@@ -1126,11 +1126,21 @@ async def import_endorsements_from_excel(
                 # Get remarks if provided
                 remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row.get('remarks')) else None
                 
+                # Determine calculation date based on endorsement type
+                # Addition/Midterm addition: Use Date of Joining (DOJ)
+                # Deletion: Use Date of Leaving (DOL)
+                if endorsement_type.value in ["Addition", "Midterm addition"]:
+                    calculation_date = date_of_joining or endorsement_date
+                elif endorsement_type.value == "Deletion":
+                    calculation_date = date_of_leaving or endorsement_date
+                else:  # Correction
+                    calculation_date = endorsement_date
+                
                 # Calculate pro-rata premium based on endorsement type
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
                     policy['inception_date'],
                     policy['expiry_date'],
-                    endorsement_date,
+                    calculation_date,
                     policy['annual_premium_per_life'],
                     endorsement_type.value  # Pass endorsement type for refund calculation
                 )
