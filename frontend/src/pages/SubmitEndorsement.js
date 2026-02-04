@@ -293,7 +293,7 @@ class SubmitEndorsement extends React.Component {
                   <Label>Endorsement Type *</Label>
                   <Select
                     value={formData.endorsement_type}
-                    onValueChange={(value) => this.updateFormData('endorsement_type', value)}
+                    onValueChange={(value) => this.handleFieldChangeWithPremiumRecalc('endorsement_type', value)}
                     required
                   >
                     <SelectTrigger data-testid="type-select">
