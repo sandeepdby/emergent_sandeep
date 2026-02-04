@@ -202,7 +202,7 @@ class ImportEndorsements extends React.Component {
       <div className="space-y-6" data-testid="import-page">
         <Card>
           <CardHeader>
-            <CardTitle>Import Endorsements from Excel</CardTitle>
+            <CardTitle>Upload Endorsements from Excel</CardTitle>
             <CardDescription>
               Upload an Excel file (.xlsx or .xls) to import endorsements in bulk
             </CardDescription>
@@ -222,11 +222,12 @@ class ImportEndorsements extends React.Component {
                   <li><strong>Employee ID</strong> - Unique employee identifier</li>
                   <li><strong>Member Name</strong> - Name of the member (Required)</li>
                   <li><strong>DOB</strong> - Date of Birth (YYYY-MM-DD)</li>
-                  <li><strong>Age</strong> - Age of the member</li>
+                  <li><strong>Age</strong> - Age of the member (Auto-calculated from DOB)</li>
                   <li><strong>Gender</strong> - Male, Female, or Other</li>
                   <li><strong>Relationship Type</strong> - Employee, Spouse, Kids, Mother, or Father (Required)</li>
                   <li><strong>Endorsement Type</strong> - Addition, Deletion, Correction, or Midterm addition (Required)</li>
-                  <li><strong>Date of Joining</strong> - When member joined the organization</li>
+                  <li><strong>Date of Joining (DOJ)</strong> - When member joined the organization</li>
+                  <li><strong>Date of Leaving (DOL)</strong> - When member left (for Deletion)</li>
                   <li><strong>Coverage Type</strong> - Floater or Non-Floater</li>
                   <li><strong>Suminsured</strong> - Sum insured/Coverage amount</li>
                   <li><strong>Endorsement Date</strong> - When endorsement received (Required)</li>
