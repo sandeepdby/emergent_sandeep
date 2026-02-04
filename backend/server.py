@@ -711,12 +711,24 @@ async def create_endorsement(endorsement_data: EndorsementCreate, current_user: 
     
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
+    # Determine calculation date based on endorsement type
+    # Addition/Midterm addition: Use Date of Joining (DOJ)
+    # Deletion: Use Date of Leaving (DOL)
+    endorsement_type = endorsement_data.endorsement_type.value
+    
+    if endorsement_type in ["Addition", "Midterm addition"]:
+        calculation_date = endorsement_data.date_of_joining or endorsement_data.endorsement_date
+    elif endorsement_type == "Deletion":
+        calculation_date = endorsement_data.date_of_leaving or endorsement_data.endorsement_date
+    else:  # Correction
+        calculation_date = endorsement_data.endorsement_date
+    
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
         policy['expiry_date'],
-        endorsement_data.endorsement_date,
+        calculation_date,
         policy['annual_premium_per_life'],
-        endorsement_data.endorsement_type.value
+        endorsement_type
     )
     
     endorsement = Endorsement(
