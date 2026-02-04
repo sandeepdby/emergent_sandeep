@@ -360,7 +360,7 @@ class SubmitEndorsement extends React.Component {
                   <Input
                     type="date"
                     value={formData.endorsement_date}
-                    onChange={(e) => this.updateFormData('endorsement_date', e.target.value)}
+                    onChange={(e) => this.handleFieldChangeWithPremiumRecalc('endorsement_date', e.target.value)}
                     required
                     data-testid="endorsement-date-input"
                   />
