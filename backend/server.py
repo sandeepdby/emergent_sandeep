@@ -828,13 +828,24 @@ async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate
     
     endorsement_date = update_dict.get('endorsement_date', existing['endorsement_date'])
     endorsement_type = update_dict.get('endorsement_type', existing['endorsement_type'])
+    date_of_joining = update_dict.get('date_of_joining', existing.get('date_of_joining'))
+    date_of_leaving = update_dict.get('date_of_leaving', existing.get('date_of_leaving'))
     
-    # Recalculate premium if date or type changed
-    if 'endorsement_date' in update_dict or 'endorsement_type' in update_dict:
+    # Recalculate premium if relevant fields changed
+    recalc_fields = ['endorsement_date', 'endorsement_type', 'date_of_joining', 'date_of_leaving']
+    if any(field in update_dict for field in recalc_fields):
+        # Determine calculation date based on endorsement type
+        if endorsement_type in ["Addition", "Midterm addition"]:
+            calculation_date = date_of_joining or endorsement_date
+        elif endorsement_type == "Deletion":
+            calculation_date = date_of_leaving or endorsement_date
+        else:  # Correction
+            calculation_date = endorsement_date
+        
         days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
             policy['inception_date'],
             policy['expiry_date'],
-            endorsement_date,
+            calculation_date,
             policy['annual_premium_per_life'],
             endorsement_type
         )
