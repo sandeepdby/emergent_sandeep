@@ -1459,6 +1459,57 @@ async def get_endorsements_summary(current_user: User = Depends(get_current_user
     }
 
 
+# ==================== PREMIUM CALCULATION ENDPOINT ====================
+
+class PremiumCalculationRequest(BaseModel):
+    policy_number: str
+    endorsement_date: str
+    endorsement_type: EndorsementType
+
+
+class PremiumCalculationResponse(BaseModel):
+    days_from_inception: int
+    days_in_policy_year: int
+    remaining_days: int
+    prorata_premium: float
+    premium_type: str  # "Charge", "Refund", or "No Change"
+    annual_premium_per_life: float
+    policy_inception_date: str
+    policy_expiry_date: str
+
+
+@api_router.post("/endorsements/calculate-premium", response_model=PremiumCalculationResponse)
+async def calculate_premium_preview(
+    request: PremiumCalculationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Calculate pro-rata premium preview without creating an endorsement"""
+    policy = await db.policies.find_one({"policy_number": request.policy_number}, {"_id": 0})
+    if not policy:
+        raise HTTPException(status_code=404, detail=f"Policy {request.policy_number} not found")
+    
+    days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
+        policy['inception_date'],
+        policy['expiry_date'],
+        request.endorsement_date,
+        policy['annual_premium_per_life'],
+        request.endorsement_type.value
+    )
+    
+    premium_type = get_premium_type(request.endorsement_type.value)
+    
+    return PremiumCalculationResponse(
+        days_from_inception=days_from_inception,
+        days_in_policy_year=days_in_policy_year,
+        remaining_days=remaining_days,
+        prorata_premium=prorata_premium,
+        premium_type=premium_type,
+        annual_premium_per_life=policy['annual_premium_per_life'],
+        policy_inception_date=policy['inception_date'],
+        policy_expiry_date=policy['expiry_date']
+    )
+
+
 # ==================== BULK APPROVAL ENDPOINTS ====================
 
 @api_router.post("/endorsements/bulk-approve")
