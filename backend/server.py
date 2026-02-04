@@ -306,24 +306,27 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 def calculate_prorata_premium(
     inception_date_str: str,
     expiry_date_str: str,
-    endorsement_date_str: str,
+    effective_date_str: str,
     annual_premium: float,
     endorsement_type: str = "Addition"
 ) -> tuple:
     """
     Calculate pro-rata premium based on endorsement type.
-    - Addition/Midterm addition: Charge for remaining days (positive premium)
-    - Deletion: Refund for remaining days (negative premium)
+    - Addition/Midterm addition: Charge for (Policy Expiry - Date of Joining)
+    - Deletion: Refund for (Policy Expiry - Date of Leaving)
     - Correction: No premium change (zero)
+    
+    Args:
+        effective_date_str: For Addition = Date of Joining (DOJ), For Deletion = Date of Leaving (DOL)
     """
     try:
         inception_date = datetime.strptime(inception_date_str, "%Y-%m-%d").date()
         expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
-        endorsement_date = datetime.strptime(endorsement_date_str, "%Y-%m-%d").date()
+        effective_date = datetime.strptime(effective_date_str, "%Y-%m-%d").date()
         
         days_in_policy_year = (expiry_date - inception_date).days
-        days_from_inception = (endorsement_date - inception_date).days
-        remaining_days = (expiry_date - endorsement_date).days
+        days_from_inception = (effective_date - inception_date).days
+        remaining_days = (expiry_date - effective_date).days
         
         if days_in_policy_year > 0 and remaining_days >= 0:
             prorata_premium = (annual_premium * remaining_days) / days_in_policy_year
