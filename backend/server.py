@@ -727,6 +727,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, current_user: 
         relationship_type=endorsement_data.relationship_type,
         endorsement_type=endorsement_data.endorsement_type,
         date_of_joining=endorsement_data.date_of_joining,
+        date_of_leaving=endorsement_data.date_of_leaving,
         coverage_type=endorsement_data.coverage_type.value if endorsement_data.coverage_type else None,
         sum_insured=endorsement_data.sum_insured,
         endorsement_date=endorsement_data.endorsement_date,
