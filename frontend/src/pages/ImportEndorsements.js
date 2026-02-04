@@ -243,7 +243,7 @@ class ImportEndorsements extends React.Component {
             <div className="flex gap-2">
               <Button onClick={this.handleDownloadTemplate} variant="outline">
                 <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Download Template
+                Export Template
               </Button>
               {policies.length === 0 && (
                 <Badge variant="destructive">Contact admin to create policies first</Badge>
