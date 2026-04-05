@@ -6,7 +6,7 @@ import axios from "axios";
 import { AuthContext, API } from "./auth";
 
 // ==================== LOGIN/REGISTER COMPONENT ====================
-const LoginRegisterPage = ({ onLogin }) => {
+const LoginRegisterPage = ({ onLogin, onBack }) => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
@@ -200,13 +200,25 @@ const LoginRegisterPage = ({ onLogin }) => {
           </button>
         </form>
         
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
           <button
             onClick={() => setShowRegister(true)}
             className="text-blue-600 hover:text-blue-800 font-medium"
+            data-testid="create-account-link"
           >
             Create New Account
           </button>
+          {onBack && (
+            <div>
+              <button
+                onClick={onBack}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+                data-testid="back-to-landing-btn"
+              >
+                ← Back to Home
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -217,10 +229,12 @@ const LoginRegisterPage = ({ onLogin }) => {
 // These are already created in the codebase
 import HRDashboard from "./pages/HRDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import LandingPage from "./pages/LandingPage";
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAuth, setShowAuth] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -240,6 +254,7 @@ function App() {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(userData));
     setUser(userData);
+    setShowAuth(false);
   };
 
   const logout = () => {
@@ -256,10 +271,18 @@ function App() {
       <div className="App min-h-screen bg-gray-50">
         <BrowserRouter>
           <Routes>
+            <Route path="/" element={
+              user ? (
+                <Navigate to={user.role === 'Admin' ? '/admin' : '/hr'} />
+              ) : showAuth ? (
+                <LoginRegisterPage onLogin={login} onBack={() => setShowAuth(false)} />
+              ) : (
+                <LandingPage onGetStarted={() => setShowAuth(true)} />
+              )
+            } />
             <Route path="/login" element={!user ? <LoginRegisterPage onLogin={login} /> : <Navigate to={user.role === 'Admin' ? '/admin' : '/hr'} />} />
             <Route path="/hr/*" element={user && user.role === 'HR' ? <HRDashboard /> : <Navigate to="/login" />} />
             <Route path="/admin/*" element={user && user.role === 'Admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
-            <Route path="/" element={<Navigate to={user ? (user.role === 'Admin' ? '/admin' : '/hr') : '/login'} />} />
           </Routes>
         </BrowserRouter>
         <Toaster />
