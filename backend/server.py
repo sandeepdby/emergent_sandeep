@@ -216,6 +216,7 @@ class EndorsementCreate(BaseModel):
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
     endorsement_date: str
@@ -237,8 +238,10 @@ class Endorsement(BaseModel):
     relationship_type: RelationshipType
     endorsement_type: EndorsementType
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[str] = None
     sum_insured: Optional[float] = None
+    annual_premium_per_life: Optional[float] = None
     endorsement_date: str
     effective_date: str
     days_from_inception: int
@@ -246,7 +249,7 @@ class Endorsement(BaseModel):
     remaining_days: int
     prorata_premium: float
     status: EndorsementStatus = EndorsementStatus.PENDING
-    submitted_by: Optional[str] = None  # user_id - optional for legacy data
+    submitted_by: Optional[str] = None
     approved_by: Optional[str] = None
     approval_date: Optional[str] = None
     remarks: Optional[str] = None
@@ -263,6 +266,7 @@ class EndorsementUpdate(BaseModel):
     relationship_type: Optional[RelationshipType] = None
     endorsement_type: Optional[EndorsementType] = None
     date_of_joining: Optional[str] = None
+    date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
     endorsement_date: Optional[str] = None
@@ -317,6 +321,30 @@ class DocumentCategory(str, Enum):
     PREMIUM_RECEIPTS = "Premium Receipts"
     ECARDS = "E-Cards"
     OTHERS = "Others"
+
+
+# CD Ledger Models
+class CDLedgerEntryCreate(BaseModel):
+    date: str
+    reference: str
+    description: Optional[str] = None
+    amount: float  # positive = deposit, negative = withdrawal
+    policy_number: Optional[str] = None
+
+
+class CDLedgerEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    date: str
+    reference: str
+    description: Optional[str] = None
+    amount: float
+    policy_number: Optional[str] = None
+    entry_type: str = "Manual"  # Manual, Endorsement Deduction, Refund Credit
+    endorsement_id: Optional[str] = None
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 # Helper Functions
@@ -1063,6 +1091,26 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {endorsement_data.policy_number} not found")
     
+    # 45-day backdating validation for DOJ and DOL
+    today = date.today()
+    min_allowed_date = today - __import__('datetime').timedelta(days=45)
+    
+    if endorsement_data.date_of_joining:
+        try:
+            doj = datetime.strptime(endorsement_data.date_of_joining, "%Y-%m-%d").date()
+            if doj < min_allowed_date:
+                raise HTTPException(status_code=400, detail="Date of Joining cannot be more than 45 days backdated")
+        except ValueError:
+            pass
+    
+    if endorsement_data.date_of_leaving:
+        try:
+            dol = datetime.strptime(endorsement_data.date_of_leaving, "%Y-%m-%d").date()
+            if dol < min_allowed_date:
+                raise HTTPException(status_code=400, detail="Date of Leaving cannot be more than 45 days backdated")
+        except ValueError:
+            pass
+    
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
@@ -1084,8 +1132,10 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         relationship_type=endorsement_data.relationship_type,
         endorsement_type=endorsement_data.endorsement_type,
         date_of_joining=endorsement_data.date_of_joining,
+        date_of_leaving=endorsement_data.date_of_leaving,
         coverage_type=endorsement_data.coverage_type.value if endorsement_data.coverage_type else None,
         sum_insured=endorsement_data.sum_insured,
+        annual_premium_per_life=policy['annual_premium_per_life'],
         endorsement_date=endorsement_data.endorsement_date,
         effective_date=effective_date,
         days_from_inception=days_from_inception,
@@ -1186,6 +1236,196 @@ async def get_endorsements(
             endorsement['created_at'] = datetime.fromisoformat(endorsement['created_at'])
     
     return endorsements
+
+
+# ==================== EXCEL PREVIEW ENDPOINT ====================
+@api_router.post("/endorsements/preview")
+async def preview_excel_import(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Preview Excel data before importing - returns parsed rows with calculated premiums"""
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported")
+    
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+        df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
+        
+        required_columns = ['policy_number', 'member_name', 'relationship_type', 'endorsement_type', 'endorsement_date']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing_columns)}")
+        
+        preview_rows = []
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                policy_number = str(row['policy_number']).strip()
+                member_name = str(row['member_name']).strip()
+                relationship_type = str(row['relationship_type']).strip()
+                endorsement_type = str(row['endorsement_type']).strip()
+                endorsement_date = parse_date(str(row['endorsement_date']))
+                
+                if not endorsement_date:
+                    errors.append({"row": index + 2, "error": "Invalid endorsement date"})
+                    continue
+                
+                policy = await db.policies.find_one({"policy_number": policy_number}, {"_id": 0})
+                annual_premium = 0
+                prorata_premium = 0
+                
+                if policy:
+                    annual_premium = policy.get('annual_premium_per_life', 0)
+                    _, _, _, prorata_premium = calculate_prorata_premium(
+                        policy['inception_date'], policy['expiry_date'],
+                        endorsement_date, annual_premium, endorsement_type
+                    )
+                elif 'annual_premium_per_life' in df.columns and pd.notna(row.get('annual_premium_per_life')):
+                    annual_premium = float(row['annual_premium_per_life'])
+                    if 'policy_inception_date' in df.columns and 'policy_expiry_date' in df.columns:
+                        inc = parse_date(str(row['policy_inception_date']))
+                        exp = parse_date(str(row['policy_expiry_date']))
+                        if inc and exp:
+                            _, _, _, prorata_premium = calculate_prorata_premium(inc, exp, endorsement_date, annual_premium, endorsement_type)
+                
+                preview_rows.append({
+                    "row_num": index + 2,
+                    "policy_number": policy_number,
+                    "member_name": member_name,
+                    "relationship_type": relationship_type,
+                    "endorsement_type": endorsement_type,
+                    "endorsement_date": endorsement_date,
+                    "employee_id": str(row.get('employee_id', '')).strip() if pd.notna(row.get('employee_id')) else '',
+                    "dob": parse_date(str(row.get('dob', ''))) if pd.notna(row.get('dob')) else '',
+                    "age": int(row['age']) if 'age' in df.columns and pd.notna(row.get('age')) else None,
+                    "gender": str(row.get('gender', '')).strip() if pd.notna(row.get('gender')) else '',
+                    "sum_insured": float(row.get('suminsured', 0)) if pd.notna(row.get('suminsured')) else 0,
+                    "annual_premium_per_life": annual_premium,
+                    "prorata_premium": prorata_premium,
+                    "policy_exists": policy is not None,
+                    "remarks": str(row.get('remarks', '')).strip() if pd.notna(row.get('remarks')) else ''
+                })
+            except Exception as e:
+                errors.append({"row": index + 2, "error": str(e)})
+        
+        return {
+            "total_rows": len(df),
+            "valid_rows": len(preview_rows),
+            "error_count": len(errors),
+            "rows": preview_rows,
+            "errors": errors
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error parsing Excel: {str(e)}")
+
+
+# ==================== IMPORT BATCHES ENDPOINT ====================
+@api_router.get("/endorsements/import-batches")
+async def get_import_batches(current_user: User = Depends(get_current_user)):
+    """Get list of import batches for Admin to review"""
+    pipeline = [
+        {"$match": {"import_batch_id": {"$exists": True, "$ne": None}}},
+        {"$group": {
+            "_id": "$import_batch_id",
+            "count": {"$sum": 1},
+            "policy_numbers": {"$addToSet": "$policy_number"},
+            "first_created": {"$min": "$created_at"},
+            "submitted_by": {"$first": "$submitted_by"},
+            "statuses": {"$addToSet": "$status"},
+            "total_premium": {"$sum": "$prorata_premium"}
+        }},
+        {"$sort": {"first_created": -1}},
+        {"$limit": 50}
+    ]
+    batches = await db.endorsements.aggregate(pipeline).to_list(50)
+    
+    user_ids = list(set([b.get('submitted_by') for b in batches if b.get('submitted_by')]))
+    users = await db.users.find({"id": {"$in": user_ids}}, {"_id": 0, "id": 1, "full_name": 1}).to_list(100)
+    user_map = {u['id']: u['full_name'] for u in users}
+    
+    result = []
+    for b in batches:
+        result.append({
+            "batch_id": b["_id"],
+            "count": b["count"],
+            "policy_numbers": b["policy_numbers"],
+            "created_at": b["first_created"],
+            "submitted_by_name": user_map.get(b.get("submitted_by"), "Unknown"),
+            "statuses": b["statuses"],
+            "total_premium": round(b["total_premium"], 2)
+        })
+    
+    return result
+
+
+@api_router.get("/endorsements/batch/{batch_id}")
+async def get_batch_endorsements(batch_id: str, current_user: User = Depends(get_current_user)):
+    """Get all endorsements in an import batch"""
+    endorsements = await db.endorsements.find(
+        {"import_batch_id": batch_id}, {"_id": 0}
+    ).to_list(10000)
+    
+    for e in endorsements:
+        if isinstance(e.get('created_at'), str):
+            e['created_at'] = datetime.fromisoformat(e['created_at'])
+    
+    return endorsements
+
+
+@api_router.get("/endorsements/batch/{batch_id}/download")
+async def download_batch_excel(batch_id: str, current_user: User = Depends(get_current_user)):
+    """Download all endorsements from a batch as Excel"""
+    endorsements = await db.endorsements.find(
+        {"import_batch_id": batch_id}, {"_id": 0}
+    ).to_list(10000)
+    
+    if not endorsements:
+        raise HTTPException(status_code=404, detail="No endorsements found for this batch")
+    
+    policy_ids = list(set([e['policy_id'] for e in endorsements]))
+    policies = await db.policies.find({"id": {"$in": policy_ids}}, {"_id": 0}).to_list(1000)
+    policy_map = {p['id']: p for p in policies}
+    
+    rows = []
+    for e in endorsements:
+        policy = policy_map.get(e.get('policy_id'), {})
+        rows.append({
+            'Policy Number': e.get('policy_number', ''),
+            'Member Name': e.get('member_name', ''),
+            'Employee ID': e.get('employee_id', ''),
+            'DOB': e.get('dob', ''),
+            'Age': e.get('age', ''),
+            'Gender': e.get('gender', ''),
+            'Relationship Type': e.get('relationship_type', ''),
+            'Endorsement Type': e.get('endorsement_type', ''),
+            'Date of Joining': e.get('date_of_joining', ''),
+            'Date of Leaving': e.get('date_of_leaving', ''),
+            'Coverage Type': e.get('coverage_type', ''),
+            'Sum Insured': e.get('sum_insured', ''),
+            'Annual Premium Per Life': e.get('annual_premium_per_life', policy.get('annual_premium_per_life', '')),
+            'Endorsement Date': e.get('endorsement_date', ''),
+            'Effective Date': e.get('effective_date', ''),
+            'Pro-rata Premium': e.get('prorata_premium', 0),
+            'Status': e.get('status', ''),
+            'Remarks': e.get('remarks', '')
+        })
+    
+    df = pd.DataFrame(rows)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Import Batch')
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=batch_{batch_id[:8]}.xlsx"}
+    )
 
 
 @api_router.get("/endorsements/{endorsement_id}", response_model=Endorsement)
@@ -1306,6 +1546,24 @@ async def approve_reject_endorsement(
                 {"id": endorsement['policy_id']},
                 {"$inc": {"total_lives_covered": -1}}
             )
+        
+        # Auto-adjust CD Ledger balance
+        premium = endorsement.get('prorata_premium', 0)
+        if premium != 0:
+            cd_entry = {
+                "id": str(uuid.uuid4()),
+                "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                "reference": f"END-{endorsement_id[:8].upper()}",
+                "description": f"{'Premium Charge' if premium > 0 else 'Refund Credit'} - {endorsement['member_name']} ({endorsement['endorsement_type']})",
+                "amount": -premium,  # Deduct charge (negative), credit refund (positive since premium is negative)
+                "policy_number": endorsement.get('policy_number'),
+                "entry_type": "Endorsement Deduction" if premium > 0 else "Refund Credit",
+                "endorsement_id": endorsement_id,
+                "created_by": current_user.id,
+                "created_by_name": current_user.full_name,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.cd_ledger.insert_one(cd_entry)
     
     # Send email notification to HR who submitted the endorsement
     if SMTP_USERNAME and endorsement.get('submitted_by'):
@@ -1592,8 +1850,10 @@ async def import_endorsements_from_excel(
                     relationship_type=relationship_type,
                     endorsement_type=endorsement_type,
                     date_of_joining=date_of_joining,
+                    date_of_leaving=parse_date(str(row.get('date_of_leaving', ''))) if 'date_of_leaving' in df.columns and pd.notna(row.get('date_of_leaving')) else None,
                     coverage_type=coverage_type,
                     sum_insured=sum_insured,
+                    annual_premium_per_life=policy.get('annual_premium_per_life', 0),
                     endorsement_date=endorsement_date,
                     effective_date=effective_date,
                     days_from_inception=days_from_inception,
@@ -2267,7 +2527,79 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
     }
 
 
-# ==================== Object Storage Startup ====================
+
+# ==================== CD LEDGER ENDPOINTS ====================
+@api_router.get("/cd-ledger")
+async def get_cd_ledger(
+    policy_number: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get CD Ledger entries and running balance"""
+    query = {}
+    if policy_number:
+        query["policy_number"] = policy_number
+    
+    entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
+    
+    # Calculate running balance
+    running_balance = 0
+    for entry in entries:
+        running_balance += entry.get("amount", 0)
+        entry["running_balance"] = round(running_balance, 2)
+    
+    return {
+        "entries": entries,
+        "total_balance": round(running_balance, 2)
+    }
+
+
+@api_router.post("/cd-ledger")
+async def create_cd_ledger_entry(
+    entry: CDLedgerEntryCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new CD Ledger entry (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage CD Ledger")
+    
+    new_entry = {
+        "id": str(uuid.uuid4()),
+        "date": entry.date,
+        "reference": entry.reference,
+        "description": entry.description or "",
+        "amount": entry.amount,
+        "policy_number": entry.policy_number,
+        "entry_type": "Manual",
+        "endorsement_id": None,
+        "created_by": current_user.id,
+        "created_by_name": current_user.full_name,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.cd_ledger.insert_one(new_entry)
+    
+    return {
+        "id": new_entry["id"],
+        "message": "CD Ledger entry created",
+        "amount": entry.amount
+    }
+
+
+@api_router.delete("/cd-ledger/{entry_id}")
+async def delete_cd_ledger_entry(entry_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a manual CD Ledger entry (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage CD Ledger")
+    
+    entry = await db.cd_ledger.find_one({"id": entry_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    
+    if entry.get("entry_type") != "Manual":
+        raise HTTPException(status_code=400, detail="Only manual entries can be deleted")
+    
+    await db.cd_ledger.delete_one({"id": entry_id})
+    return {"message": "Entry deleted"}
 @app.on_event("startup")
 async def startup_storage():
     try:

@@ -319,6 +319,7 @@ const EndorsementsPage = () => {
                     <TableHead>Coverage</TableHead>
                     <TableHead>Endorsement Date</TableHead>
                     <TableHead>Remaining Days</TableHead>
+                    <TableHead>Annual Premium</TableHead>
                     <TableHead>Pro-rata Premium</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -342,6 +343,7 @@ const EndorsementsPage = () => {
                       <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
                       <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
                       <TableCell>{endorsement.remaining_days} days</TableCell>
+                      <TableCell className="text-gray-600">₹{endorsement.annual_premium_per_life?.toLocaleString() || '—'}</TableCell>
                       <TableCell className={`font-semibold ${endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
                         {endorsement.prorata_premium < 0 ? `₹${Math.abs(endorsement.prorata_premium).toLocaleString()} (Refund)` : `₹${endorsement.prorata_premium.toLocaleString()}`}
                       </TableCell>

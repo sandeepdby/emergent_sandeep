@@ -247,7 +247,8 @@ export default function ApproveEndorsements() {
                     <TableHead>Member</TableHead>
                     <TableHead>Relationship</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Premium</TableHead>
+                    <TableHead>Annual Premium</TableHead>
+                    <TableHead>Pro-rata</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -274,6 +275,7 @@ export default function ApproveEndorsements() {
                           {endorsement.endorsement_type}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-gray-600">₹{endorsement.annual_premium_per_life?.toLocaleString() || '—'}</TableCell>
                       <TableCell className={endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}>
                         ₹{Math.abs(endorsement.prorata_premium).toLocaleString()}
                         {endorsement.prorata_premium < 0 && ' (Refund)'}

@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload } from "lucide-react";
+import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet } from "lucide-react";
 import { AuthContext } from "../auth";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
@@ -10,18 +10,22 @@ import DownloadApproved from "./DownloadApproved";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import EmailSettings from "./EmailSettings";
 import CloudStorage from "./CloudStorage";
+import CDLedger from "./CDLedger";
+import ImportBatches from "./ImportBatches";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
   
   const navItems = [
     { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-    { path: "/admin/approve", label: "Pending Approvals", icon: CheckSquare },
-    { path: "/admin/all-endorsements", label: "All Endorsements", icon: ClipboardList },
+    { path: "/admin/approve", label: "Approvals", icon: CheckSquare },
+    { path: "/admin/all-endorsements", label: "Endorsements", icon: ClipboardList },
+    { path: "/admin/import-batches", label: "Imports", icon: FileSpreadsheet },
     { path: "/admin/policies", label: "Policies", icon: Layers },
+    { path: "/admin/cd-ledger", label: "CD Ledger", icon: Wallet },
     { path: "/admin/download", label: "Download", icon: Download },
+    { path: "/admin/storage", label: "Storage", icon: CloudUpload },
     { path: "/admin/email", label: "Email", icon: Mail },
-    { path: "/admin/storage", label: "Cloud Storage", icon: CloudUpload },
   ];
 
   return (
@@ -48,13 +52,13 @@ const Navigation = ({ onLogout, user }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t whitespace-nowrap ${
+                    className={`inline-flex items-center px-2.5 py-2 border-b-2 text-xs font-medium rounded-t whitespace-nowrap ${
                       isActive
                         ? "border-indigo-500 text-indigo-600 bg-indigo-50"
                         : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
                   >
-                    <Icon className="w-4 h-4 mr-1" />
+                    <Icon className="w-3.5 h-3.5 mr-1" />
                     {item.label}
                   </Link>
                 );
@@ -91,7 +95,9 @@ class AdminDashboard extends React.Component {
             <Route path="/analytics" element={<AnalyticsDashboard />} />
             <Route path="/approve" element={<ApproveEndorsements />} />
             <Route path="/all-endorsements" element={<AllEndorsements />} />
+            <Route path="/import-batches" element={<ImportBatches />} />
             <Route path="/policies" element={<PoliciesManagement />} />
+            <Route path="/cd-ledger" element={<CDLedger />} />
             <Route path="/download" element={<DownloadApproved />} />
             <Route path="/email" element={<EmailSettings />} />
             <Route path="/storage" element={<CloudStorage />} />
