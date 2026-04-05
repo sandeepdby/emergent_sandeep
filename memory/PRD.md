@@ -9,6 +9,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - JWT-based authentication with "HR" and "Admin" roles
 - Registration and login functionality
 - Role-based access control
+- Phone number field for users
 
 ### HR Portal
 - Submit individual endorsements with all member details
@@ -21,6 +22,14 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - Approve or reject endorsements with remarks
 - Manage policies (CRUD operations)
 - Download approved endorsements as Excel report
+- Email Settings for Gmail SMTP configuration
+
+### Email Notifications (SMTP - Gmail App Password)
+- **SMTP Configured**: connect@aarogya-assist.com
+- **Welcome Email**: Sent to new users upon registration
+- **Notification Email**: Sent to all existing HR/Admin users when new user registers
+- **Custom Email**: Admin can send emails with Excel/PDF attachments
+- **Bulk Approval Notification**: Email sent when endorsements are approved/rejected
 
 ### Excel Import/Export
 - **Import Template (19 columns)**:
@@ -52,6 +61,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - JWT authentication with bcrypt password hashing
 - Async motor driver for MongoDB operations
 - Pandas/openpyxl for Excel processing
+- smtplib for email sending via Gmail SMTP
 
 ### Frontend (React)
 - `/app/frontend/src/` - React application
@@ -61,14 +71,14 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - Sonner for toast notifications
 
 ### Database Collections
-- **users**: username, password_hash, role, full_name, email
+- **users**: username, password_hash, role, full_name, email, phone
 - **policies**: policy_number, policy_holder_name, inception_date, expiry_date, policy_type, annual_premium_per_life, status
 - **endorsements**: All member details, policy reference, premium calculations, approval status
 
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Register new user
+- `POST /api/auth/register` - Register new user (sends notifications)
 - `POST /api/auth/login` - Login and get JWT token
 - `GET /api/auth/me` - Get current user info
 
@@ -88,52 +98,33 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - `GET /api/endorsements/download/approved` - Download approved as Excel
 - `GET /api/endorsements/template/download` - Download import template
 
-## Completed Features (Feb 2025)
+### Email
+- `GET /api/email/config` - Get SMTP configuration status
+- `POST /api/email/config` - Update SMTP settings
+- `POST /api/email/send` - Send custom email with attachments
 
-### Session 1
-- [x] Full authentication system with HR/Admin roles
-- [x] Endorsement submission form
-- [x] Excel import functionality
-- [x] Approval workflow
-- [x] Pro-rata premium calculation
+## Completed Features (April 2026)
 
-### Session 2
-- [x] Added Employee ID field to import/export
-- [x] Added Type of Policy field
-- [x] Added DOB, Age, Gender fields
-- [x] Added Endorsement Type "Midterm addition"
-- [x] Added Date of Joining field
-- [x] Added Coverage Type (Floater/Non-Floater)
-- [x] Added Suminsured (Coverage) field
-- [x] Updated all frontend forms and tables
-- [x] Fixed legacy data handling (submitted_by optional)
-- [x] **Premium Calculation for Deletion = Refund (negative value)**
-- [x] **UI displays refund amounts in red with "(Refund)" label**
-- [x] **Excel export preserves negative premium values for deletions**
-
-### Session 3 (Latest)
-- [x] **Added "Premium Type" column (Charge/Refund) to Excel export**
-- [x] **Bulk Approval/Rejection with checkbox selection**
-- [x] **Email Settings page with Gmail SMTP configuration**
-- [x] **Send emails with CC, BCC, and attachment options**
-- [x] **Analytics Dashboard with interactive charts:**
-  - Status Distribution pie chart
-  - Endorsements by Type bar chart
-  - Monthly Trend area chart
-  - Relationship Type distribution
-  - Top Policies breakdown
-  - Premium summary cards (Charge vs Refund)
-- [x] **PDF Export with two options:**
-  - Summary Report (statistics and totals)
-  - Detailed Report (full table format)
-- [x] **Enhanced UI with gradient cards and better visuals**
+### Session - SMTP Email Setup
+- [x] Configured Gmail SMTP with App Password (connect@aarogya-assist.com)
+- [x] Added phone number field to user model and registration form
+- [x] Welcome email sent to new users upon registration
+- [x] Notification email sent to all HR/Admin users when new user registers
+- [x] Email settings page shows "Email configured" status
+- [x] Custom email sending with Excel/PDF attachments working
 
 ## Test Credentials
-- **HR User**: hr@test.com / password123
-- **Admin User**: admin@test.com / password123
+- **Admin User**: admin / admin123
+- **HR User**: hruser1 / hr123456
+
+## SMTP Configuration
+- **Server**: smtp.gmail.com
+- **Port**: 587
+- **Username**: connect@aarogya-assist.com
+- **Password**: (Gmail App Password configured in backend .env)
 
 ## Backlog / Future Enhancements
-- [ ] Auto-send email notifications on submission/approval (requires Gmail App Password)
+- [ ] SMS notifications using Twilio (phone numbers already captured)
 - [ ] Audit log for all user actions
 - [ ] Multi-policy comparison view
 - [ ] Export templates for different insurers
