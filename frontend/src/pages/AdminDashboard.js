@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail } from "lucide-react";
+import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload } from "lucide-react";
 import { AuthContext } from "../auth";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
@@ -9,6 +9,7 @@ import PoliciesManagement from "./PoliciesManagement";
 import DownloadApproved from "./DownloadApproved";
 import AnalyticsDashboard from "./AnalyticsDashboard";
 import EmailSettings from "./EmailSettings";
+import CloudStorage from "./CloudStorage";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
@@ -20,6 +21,7 @@ const Navigation = ({ onLogout, user }) => {
     { path: "/admin/policies", label: "Policies", icon: Layers },
     { path: "/admin/download", label: "Download", icon: Download },
     { path: "/admin/email", label: "Email", icon: Mail },
+    { path: "/admin/storage", label: "Cloud Storage", icon: CloudUpload },
   ];
 
   return (
@@ -92,6 +94,7 @@ class AdminDashboard extends React.Component {
             <Route path="/policies" element={<PoliciesManagement />} />
             <Route path="/download" element={<DownloadApproved />} />
             <Route path="/email" element={<EmailSettings />} />
+            <Route path="/storage" element={<CloudStorage />} />
             <Route path="/" element={<Navigate to="/admin/analytics" />} />
           </Routes>
         </div>

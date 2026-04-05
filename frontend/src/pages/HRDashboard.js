@@ -1,11 +1,12 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileSpreadsheet, ClipboardList, Plus } from "lucide-react";
+import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, CloudUpload } from "lucide-react";
 import { AuthContext } from "../auth";
 import SubmitEndorsement from "./SubmitEndorsement";
 import MyEndorsements from "./MyEndorsements";
 import ImportEndorsements from "./ImportEndorsements";
+import CloudStorage from "./CloudStorage";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
@@ -14,6 +15,7 @@ const Navigation = ({ onLogout, user }) => {
     { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
     { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
     { path: "/hr/import", label: "Import Excel", icon: FileSpreadsheet },
+    { path: "/hr/storage", label: "Cloud Storage", icon: CloudUpload },
   ];
 
   return (
@@ -83,6 +85,7 @@ class HRDashboard extends React.Component {
             <Route path="/submit" element={<SubmitEndorsement />} />
             <Route path="/my-endorsements" element={<MyEndorsements />} />
             <Route path="/import" element={<ImportEndorsements />} />
+            <Route path="/storage" element={<CloudStorage />} />
             <Route path="/" element={<Navigate to="/hr/submit" />} />
           </Routes>
         </div>

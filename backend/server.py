@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query
+from fastapi.responses import StreamingResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -27,10 +27,53 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+import requests as http_requests
 
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# ==================== Object Storage Configuration ====================
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+APP_NAME = "insurehub"
+storage_key = None
+
+def init_storage():
+    """Initialize object storage. Call once at startup."""
+    global storage_key
+    if storage_key:
+        return storage_key
+    resp = http_requests.post(
+        f"{STORAGE_URL}/init",
+        json={"emergent_key": os.environ.get('EMERGENT_LLM_KEY')},
+        timeout=30
+    )
+    resp.raise_for_status()
+    storage_key = resp.json()["storage_key"]
+    return storage_key
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    """Upload file to object storage."""
+    key = init_storage()
+    resp = http_requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data,
+        timeout=120
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+def get_object(path: str):
+    """Download file from object storage."""
+    key = init_storage()
+    resp = http_requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -265,6 +308,15 @@ class BulkApprovalRequest(BaseModel):
     endorsement_ids: List[str]
     status: EndorsementStatus
     remarks: Optional[str] = None
+
+
+# Document Storage Models
+class DocumentCategory(str, Enum):
+    POLICY_TERMS = "Policy Terms"
+    ENDORSEMENT_FILES = "Endorsement Files"
+    PREMIUM_RECEIPTS = "Premium Receipts"
+    ECARDS = "E-Cards"
+    OTHERS = "Others"
 
 
 # Helper Functions
@@ -2213,6 +2265,129 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
             "net_premium": premium_data.get("net_premium", 0)
         }
     }
+
+
+# ==================== Object Storage Startup ====================
+@app.on_event("startup")
+async def startup_storage():
+    try:
+        init_storage()
+        logging.getLogger(__name__).info("Object storage initialized successfully")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Object storage init failed: {e}")
+
+
+# ==================== Document Storage Endpoints ====================
+@api_router.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    category: str = Query(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a document to cloud storage."""
+    allowed_types = [
+        "application/pdf", "image/jpeg", "image/png", "image/webp",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel", "text/csv", "text/plain",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/octet-stream"
+    ]
+    
+    max_size = 25 * 1024 * 1024  # 25MB
+    data = await file.read()
+    if len(data) > max_size:
+        raise HTTPException(status_code=400, detail="File size exceeds 25MB limit")
+
+    ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+    storage_path = f"{APP_NAME}/documents/{current_user.id}/{uuid.uuid4()}.{ext}"
+    
+    content_type = file.content_type or "application/octet-stream"
+    
+    try:
+        result = put_object(storage_path, data, content_type)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Storage upload failed: {str(e)}")
+    
+    doc_id = str(uuid.uuid4())
+    doc_record = {
+        "id": doc_id,
+        "storage_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "category": category,
+        "uploaded_by": current_user.id,
+        "uploaded_by_name": current_user.full_name,
+        "uploaded_by_role": current_user.role,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.documents.insert_one(doc_record)
+    
+    return {
+        "id": doc_id,
+        "filename": file.filename,
+        "category": category,
+        "size": result.get("size", len(data)),
+        "created_at": doc_record["created_at"]
+    }
+
+
+@api_router.get("/documents")
+async def list_documents(
+    category: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """List documents, optionally filtered by category."""
+    query = {"is_deleted": False}
+    if category:
+        query["category"] = category
+    
+    docs = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@api_router.get("/documents/{doc_id}/download")
+async def download_document(
+    doc_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Download a document by its ID."""
+    record = await db.documents.find_one({"id": doc_id, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    try:
+        data, ct = get_object(record["storage_path"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {str(e)}")
+    
+    return Response(
+        content=data,
+        media_type=record.get("content_type", ct),
+        headers={
+            "Content-Disposition": f'attachment; filename="{record["original_filename"]}"'
+        }
+    )
+
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(
+    doc_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Soft-delete a document."""
+    record = await db.documents.find_one({"id": doc_id, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Only allow delete by uploader or Admin
+    if record["uploaded_by"] != current_user.id and current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this document")
+    
+    await db.documents.update_one({"id": doc_id}, {"$set": {"is_deleted": True}})
+    return {"message": "Document deleted successfully"}
 
 
 # Include the router in the main app
