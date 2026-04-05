@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 class WhatsAppNotificationTester:
-    def __init__(self, base_url="https://app-password-setup.preview.emergentagent.com"):
+    def __init__(self, base_url="https://endorsement-ai.preview.emergentagent.com"):
         self.base_url = base_url
         self.admin_token = None
         self.hr_token = None
