@@ -27,9 +27,11 @@ export default function LandingPage({ onGetStarted }) {
       <header className="sticky top-0 z-50 backdrop-blur-xl bg-[#FAF9F6]/70 border-b border-black/5">
         <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 h-20 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#16332A] rounded-xl flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
+            <img 
+              src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
+              alt="Aarogya Assist" 
+              className="h-11 w-auto"
+            />
             <span className="text-xl font-bold tracking-tight">InsureHub</span>
           </div>
           <nav className="hidden md:flex items-center gap-8">
@@ -410,9 +412,11 @@ export default function LandingPage({ onGetStarted }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
               <div>
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 bg-[#16332A] rounded-lg flex items-center justify-center">
-                    <Shield className="w-4 h-4 text-white" />
-                  </div>
+                  <img 
+                    src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
+                    alt="Aarogya Assist" 
+                    className="h-8 w-auto brightness-0 invert"
+                  />
                   <span className="font-bold">InsureHub</span>
                 </div>
                 <p className="text-sm text-[#FAF9F6]/50">AI-powered endorsement management by Aarogya Assist</p>
