@@ -60,6 +60,14 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] HR Data Isolation: HR users only see own endorsements, import batches, batch details
 - [x] Full E2E Excel import tested: Upload → Preview → Confirm → Admin batch view → Approve → CD auto-deduct → Download
 
+### Session 8 - HR Dashboard Summary (April 2026)
+- [x] New HR Dashboard landing page with summary stats
+- [x] 4 stat cards: Total Submitted, Pending, Approved, Rejected
+- [x] 3 premium cards: Charges, Refunds, Net Premium Impact
+- [x] Status Distribution donut chart + By Endorsement Type bar chart
+- [x] Recent Endorsements table (latest 8)
+- [x] Dashboard is default tab for HR (redirects from /hr to /hr/dashboard)
+
 ## API Endpoints
 
 ### Auth
