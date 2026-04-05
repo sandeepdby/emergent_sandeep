@@ -139,6 +139,15 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] Added /api/users/{id}/contact endpoint for Admin to get HR contact
 - [x] Notification dialogs show email sent confirmation + WhatsApp buttons
 
+### Session 3 - AI-Generated Notification Content
+- [x] Integrated GPT-4o-mini via Emergent LLM Key for notification generation
+- [x] AI generates personalized email subjects and HTML bodies
+- [x] AI generates WhatsApp messages with emojis and formatting
+- [x] Added /api/notifications/generate endpoint for on-demand AI generation
+- [x] Fallback to static templates if AI fails
+- [x] Frontend shows "AI Email Sent" badge after actions
+- [x] Professional, warm, and contextual notification content
+
 ## Test Credentials
 - **Admin User**: admin / admin123
 - **HR User**: hruser1 / hr123456
