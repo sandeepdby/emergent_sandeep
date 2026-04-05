@@ -116,6 +116,7 @@ class UserCreate(BaseModel):
     role: UserRole
     full_name: str
     email: str
+    phone: Optional[str] = None  # Phone number for SMS notifications
 
 
 class User(BaseModel):
@@ -125,6 +126,7 @@ class User(BaseModel):
     username: str
     full_name: str
     email: str
+    phone: Optional[str] = None
     role: UserRole
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -564,8 +566,8 @@ async def root():
 # ==================== AUTHENTICATION ENDPOINTS ====================
 
 @api_router.post("/auth/register")
-async def register_user(user_data: UserCreate):
-    """Register a new user (HR or Admin)"""
+async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks):
+    """Register a new user (HR or Admin) and send notifications"""
     existing = await db.users.find_one({"username": user_data.username}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -574,6 +576,7 @@ async def register_user(user_data: UserCreate):
         username=user_data.username,
         full_name=user_data.full_name,
         email=user_data.email,
+        phone=user_data.phone,
         role=user_data.role
     )
     
@@ -582,6 +585,71 @@ async def register_user(user_data: UserCreate):
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.users.insert_one(doc)
+    
+    # Send notification email to the newly registered user
+    if user_data.email and SMTP_USERNAME:
+        welcome_subject = f"Welcome to InsureHub - Account Created"
+        welcome_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; text-align: center;">
+                <h1 style="color: white; margin: 0;">InsureHub</h1>
+                <p style="color: #bfdbfe; margin: 10px 0 0;">Endorsement Management Portal</p>
+            </div>
+            <div style="padding: 30px; background: #f8fafc;">
+                <h2 style="color: #1e40af;">Welcome, {user_data.full_name}!</h2>
+                <p style="color: #475569;">Your account has been successfully created on InsureHub.</p>
+                <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 5px 0;"><strong>Username:</strong> {user_data.username}</p>
+                    <p style="margin: 5px 0;"><strong>Role:</strong> {user_data.role.value}</p>
+                    <p style="margin: 5px 0;"><strong>Email:</strong> {user_data.email}</p>
+                    {f'<p style="margin: 5px 0;"><strong>Phone:</strong> {user_data.phone}</p>' if user_data.phone else ''}
+                </div>
+                <p style="color: #475569;">You can now log in and start managing insurance endorsements.</p>
+                <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                    This is an automated message from InsureHub by Aarogya-Assist.
+                </p>
+            </div>
+        </div>
+        """
+        background_tasks.add_task(send_email_notification, [user_data.email], welcome_subject, welcome_body)
+    
+    # Notify all existing HR and Admin users about the new registration
+    if SMTP_USERNAME:
+        # Get all HR and Admin users to notify
+        all_users = await db.users.find(
+            {"role": {"$in": ["HR", "Admin"]}, "id": {"$ne": user.id}},
+            {"_id": 0, "email": 1, "phone": 1, "role": 1, "full_name": 1}
+        ).to_list(100)
+        
+        notify_emails = [u['email'] for u in all_users if u.get('email')]
+        
+        if notify_emails:
+            notify_subject = f"New {user_data.role.value} User Registered - InsureHub"
+            notify_body = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">InsureHub</h1>
+                    <p style="color: #a7f3d0; margin: 10px 0 0;">New User Registration Alert</p>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <h2 style="color: #059669;">New User Registered</h2>
+                    <p style="color: #475569;">A new {user_data.role.value} user has registered on InsureHub.</p>
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #059669;">
+                        <p style="margin: 5px 0;"><strong>Name:</strong> {user_data.full_name}</p>
+                        <p style="margin: 5px 0;"><strong>Username:</strong> {user_data.username}</p>
+                        <p style="margin: 5px 0;"><strong>Role:</strong> {user_data.role.value}</p>
+                        <p style="margin: 5px 0;"><strong>Email:</strong> {user_data.email}</p>
+                        {f'<p style="margin: 5px 0;"><strong>Phone:</strong> {user_data.phone}</p>' if user_data.phone else ''}
+                        <p style="margin: 5px 0;"><strong>Registered At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                    </div>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                        This is an automated notification from InsureHub by Aarogya-Assist.
+                    </p>
+                </div>
+            </div>
+            """
+            background_tasks.add_task(send_email_notification, notify_emails, notify_subject, notify_body)
+    
     return {"message": "User registered successfully", "user": user}
 
 
@@ -605,6 +673,7 @@ async def login(credentials: UserLogin):
             "username": user['username'],
             "full_name": user['full_name'],
             "email": user['email'],
+            "phone": user.get('phone'),
             "role": user['role']
         }
     }

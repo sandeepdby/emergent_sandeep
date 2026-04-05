@@ -11,7 +11,7 @@ const LoginRegisterPage = ({ onLogin }) => {
   const [loading, setLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [registerData, setRegisterData] = useState({
-    username: "", password: "", full_name: "", email: "", role: "HR"
+    username: "", password: "", full_name: "", email: "", phone: "", role: "HR"
   });
 
   const handleLogin = async (e) => {
@@ -32,9 +32,9 @@ const LoginRegisterPage = ({ onLogin }) => {
     setLoading(true);
     try {
       await axios.post(`${API}/auth/register`, registerData);
-      alert('Registration successful! Please login.');
+      alert('Registration successful! You will receive a welcome email. Please login.');
       setShowRegister(false);
-      setRegisterData({ username: "", password: "", full_name: "", email: "", role: "HR" });
+      setRegisterData({ username: "", password: "", full_name: "", email: "", phone: "", role: "HR" });
     } catch (error) {
       alert('Registration failed: ' + (error.response?.data?.detail || error.message));
     } finally {
@@ -58,6 +58,7 @@ const LoginRegisterPage = ({ onLogin }) => {
                 value={registerData.full_name}
                 onChange={(e) => setRegisterData({...registerData, full_name: e.target.value})}
                 required
+                data-testid="register-fullname-input"
               />
             </div>
             
@@ -69,6 +70,19 @@ const LoginRegisterPage = ({ onLogin }) => {
                 value={registerData.email}
                 onChange={(e) => setRegisterData({...registerData, email: e.target.value})}
                 required
+                data-testid="register-email-input"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number (Optional)</label>
+              <input
+                type="tel"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="+91 9876543210"
+                value={registerData.phone}
+                onChange={(e) => setRegisterData({...registerData, phone: e.target.value})}
+                data-testid="register-phone-input"
               />
             </div>
             
@@ -80,6 +94,7 @@ const LoginRegisterPage = ({ onLogin }) => {
                 value={registerData.username}
                 onChange={(e) => setRegisterData({...registerData, username: e.target.value})}
                 required
+                data-testid="register-username-input"
               />
             </div>
             
@@ -92,6 +107,7 @@ const LoginRegisterPage = ({ onLogin }) => {
                 onChange={(e) => setRegisterData({...registerData, password: e.target.value})}
                 required
                 minLength="6"
+                data-testid="register-password-input"
               />
             </div>
             
@@ -101,6 +117,7 @@ const LoginRegisterPage = ({ onLogin }) => {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 value={registerData.role}
                 onChange={(e) => setRegisterData({...registerData, role: e.target.value})}
+                data-testid="register-role-select"
               >
                 <option value="HR">HR User</option>
                 <option value="Admin">Admin User</option>
@@ -111,6 +128,7 @@ const LoginRegisterPage = ({ onLogin }) => {
               type="submit"
               disabled={loading}
               className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              data-testid="register-submit-button"
             >
               {loading ? 'Registering...' : 'Register'}
             </button>
@@ -119,10 +137,15 @@ const LoginRegisterPage = ({ onLogin }) => {
               type="button"
               onClick={() => setShowRegister(false)}
               className="w-full bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 font-medium"
+              data-testid="back-to-login-button"
             >
               Back to Login
             </button>
           </form>
+          
+          <p className="text-xs text-center text-gray-500 mt-4">
+            A welcome email will be sent to you and notifications will be sent to existing HR &amp; Admin users.
+          </p>
         </div>
       </div>
     );
