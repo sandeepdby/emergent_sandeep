@@ -30,8 +30,7 @@ next-env.d.ts
 dist/
 dist
 
-# Environment files (comprehensive coverage)
-
+# Sensitive tokens (but NOT .env files - needed for deployment)
 *token.json*
 *credentials.json*
 
@@ -76,27 +75,10 @@ agenthub/agents/youtube/db
 # Build caches
 .cache/
 
+# Test credentials (sensitive)
 memory/test_credentials.md
 
-# Mobile development
+# Mobile development cache files
 android-sdk/frontend/node_modules/.cache/default-development/1.pack
-frontend/node_modules/.cache/default-development/1.pack
-frontend/node_modules/.cache/default-development/3.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
-frontend/node_modules/.cache/default-development/6.pack
+frontend/node_modules/.cache/default-development/*.pack
 frontend/node_modules/.cache/default-development/4.pack
--e 
-# Environment files
-*.env
-*.env.*
--e 
-# Environment files
-*.env
-*.env.*
