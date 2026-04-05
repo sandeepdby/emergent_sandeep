@@ -53,6 +53,13 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Premium sign convention: Addition=positive charge, Deletion=negative refund
 - [x] Annual Premium Per Life column in All Endorsements & Approve tables
 
+### Session 7 - Product Types, HR Isolation & Policy CD Ledger (April 2026)
+- [x] GPA & GTL product types added to policies
+- [x] GPA/GTL policies restrict relationship type to Employee only
+- [x] Policy-wise CD Ledger filtering with dropdown and balance recalculation
+- [x] HR Data Isolation: HR users only see own endorsements, import batches, batch details
+- [x] Full E2E Excel import tested: Upload → Preview → Confirm → Admin batch view → Approve → CD auto-deduct → Download
+
 ## API Endpoints
 
 ### Auth

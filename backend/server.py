@@ -2593,7 +2593,10 @@ async def create_cd_ledger_entry(
     return {
         "id": new_entry["id"],
         "message": "CD Ledger entry created",
-        "amount": entry.amount
+        "amount": entry.amount,
+        "policy_number": entry.policy_number,
+        "date": entry.date,
+        "reference": entry.reference
     }
 
 
