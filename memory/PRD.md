@@ -120,6 +120,12 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - `POST /api/email/config` - Update SMTP settings
 - `POST /api/email/send` - Send custom email with attachments
 
+### Cloud Storage
+- `POST /api/documents/upload?category=...` - Upload document to specified category
+- `GET /api/documents` - List all documents (optional ?category= filter)
+- `GET /api/documents/{doc_id}/download` - Download a document
+- `DELETE /api/documents/{doc_id}` - Soft-delete a document
+
 ## Completed Features (April 2026)
 
 ### Session 1 - SMTP Email Setup
@@ -158,6 +164,15 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [x] Smooth scroll navigation
 - [x] Framer Motion animations
 - [x] Responsive design
+
+### Session 5 - Cloud Storage (April 2026)
+- [x] Emergent Object Storage integration for file uploads
+- [x] 5 document categories: Policy Terms, Endorsement Files, Premium Receipts, E-Cards, Others
+- [x] Upload, download, and soft-delete functionality
+- [x] Cloud Storage tab added to both Admin and HR navigation
+- [x] Tabbed UI with file count badges, file tables with metadata
+- [x] Role-based delete permissions (uploader or Admin)
+- [x] 25MB file size limit with proper error handling
 
 ## Test Credentials
 - **Admin User**: admin / admin123
