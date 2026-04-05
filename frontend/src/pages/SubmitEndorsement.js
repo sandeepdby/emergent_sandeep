@@ -7,10 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Loader2, MessageCircle, Mail, Phone, Users } from "lucide-react";
+import { Plus, Loader2, MessageCircle } from "lucide-react";
 
 // WhatsApp Web link generator
 const generateWhatsAppLink = (phone, message) => {
@@ -24,8 +22,8 @@ export default function SubmitEndorsement() {
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adminUsers, setAdminUsers] = useState([]);
-  const [notificationDialog, setNotificationDialog] = useState(false);
-  const [submittedEndorsement, setSubmittedEndorsement] = useState(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [submittedData, setSubmittedData] = useState(null);
   const [formData, setFormData] = useState({
     policy_number: "",
     employee_id: "",
@@ -96,18 +94,9 @@ export default function SubmitEndorsement() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      toast.success("Endorsement submitted successfully! Email notification sent to Admins.");
-      
-      // Store submitted data for WhatsApp notification
-      setSubmittedEndorsement({
-        ...response.data,
-        formData: submitData
-      });
-      
-      // Show WhatsApp notification dialog
-      if (adminUsers.length > 0) {
-        setNotificationDialog(true);
-      }
+      toast.success("Endorsement submitted! Email sent to Admins.");
+      setSubmittedData(response.data);
+      setShowSuccess(true);
       
       // Reset form
       setFormData({
@@ -139,13 +128,57 @@ export default function SubmitEndorsement() {
   };
 
   const getWhatsAppMessage = () => {
-    if (!submittedEndorsement) return "";
-    const e = submittedEndorsement;
-    return `*InsureHub - New Endorsement Submitted*\n\n*Policy:* ${e.policy_number}\n*Member:* ${e.member_name}\n*Type:* ${e.endorsement_type}\n*Relationship:* ${e.relationship_type}\n*Premium:* ₹${Math.abs(e.prorata_premium).toLocaleString()}${e.prorata_premium < 0 ? ' (Refund)' : ''}\n\nPlease review and approve/reject in the Admin portal.`;
+    if (!submittedData) return "";
+    return `*InsureHub - New Endorsement*\n\n*Policy:* ${submittedData.policy_number}\n*Member:* ${submittedData.member_name}\n*Type:* ${submittedData.endorsement_type}\n\nPlease review in Admin portal.`;
   };
+
+  const adminsWithPhone = adminUsers.filter(a => a.phone);
 
   return (
     <div className="space-y-6" data-testid="submit-endorsement-page">
+      {/* Success Banner with WhatsApp Icons */}
+      {showSuccess && (
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-green-700">
+                <span className="text-lg">✓</span>
+                <span className="font-medium">Endorsement submitted! Email sent to Admins.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {adminsWithPhone.length > 0 && (
+                  <>
+                    <span className="text-sm text-green-600 mr-2">Notify via WhatsApp:</span>
+                    {adminsWithPhone.map((admin) => (
+                      <a
+                        key={admin.id}
+                        href={generateWhatsAppLink(admin.phone, getWhatsAppMessage())}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+                        title={`WhatsApp ${admin.full_name}`}
+                        data-testid={`whatsapp-admin-${admin.id}`}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        {admin.full_name.split(' ')[0]}
+                      </a>
+                    ))}
+                  </>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setShowSuccess(false)}
+                  className="text-green-600 hover:text-green-700"
+                >
+                  ✕
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Submit New Endorsement</CardTitle>
@@ -358,85 +391,6 @@ export default function SubmitEndorsement() {
           </form>
         </CardContent>
       </Card>
-
-      {/* WhatsApp Notification Dialog for Admins */}
-      <Dialog open={notificationDialog} onOpenChange={setNotificationDialog}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-green-500" />
-              Notify Admins via WhatsApp
-            </DialogTitle>
-            <DialogDescription>
-              Your endorsement has been submitted successfully. Email notifications have been sent to all Admin users automatically.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="bg-green-50 p-4 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Mail className="w-4 h-4 text-green-600" />
-                <span className="font-medium text-green-800">Email Sent</span>
-                <Badge variant="outline" className="text-green-600 border-green-600">Automatic</Badge>
-              </div>
-              <p className="text-sm text-green-700">
-                All admin users have been notified via email about this submission.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-600" />
-                <span className="font-medium">Send WhatsApp to Admin(s):</span>
-              </div>
-              
-              {adminUsers.length === 0 ? (
-                <p className="text-gray-500 text-sm">No admin users with phone numbers found.</p>
-              ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {adminUsers.map((admin) => (
-                    <div key={admin.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <div className="font-medium">{admin.full_name}</div>
-                        <div className="text-sm text-gray-500 flex items-center gap-2">
-                          {admin.phone ? (
-                            <>
-                              <Phone className="w-3 h-3" />
-                              {admin.phone}
-                            </>
-                          ) : (
-                            <span className="text-orange-500">No phone number</span>
-                          )}
-                        </div>
-                      </div>
-                      {admin.phone && (
-                        <a
-                          href={generateWhatsAppLink(admin.phone, getWhatsAppMessage())}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                          data-testid={`whatsapp-admin-${admin.id}`}
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                          WhatsApp
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <Button 
-              variant="outline" 
-              onClick={() => setNotificationDialog(false)}
-              className="w-full"
-            >
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

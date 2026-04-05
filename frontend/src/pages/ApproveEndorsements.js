@@ -11,12 +11,11 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, XCircle, CheckSquare, MessageCircle, Mail, Phone } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckSquare, MessageCircle } from "lucide-react";
 
 // WhatsApp Web link generator
 const generateWhatsAppLink = (phone, message) => {
   if (!phone) return null;
-  // Clean phone number - remove spaces, dashes, etc.
   const cleanPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^\+/, '');
   const encodedMessage = encodeURIComponent(message);
   return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
@@ -37,9 +36,9 @@ export default function ApproveEndorsements() {
   const [bulkAction, setBulkAction] = useState("Approved");
   const [bulkRemarks, setBulkRemarks] = useState("");
   
-  // Notification dialog state
-  const [notificationDialog, setNotificationDialog] = useState(false);
-  const [notificationData, setNotificationData] = useState(null);
+  // WhatsApp notification state
+  const [whatsappLink, setWhatsappLink] = useState(null);
+  const [showWhatsappBtn, setShowWhatsappBtn] = useState(false);
 
   const fetchPendingEndorsements = useCallback(async () => {
     try {
@@ -66,6 +65,8 @@ export default function ApproveEndorsements() {
     setSelectedEndorsement(endorsement);
     setApprovalAction(action);
     setRemarks("");
+    setWhatsappLink(null);
+    setShowWhatsappBtn(false);
     setApprovalDialog(true);
   };
 
@@ -74,7 +75,7 @@ export default function ApproveEndorsements() {
       setProcessing(true);
       const token = localStorage.getItem('token');
       
-      // Get submitter info for notifications
+      // Get submitter info for WhatsApp notification
       let submitterInfo = null;
       if (selectedEndorsement.submitted_by) {
         try {
@@ -94,21 +95,15 @@ export default function ApproveEndorsements() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      toast.success(`Endorsement ${approvalAction.toLowerCase()} successfully`);
-      setApprovalDialog(false);
+      toast.success(`Endorsement ${approvalAction.toLowerCase()} successfully! Email sent to HR.`);
       
-      // Show notification dialog with WhatsApp option
-      if (submitterInfo) {
-        const message = `*InsureHub Notification*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}\n*Type:* ${selectedEndorsement.endorsement_type}\n*Premium:* ₹${Math.abs(selectedEndorsement.prorata_premium).toLocaleString()}${selectedEndorsement.prorata_premium < 0 ? ' (Refund)' : ''}\n${remarks ? `*Remarks:* ${remarks}` : ''}\n\nPlease log in to InsureHub portal for details.`;
-        
-        setNotificationData({
-          user: submitterInfo,
-          action: approvalAction,
-          endorsement: selectedEndorsement,
-          message: message,
-          whatsappLink: generateWhatsAppLink(submitterInfo.phone, message)
-        });
-        setNotificationDialog(true);
+      // Generate WhatsApp link if submitter has phone
+      if (submitterInfo && submitterInfo.phone) {
+        const message = `*InsureHub*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}\n*Type:* ${selectedEndorsement.endorsement_type}${remarks ? `\n*Remarks:* ${remarks}` : ''}`;
+        setWhatsappLink(generateWhatsAppLink(submitterInfo.phone, message));
+        setShowWhatsappBtn(true);
+      } else {
+        setApprovalDialog(false);
       }
       
       fetchPendingEndorsements();
@@ -193,23 +188,21 @@ export default function ApproveEndorsements() {
   return (
     <div className="space-y-6" data-testid="approve-endorsements-page">
       <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle>Pending Endorsements</CardTitle>
-              <CardDescription>Review and approve/reject endorsement requests</CardDescription>
-            </div>
-            {selectedIds.length > 0 && (
-              <Button onClick={() => setBulkDialog(true)} className="bg-purple-600 hover:bg-purple-700">
-                <CheckSquare className="w-4 h-4 mr-2" />
-                Bulk Action ({selectedIds.length} selected)
-              </Button>
-            )}
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Pending Endorsements</CardTitle>
+            <CardDescription>Review and approve/reject endorsement requests</CardDescription>
           </div>
+          {selectedIds.length > 0 && (
+            <Button onClick={() => setBulkDialog(true)} variant="outline">
+              <CheckSquare className="w-4 h-4 mr-2" />
+              Bulk Action ({selectedIds.length})
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {endorsements.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-12 text-gray-500">
               No pending endorsements to review
             </div>
           ) : (
@@ -221,62 +214,58 @@ export default function ApproveEndorsements() {
                       <Checkbox
                         checked={selectedIds.length === endorsements.length && endorsements.length > 0}
                         onCheckedChange={handleSelectAll}
-                        data-testid="select-all-checkbox"
                       />
                     </TableHead>
                     <TableHead>Policy</TableHead>
-                    <TableHead>Employee ID</TableHead>
                     <TableHead>Member</TableHead>
                     <TableHead>Relationship</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Coverage</TableHead>
+                    <TableHead>Premium</TableHead>
                     <TableHead>Date</TableHead>
-                    <TableHead>Pro-rata Premium</TableHead>
-                    <TableHead>Remarks</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {endorsements.map((endorsement) => (
-                    <TableRow key={endorsement.id} className={selectedIds.includes(endorsement.id) ? "bg-blue-50" : ""}>
+                    <TableRow key={endorsement.id}>
                       <TableCell>
                         <Checkbox
                           checked={selectedIds.includes(endorsement.id)}
                           onCheckedChange={(checked) => handleSelectOne(endorsement.id, checked)}
-                          data-testid={`select-${endorsement.id}`}
                         />
                       </TableCell>
                       <TableCell className="font-medium">{endorsement.policy_number}</TableCell>
-                      <TableCell>{endorsement.employee_id || "-"}</TableCell>
                       <TableCell>{endorsement.member_name}</TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getRelationshipColor(endorsement.relationship_type)}`}>
+                        <Badge className={getRelationshipColor(endorsement.relationship_type)}>
                           {endorsement.relationship_type}
-                        </span>
+                        </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : endorsement.endorsement_type === "Deletion" ? "destructive" : "secondary"}>
+                        <Badge variant={endorsement.endorsement_type === 'Addition' ? 'default' : 
+                                       endorsement.endorsement_type === 'Deletion' ? 'destructive' : 'secondary'}>
                           {endorsement.endorsement_type}
                         </Badge>
                       </TableCell>
-                      <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
-                      <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
-                      <TableCell className={`font-semibold ${endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {endorsement.prorata_premium < 0 ? `₹${Math.abs(endorsement.prorata_premium).toLocaleString()} (Refund)` : `₹${endorsement.prorata_premium.toLocaleString()}`}
+                      <TableCell className={endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}>
+                        ₹{Math.abs(endorsement.prorata_premium).toLocaleString()}
+                        {endorsement.prorata_premium < 0 && ' (Refund)'}
                       </TableCell>
-                      <TableCell className="text-sm text-gray-500 max-w-[150px] truncate">{endorsement.remarks || "-"}</TableCell>
-                      <TableCell className="text-right space-x-2">
+                      <TableCell>{endorsement.endorsement_date}</TableCell>
+                      <TableCell>
                         <Button
                           size="sm"
+                          variant="outline"
+                          className="mr-2 text-green-600 border-green-600 hover:bg-green-50"
                           onClick={() => openApprovalDialog(endorsement, "Approved")}
-                          className="bg-green-600 hover:bg-green-700"
                         >
                           <CheckCircle className="w-4 h-4 mr-1" />
                           Approve
                         </Button>
                         <Button
                           size="sm"
-                          variant="destructive"
+                          variant="outline"
+                          className="text-red-600 border-red-600 hover:bg-red-50"
                           onClick={() => openApprovalDialog(endorsement, "Rejected")}
                         >
                           <XCircle className="w-4 h-4 mr-1" />
@@ -310,30 +299,58 @@ export default function ApproveEndorsements() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Remarks (optional)</Label>
-              <Textarea
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Add any notes for this approval/rejection"
-                rows={3}
-              />
+          
+          {!showWhatsappBtn ? (
+            <>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Remarks (optional)</Label>
+                  <Textarea
+                    value={remarks}
+                    onChange={(e) => setRemarks(e.target.value)}
+                    placeholder="Add any notes for this approval/rejection"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setApprovalDialog(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleApproval}
+                  disabled={processing}
+                  className={approvalAction === "Approved" ? "bg-green-600" : "bg-red-600"}
+                >
+                  {processing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  {approvalAction === "Approved" ? "Approve" : "Reject"}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="text-center text-green-600 font-medium">
+                ✓ {approvalAction} successfully! Email sent.
+              </div>
+              <div className="flex justify-center gap-3">
+                {whatsappLink && (
+                  <a
+                    href={whatsappLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                    data-testid="whatsapp-notify-btn"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Notify via WhatsApp
+                  </a>
+                )}
+                <Button variant="outline" onClick={() => setApprovalDialog(false)}>
+                  Close
+                </Button>
+              </div>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApprovalDialog(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleApproval}
-              disabled={processing}
-              className={approvalAction === "Approved" ? "bg-green-600" : "bg-red-600"}
-            >
-              {processing && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {approvalAction === "Approved" ? "Approve" : "Reject"}
-            </Button>
-          </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -396,77 +413,6 @@ export default function ApproveEndorsements() {
               {bulkAction === "Approved" ? "Approve" : "Reject"} {selectedIds.length} Endorsement(s)
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* WhatsApp Notification Dialog */}
-      <Dialog open={notificationDialog} onOpenChange={setNotificationDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageCircle className="w-5 h-5 text-green-500" />
-              Notify HR via WhatsApp
-            </DialogTitle>
-            <DialogDescription>
-              {notificationData && (
-                <>
-                  Endorsement has been {notificationData.action.toLowerCase()}. 
-                  Email notification sent automatically.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          
-          {notificationData && (
-            <div className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">HR:</span> 
-                  <span>{notificationData.user.full_name}</span>
-                </div>
-                {notificationData.user.email && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Mail className="w-4 h-4" />
-                    <span>{notificationData.user.email}</span>
-                    <Badge variant="outline" className="text-green-600 border-green-600">Email Sent</Badge>
-                  </div>
-                )}
-                {notificationData.user.phone && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Phone className="w-4 h-4" />
-                    <span>{notificationData.user.phone}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-3">
-                {notificationData.whatsappLink ? (
-                  <a
-                    href={notificationData.whatsappLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 w-full bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-lg font-medium transition-colors"
-                    data-testid="whatsapp-notify-btn"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    Send WhatsApp Message
-                  </a>
-                ) : (
-                  <div className="text-center text-gray-500 py-3">
-                    No phone number registered for this user
-                  </div>
-                )}
-                
-                <Button 
-                  variant="outline" 
-                  onClick={() => setNotificationDialog(false)}
-                  className="w-full"
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
