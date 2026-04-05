@@ -1,193 +1,110 @@
 # InsureHub - Endorsement Management Portal PRD
 
-## Overview
-InsureHub is a comprehensive endorsement management portal for insurance companies. It allows HR users to submit endorsements (additions, deletions, corrections) for policy members, and Admin users to approve or reject these endorsements.
+## Original Problem Statement
+Build a comprehensive health insurance endorsement management system with:
+- Gmail SMTP email notifications
+- WhatsApp Web direct messaging
+- AI-generated notification content (Emergent LLM Key / GPT-4o-mini)
+- Landing page with AI insights
+- Cloud storage for document management
+- CD Ledger for cash deposit tracking
+- Smart form with auto-calculations and validations
 
-## Core Features
+## Architecture
+- **Frontend**: React.js (CRA + Shadcn/UI + Tailwind)
+- **Backend**: FastAPI + Motor (async MongoDB)
+- **Database**: MongoDB
+- **AI**: GPT-4o-mini via Emergent LLM Key + litellm
+- **Storage**: Emergent Object Storage
+- **Email**: Gmail SMTP with App Password
 
-### Authentication System
-- JWT-based authentication with "HR" and "Admin" roles
-- Registration and login functionality
-- Role-based access control
-- Phone number field for users (for WhatsApp notifications)
+## Completed Features
 
-### HR Portal
-- Submit individual endorsements with all member details
-- Import endorsements in bulk via Excel file upload
-- View and manage submitted endorsements
-- Download Excel template for bulk imports
-- **WhatsApp notification dialog** after submission to notify Admins
+### Session 1-3 - Core Platform
+- [x] User registration with phone numbers (HR/Admin roles)
+- [x] JWT authentication with login/logout
+- [x] Policy CRUD management
+- [x] Endorsement submission (single + Excel bulk import)
+- [x] Endorsement approval/rejection workflow
+- [x] Pro-rata premium calculation engine
+- [x] Analytics dashboard with charts
+- [x] Excel download of approved endorsements
+- [x] Gmail SMTP email notifications
+- [x] WhatsApp Web direct messaging links
+- [x] AI-generated notification content (GPT-4o-mini)
 
-### Admin Portal  
-- Review pending endorsements
-- Approve or reject endorsements with remarks
-- Manage policies (CRUD operations)
-- Download approved endorsements as Excel report
-- Email Settings for Gmail SMTP configuration
-- **WhatsApp notification dialog** after approval/rejection to notify HR
+### Session 4 - Landing Page
+- [x] High-contrast landing page with hero section
+- [x] Features bento grid, AI section, testimonials, footer
+- [x] Framer Motion animations, responsive design
 
-### Email Notifications (SMTP - Gmail App Password)
-- **SMTP Configured**: connect@aarogya-assist.com
-- **Welcome Email**: Sent to new users upon registration
-- **Notification Email**: Sent to all existing HR/Admin users when new user registers
-- **Endorsement Submission Email**: Sent to all Admins when HR submits new endorsement
-- **Approval/Rejection Email**: Sent to HR who submitted when Admin approves/rejects
-- **Custom Email**: Admin can send emails with Excel/PDF attachments
+### Session 5 - Cloud Storage (April 2026)
+- [x] Emergent Object Storage integration
+- [x] 5 categories: Policy Terms, Endorsement Files, Premium Receipts, E-Cards, Others
+- [x] Upload/download/soft-delete with role-based permissions
 
-### WhatsApp Web Notifications
-- **WhatsApp Web Links**: Using wa.me format (click-to-open)
-- **HR Submission**: After submitting endorsement, HR sees dialog with WhatsApp links to notify all Admin users
-- **Admin Approval/Rejection**: After processing, Admin sees dialog with WhatsApp link to notify the HR who submitted
-- **Pre-filled Messages**: Links include formatted message with endorsement details
-- **Dual Notification**: Email sent automatically + WhatsApp link for manual sending
-
-### Excel Import/Export
-- **Import Template (19 columns)**:
-  - Policy Number, Policy Holder, Policy Inception Date, Policy Expiry Date
-  - Type of Policy (Group Health/Group Accident/Group Term)
-  - Annual Premium Per Life, Employee ID, Member Name
-  - DOB, Age, Gender, Relationship Type
-  - Endorsement Type (Addition/Deletion/Correction/Midterm addition)
-  - Date of Joining, Coverage Type (Floater/Non-Floater), Suminsured
-  - Endorsement Date, Effective Date, Remarks
-
-- **Export Report (26 columns)**:
-  - All import fields plus: Days from Inception, Days in Policy Year
-  - Remaining Days, Pro-rata Premium (auto-calculated), Status
-  - Approval Date, Approved By (actual user name)
-
-### Pro-rata Premium Calculation
-- Automatic calculation based on policy dates and annual premium
-- Formula: (Annual Premium × Remaining Days) / Days in Policy Year
-- **Addition/Midterm addition**: Positive premium (charge to client)
-- **Deletion**: Negative premium (refund to client)
-- **Correction**: Zero premium impact
-
-## Technical Architecture
-
-### Backend (FastAPI)
-- `/app/backend/server.py` - Main API server
-- MongoDB database for data persistence
-- JWT authentication with bcrypt password hashing
-- Async motor driver for MongoDB operations
-- Pandas/openpyxl for Excel processing
-- smtplib for email sending via Gmail SMTP
-- Background tasks for async email notifications
-
-### Frontend (React)
-- `/app/frontend/src/` - React application
-- ShadCN UI components
-- Role-based routing and dashboards
-- Axios for API calls
-- Sonner for toast notifications
-- WhatsApp Web link generation (wa.me format)
-
-### Database Collections
-- **users**: username, password_hash, role, full_name, email, phone
-- **policies**: policy_number, policy_holder_name, inception_date, expiry_date, policy_type, annual_premium_per_life, status
-- **endorsements**: All member details, policy reference, premium calculations, approval status
+### Session 6 - Advanced Features (April 2026)
+- [x] Auto age calculation from DOB
+- [x] Dynamic form fields: Addition→DOJ, Deletion→DOL, Midterm addition→hide Employee
+- [x] 45-day backdating lock on DOJ/DOL (frontend min + backend validation)
+- [x] Excel Preview step before import (HR reviews data before submitting)
+- [x] Admin Import Batches viewer with Excel download
+- [x] CD Ledger tab: manual cash deposits, auto-deduction on endorsement approval
+- [x] Premium sign convention: Addition=positive charge, Deletion=negative refund
+- [x] Annual Premium Per Life column in All Endorsements & Approve tables
 
 ## API Endpoints
 
-### Authentication
-- `POST /api/auth/register` - Register new user (sends notifications)
-- `POST /api/auth/login` - Login and get JWT token
-- `GET /api/auth/me` - Get current user info
-
-### User Notifications
-- `GET /api/users/admins` - Get all admin users for notifications
-- `GET /api/users/hr` - Get all HR users (Admin only)
-- `GET /api/users/{user_id}/contact` - Get user contact info
-
-### Policies (Admin only)
-- `GET /api/policies` - List all policies
-- `POST /api/policies` - Create policy
-- `PUT /api/policies/{id}` - Update policy
-- `DELETE /api/policies/{id}` - Delete policy
+### Auth
+- POST /api/auth/register
+- POST /api/auth/login
+- GET /api/users/admins
 
 ### Endorsements
-- `GET /api/endorsements` - List endorsements (filtered by role)
-- `POST /api/endorsements` - Create endorsement (sends email to Admins)
-- `PUT /api/endorsements/{id}` - Update endorsement
-- `DELETE /api/endorsements/{id}` - Delete endorsement
-- `POST /api/endorsements/{id}/approve` - Approve/reject (sends email to HR)
-- `POST /api/endorsements/import` - Import from Excel
-- `GET /api/endorsements/download/approved` - Download approved as Excel
-- `GET /api/endorsements/template/download` - Download import template
+- POST /api/endorsements - Create with 45-day validation
+- GET /api/endorsements - List all
+- GET /api/endorsements/{id} - Get specific
+- PUT /api/endorsements/{id} - Update pending
+- DELETE /api/endorsements/{id} - Delete
+- POST /api/endorsements/{id}/approve - Approve/reject (auto CD deduct)
+- POST /api/endorsements/preview - Excel preview before import
+- POST /api/endorsements/import - Bulk import from Excel
+- GET /api/endorsements/import-batches - List import batches
+- GET /api/endorsements/batch/{id} - View batch detail
+- GET /api/endorsements/batch/{id}/download - Download batch as Excel
+- GET /api/endorsements/template/download
+- GET /api/endorsements/download/approved
+- GET /api/endorsements/stats/summary
+- POST /api/endorsements/bulk-approve
 
-### Email
-- `GET /api/email/config` - Get SMTP configuration status
-- `POST /api/email/config` - Update SMTP settings
-- `POST /api/email/send` - Send custom email with attachments
+### Policies
+- CRUD at /api/policies
 
-### Cloud Storage
-- `POST /api/documents/upload?category=...` - Upload document to specified category
-- `GET /api/documents` - List all documents (optional ?category= filter)
-- `GET /api/documents/{doc_id}/download` - Download a document
-- `DELETE /api/documents/{doc_id}` - Soft-delete a document
+### CD Ledger
+- GET /api/cd-ledger - List entries with running balance
+- POST /api/cd-ledger - Add manual entry (Admin only)
+- DELETE /api/cd-ledger/{id} - Delete manual entry (Admin only)
 
-## Completed Features (April 2026)
+### Documents
+- POST /api/documents/upload?category=...
+- GET /api/documents
+- GET /api/documents/{id}/download
+- DELETE /api/documents/{id}
 
-### Session 1 - SMTP Email Setup
-- [x] Configured Gmail SMTP with App Password (connect@aarogya-assist.com)
-- [x] Added phone number field to user model and registration form
-- [x] Welcome email sent to new users upon registration
-- [x] Notification email sent to all HR/Admin users when new user registers
-- [x] Email settings page shows "Email configured" status
-- [x] Custom email sending with Excel/PDF attachments working
+### Email & Notifications
+- GET/POST /api/email/config
+- POST /api/notifications/generate
 
-### Session 2 - WhatsApp Web Notifications
-- [x] WhatsApp Web link generation (wa.me format)
-- [x] HR submission triggers email to all Admins + WhatsApp dialog
-- [x] Admin approval/rejection triggers email to HR + WhatsApp dialog
-- [x] Pre-filled WhatsApp messages with endorsement details
-- [x] Added /api/users/admins endpoint for HR to get admin contacts
-- [x] Added /api/users/{id}/contact endpoint for Admin to get HR contact
-- [x] Notification dialogs show email sent confirmation + WhatsApp buttons
+## Database Schema
+- `users`: id, username, password, full_name, email, phone, role
+- `endorsements`: id, policy_id, policy_number, member_name, dob, age, endorsement_type, date_of_joining, date_of_leaving, annual_premium_per_life, prorata_premium, status, import_batch_id, ...
+- `policies`: id, policy_number, inception_date, expiry_date, annual_premium_per_life, ...
+- `cd_ledger`: id, date, reference, description, amount, entry_type, endorsement_id, ...
+- `documents`: id, storage_path, original_filename, category, uploaded_by, is_deleted, ...
 
-### Session 3 - AI-Generated Notification Content
-- [x] Integrated GPT-4o-mini via Emergent LLM Key for notification generation
-- [x] AI generates personalized email subjects and HTML bodies
-- [x] AI generates WhatsApp messages with emojis and formatting
-- [x] Added /api/notifications/generate endpoint for on-demand AI generation
-- [x] Fallback to static templates if AI fails
-- [x] Frontend shows "AI Email Sent" badge after actions
-- [x] Professional, warm, and contextual notification content
-
-### Session 4 - Landing Page
-- [x] Created beautiful landing page with Swiss/High-Contrast design
-- [x] Hero section: "Health Endorsement Made Intelligent" with AI badge
-- [x] Features bento grid: Member Additions, Deletions, Corrections, Real-time Sync
-- [x] AI & Notifications section: WhatsApp Integration, Smart Email Alerts
-- [x] Testimonials from HR professionals
-- [x] Dark footer with CTA
-- [x] Smooth scroll navigation
-- [x] Framer Motion animations
-- [x] Responsive design
-
-### Session 5 - Cloud Storage (April 2026)
-- [x] Emergent Object Storage integration for file uploads
-- [x] 5 document categories: Policy Terms, Endorsement Files, Premium Receipts, E-Cards, Others
-- [x] Upload, download, and soft-delete functionality
-- [x] Cloud Storage tab added to both Admin and HR navigation
-- [x] Tabbed UI with file count badges, file tables with metadata
-- [x] Role-based delete permissions (uploader or Admin)
-- [x] 25MB file size limit with proper error handling
-
-## Test Credentials
-- **Admin User**: admin / admin123
-- **HR User**: hruser1 / hr123456
-
-## SMTP Configuration
-- **Server**: smtp.gmail.com
-- **Port**: 587
-- **Username**: connect@aarogya-assist.com
-- **Password**: (Gmail App Password configured in backend .env)
-
-## Backlog / Future Enhancements
-- [ ] SMS notifications using Twilio (phone numbers already captured)
-- [ ] Audit log for all user actions
-- [ ] Multi-policy comparison view
-- [ ] Export templates for different insurers
-- [ ] Push notifications for mobile
-- [ ] WhatsApp Business API integration for automated messages
+## Future/Backlog Tasks
+- P1: SMS notifications via Twilio
+- P2: Pricing/contact page for lead generation
+- P2: Audit log for all user actions
+- P2: WhatsApp Business API for automated messages
+- P3: Backend refactoring (server.py modularization)
