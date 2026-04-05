@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Loader2, MessageCircle } from "lucide-react";
+import { Plus, Loader2, MessageCircle, Sparkles } from "lucide-react";
 
 // WhatsApp Web link generator
 const generateWhatsAppLink = (phone, message) => {
@@ -24,6 +24,8 @@ export default function SubmitEndorsement() {
   const [adminUsers, setAdminUsers] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
+  const [aiWhatsappMessage, setAiWhatsappMessage] = useState("");
+  const [generatingAI, setGeneratingAI] = useState(false);
   const [formData, setFormData] = useState({
     policy_number: "",
     employee_id: "",
@@ -71,6 +73,36 @@ export default function SubmitEndorsement() {
     }
   };
 
+  const generateAIWhatsappMessage = async (endorsementData) => {
+    try {
+      setGeneratingAI(true);
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API}/notifications/generate`, {
+        notification_type: "endorsement_submitted",
+        context: {
+          submitted_by: "HR User",
+          policy_number: endorsementData.policy_number,
+          member_name: endorsementData.member_name,
+          endorsement_type: endorsementData.endorsement_type,
+          relationship_type: endorsementData.relationship_type,
+          prorata_premium: endorsementData.prorata_premium || 0
+        }
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.data.content?.whatsapp_message) {
+        setAiWhatsappMessage(response.data.content.whatsapp_message);
+      }
+    } catch (error) {
+      console.error("Error generating AI message:", error);
+      // Fallback to simple message
+      setAiWhatsappMessage(`*InsureHub - New Endorsement*\n\n*Policy:* ${endorsementData.policy_number}\n*Member:* ${endorsementData.member_name}\n*Type:* ${endorsementData.endorsement_type}\n\nPlease review in Admin portal.`);
+    } finally {
+      setGeneratingAI(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -94,9 +126,12 @@ export default function SubmitEndorsement() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      toast.success("Endorsement submitted! Email sent to Admins.");
+      toast.success("Endorsement submitted! AI-powered email sent to Admins.");
       setSubmittedData(response.data);
       setShowSuccess(true);
+      
+      // Generate AI WhatsApp message
+      generateAIWhatsappMessage(response.data);
       
       // Reset form
       setFormData({
@@ -128,6 +163,7 @@ export default function SubmitEndorsement() {
   };
 
   const getWhatsAppMessage = () => {
+    if (aiWhatsappMessage) return aiWhatsappMessage;
     if (!submittedData) return "";
     return `*InsureHub - New Endorsement*\n\n*Policy:* ${submittedData.policy_number}\n*Member:* ${submittedData.member_name}\n*Type:* ${submittedData.endorsement_type}\n\nPlease review in Admin portal.`;
   };
@@ -136,20 +172,36 @@ export default function SubmitEndorsement() {
 
   return (
     <div className="space-y-6" data-testid="submit-endorsement-page">
-      {/* Success Banner with WhatsApp Icons */}
+      {/* Success Banner with AI-generated WhatsApp Icons */}
       {showSuccess && (
         <Card className="bg-green-50 border-green-200">
           <CardContent className="py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-green-700">
                 <span className="text-lg">✓</span>
-                <span className="font-medium">Endorsement submitted! Email sent to Admins.</span>
+                <span className="font-medium">Endorsement submitted!</span>
+                <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                  <Sparkles className="w-3 h-3" />
+                  AI Email Sent
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 {adminsWithPhone.length > 0 && (
                   <>
-                    <span className="text-sm text-green-600 mr-2">Notify via WhatsApp:</span>
-                    {adminsWithPhone.map((admin) => (
+                    <span className="text-sm text-green-600 mr-2 flex items-center gap-1">
+                      {generatingAI ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Generating AI message...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3 text-purple-500" />
+                          WhatsApp:
+                        </>
+                      )}
+                    </span>
+                    {!generatingAI && adminsWithPhone.map((admin) => (
                       <a
                         key={admin.id}
                         href={generateWhatsAppLink(admin.phone, getWhatsAppMessage())}

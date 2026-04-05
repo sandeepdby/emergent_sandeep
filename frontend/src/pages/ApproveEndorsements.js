@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, XCircle, CheckSquare, MessageCircle } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckSquare, MessageCircle, Sparkles } from "lucide-react";
 
 // WhatsApp Web link generator
 const generateWhatsAppLink = (phone, message) => {
@@ -89,18 +89,45 @@ export default function ApproveEndorsements() {
         }
       }
       
-      await axios.post(
+      const response = await axios.post(
         `${API}/endorsements/${selectedEndorsement.id}/approve`,
         { status: approvalAction, remarks },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      toast.success(`Endorsement ${approvalAction.toLowerCase()} successfully! Email sent to HR.`);
+      toast.success(`Endorsement ${approvalAction.toLowerCase()} successfully! AI-powered email sent.`);
+      
+      // Use AI-generated WhatsApp message if available from response
+      let whatsappMsg = response.data.ai_whatsapp_message;
+      
+      // If no AI message, generate one
+      if (!whatsappMsg && submitterInfo && submitterInfo.phone) {
+        try {
+          const aiResponse = await axios.post(`${API}/notifications/generate`, {
+            notification_type: approvalAction === "Approved" ? "endorsement_approved" : "endorsement_rejected",
+            context: {
+              approved_by: "Admin",
+              hr_name: submitterInfo.full_name,
+              policy_number: selectedEndorsement.policy_number,
+              member_name: selectedEndorsement.member_name,
+              endorsement_type: selectedEndorsement.endorsement_type,
+              prorata_premium: selectedEndorsement.prorata_premium,
+              remarks: remarks || "None"
+            }
+          }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          whatsappMsg = aiResponse.data.content?.whatsapp_message;
+        } catch (e) {
+          // Fallback message
+          whatsappMsg = `*InsureHub*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}${remarks ? `\n*Remarks:* ${remarks}` : ''}`;
+        }
+      }
       
       // Generate WhatsApp link if submitter has phone
       if (submitterInfo && submitterInfo.phone) {
-        const message = `*InsureHub*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}\n*Type:* ${selectedEndorsement.endorsement_type}${remarks ? `\n*Remarks:* ${remarks}` : ''}`;
-        setWhatsappLink(generateWhatsAppLink(submitterInfo.phone, message));
+        const finalMessage = whatsappMsg || `*InsureHub*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}`;
+        setWhatsappLink(generateWhatsAppLink(submitterInfo.phone, finalMessage));
         setShowWhatsappBtn(true);
       } else {
         setApprovalDialog(false);
@@ -329,8 +356,14 @@ export default function ApproveEndorsements() {
             </>
           ) : (
             <div className="space-y-4">
-              <div className="text-center text-green-600 font-medium">
-                ✓ {approvalAction} successfully! Email sent.
+              <div className="text-center">
+                <div className="text-green-600 font-medium flex items-center justify-center gap-2">
+                  ✓ {approvalAction} successfully!
+                  <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+                    <Sparkles className="w-3 h-3" />
+                    AI Email Sent
+                  </span>
+                </div>
               </div>
               <div className="flex justify-center gap-3">
                 {whatsappLink && (
@@ -342,7 +375,8 @@ export default function ApproveEndorsements() {
                     data-testid="whatsapp-notify-btn"
                   >
                     <MessageCircle className="w-5 h-5" />
-                    Notify via WhatsApp
+                    <Sparkles className="w-3 h-3" />
+                    WhatsApp HR
                   </a>
                 )}
                 <Button variant="outline" onClick={() => setApprovalDialog(false)}>

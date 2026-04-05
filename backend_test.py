@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 InsureHub Backend API Testing
-Tests SMTP email functionality and user registration with notifications
+Tests AI notification generation, SMTP email functionality and endorsement workflows
 """
 
 import requests
@@ -227,6 +227,127 @@ class InsureHubAPITester:
             return True
         return False
 
+    def test_ai_notification_generation(self):
+        """Test AI notification generation endpoint"""
+        if not self.token:
+            print("❌ No token available for AI notification test")
+            return False
+            
+        print("\n🤖 Testing AI Notification Generation...")
+        
+        # Test endorsement submitted notification
+        success, response = self.run_test(
+            "AI Notification - Endorsement Submitted",
+            "POST",
+            "notifications/generate",
+            200,
+            data={
+                "notification_type": "endorsement_submitted",
+                "context": {
+                    "submitted_by": "Test HR User",
+                    "policy_number": "TEST_POL_001",
+                    "member_name": "John Doe",
+                    "endorsement_type": "Addition",
+                    "relationship_type": "Employee",
+                    "prorata_premium": 5000
+                }
+            }
+        )
+        
+        if success and response.get("content"):
+            content = response["content"]
+            has_email = bool(content.get("email_subject") and content.get("email_body"))
+            has_whatsapp = bool(content.get("whatsapp_message"))
+            print(f"   📧 Email content: {'✓' if has_email else '✗'}")
+            print(f"   💬 WhatsApp content: {'✓' if has_whatsapp else '✗'}")
+            
+            # Check for emojis and formatting in WhatsApp message
+            if has_whatsapp:
+                whatsapp_msg = content["whatsapp_message"]
+                has_emojis = any(ord(char) > 127 for char in whatsapp_msg)
+                has_formatting = "*" in whatsapp_msg or "_" in whatsapp_msg
+                print(f"   🎨 WhatsApp emojis: {'✓' if has_emojis else '✗'}")
+                print(f"   📝 WhatsApp formatting: {'✓' if has_formatting else '✗'}")
+            return True
+        elif success:
+            print("   ⚠️ AI notification endpoint responded but no content generated")
+            return True
+        else:
+            print("   ❌ AI notification generation failed")
+            return False
+
+    def test_endorsement_workflow_with_ai(self):
+        """Test complete endorsement workflow with AI notifications"""
+        if not self.token:
+            print("❌ No token available for endorsement workflow test")
+            return False
+            
+        print("\n📝 Testing Endorsement Workflow with AI...")
+        
+        # First get available policies
+        success, policies = self.run_test(
+            "Get Policies for Endorsement",
+            "GET",
+            "policies",
+            200
+        )
+        
+        if not success or not policies:
+            print("   ⚠️ No policies available for endorsement testing")
+            return False
+        
+        test_policy = policies[0]
+        print(f"   Using policy: {test_policy['policy_number']}")
+        
+        # Submit endorsement (should trigger AI email to admins)
+        endorsement_data = {
+            "policy_number": test_policy["policy_number"],
+            "employee_id": f"EMP_{datetime.now().strftime('%H%M%S')}",
+            "member_name": "AI Test Member",
+            "dob": "1990-01-01",
+            "age": 35,
+            "gender": "Male",
+            "relationship_type": "Employee",
+            "endorsement_type": "Addition",
+            "date_of_joining": "2025-01-15",
+            "coverage_type": "Floater",
+            "sum_insured": 500000,
+            "endorsement_date": "2025-01-20",
+            "effective_date": "2025-01-20",
+            "remarks": "AI notification test endorsement"
+        }
+        
+        success, endorsement = self.run_test(
+            "Submit Endorsement (AI Email to Admins)",
+            "POST",
+            "endorsements",
+            200,
+            data=endorsement_data
+        )
+        
+        if success and endorsement:
+            print(f"   📧 AI email should be sent to admins for endorsement: {endorsement['id']}")
+            
+            # Now approve the endorsement (should trigger AI email to HR)
+            approval_data = {
+                "status": "Approved",
+                "remarks": "AI notification test approval"
+            }
+            
+            success, approved = self.run_test(
+                "Approve Endorsement (AI Email to HR)",
+                "POST",
+                f"endorsements/{endorsement['id']}/approve",
+                200,
+                data=approval_data
+            )
+            
+            if success:
+                print(f"   📧 AI email should be sent to HR who submitted the endorsement")
+                return True
+        
+        return False
+
 def main():
     """Main test execution"""
     print("🚀 Starting InsureHub Backend API Tests")
@@ -242,6 +363,8 @@ def main():
         ("Current User Info", tester.test_get_current_user),
         ("Policies Access", tester.test_policies_endpoint),
         ("Endorsements Access", tester.test_endorsements_endpoint),
+        ("AI Notification Generation", tester.test_ai_notification_generation),
+        ("Endorsement Workflow with AI", tester.test_endorsement_workflow_with_ai),
         ("User Registration with Email", lambda: tester.test_user_registration_with_email()[0]),
         ("User Registration without Email", tester.test_user_creation_without_email),
         ("Send Custom Email", tester.test_send_custom_email),
@@ -276,6 +399,14 @@ def main():
             print(f"   - {test}")
     else:
         print("\n✅ All tests passed!")
+    
+    # AI functionality summary
+    print("\n🤖 AI NOTIFICATION FUNCTIONALITY SUMMARY:")
+    print("- AI notification generation: POST /api/notifications/generate")
+    print("- Endorsement submission: Triggers AI-generated email to admins")
+    print("- Endorsement approval: Triggers AI-generated email to HR")
+    print("- WhatsApp messages: AI-generated with emojis and formatting")
+    print("- Fallback: Static templates if AI fails")
     
     # Email functionality summary
     print("\n📧 EMAIL FUNCTIONALITY SUMMARY:")

@@ -26,6 +26,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 
 ROOT_DIR = Path(__file__).parent
@@ -48,6 +49,9 @@ SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
 SMTP_USERNAME = os.environ.get('SMTP_USERNAME', '')
 SMTP_PASSWORD = os.environ.get('SMTP_PASSWORD', '')  # App password for Gmail
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '')
+
+# AI/LLM Configuration
+EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
 
 # Create the main app
 app = FastAPI()
@@ -430,6 +434,181 @@ async def send_email_notification(
         return False
 
 
+# ==================== AI NOTIFICATION GENERATION ====================
+
+async def generate_ai_notification(notification_type: str, context: dict) -> dict:
+    """Generate AI-powered notification content for email and WhatsApp"""
+    if not EMERGENT_LLM_KEY:
+        logging.warning("AI notifications disabled - EMERGENT_LLM_KEY not configured")
+        return None
+    
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"notification-{uuid.uuid4()}",
+            system_message="""You are InsureHub's notification assistant. Generate professional, warm, and concise notification messages for insurance endorsement workflows.
+
+Guidelines:
+- Be professional yet friendly
+- Keep messages concise but informative
+- Use bullet points for key details
+- Include relevant emojis sparingly for WhatsApp messages
+- For emails, use proper HTML formatting
+- Always include the key information: member name, policy, endorsement type, status
+- Add a brief contextual message that feels human, not robotic
+- Sign off appropriately for business communication"""
+        ).with_model("openai", "gpt-4o-mini")
+        
+        if notification_type == "endorsement_submitted":
+            prompt = f"""Generate notification content for a NEW ENDORSEMENT SUBMISSION.
+
+Context:
+- Submitted by: {context.get('submitted_by', 'HR User')}
+- Policy Number: {context.get('policy_number', 'N/A')}
+- Member Name: {context.get('member_name', 'N/A')}
+- Endorsement Type: {context.get('endorsement_type', 'N/A')}
+- Relationship: {context.get('relationship_type', 'N/A')}
+- Pro-rata Premium: ₹{context.get('prorata_premium', 0):,.2f}
+- Submitted At: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+Generate two versions:
+1. EMAIL_SUBJECT: A brief subject line (max 60 chars)
+2. EMAIL_BODY: HTML formatted email body (professional, include all details in a styled card)
+3. WHATSAPP_MESSAGE: Plain text with WhatsApp formatting (*bold*, _italic_) and appropriate emojis
+
+Format your response exactly as:
+EMAIL_SUBJECT: [subject here]
+---EMAIL_BODY---
+[html body here]
+---WHATSAPP_MESSAGE---
+[whatsapp message here]"""
+
+        elif notification_type == "endorsement_approved":
+            prompt = f"""Generate notification content for an APPROVED ENDORSEMENT.
+
+Context:
+- Approved by: {context.get('approved_by', 'Admin')}
+- HR who submitted: {context.get('hr_name', 'HR User')}
+- Policy Number: {context.get('policy_number', 'N/A')}
+- Member Name: {context.get('member_name', 'N/A')}
+- Endorsement Type: {context.get('endorsement_type', 'N/A')}
+- Pro-rata Premium: ₹{context.get('prorata_premium', 0):,.2f}
+- Remarks: {context.get('remarks', 'None')}
+- Processed At: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+Generate two versions:
+1. EMAIL_SUBJECT: A brief subject line (max 60 chars) - positive tone
+2. EMAIL_BODY: HTML formatted email body (celebratory but professional, green accents)
+3. WHATSAPP_MESSAGE: Plain text with WhatsApp formatting and ✅ emoji
+
+Format your response exactly as:
+EMAIL_SUBJECT: [subject here]
+---EMAIL_BODY---
+[html body here]
+---WHATSAPP_MESSAGE---
+[whatsapp message here]"""
+
+        elif notification_type == "endorsement_rejected":
+            prompt = f"""Generate notification content for a REJECTED ENDORSEMENT.
+
+Context:
+- Rejected by: {context.get('approved_by', 'Admin')}
+- HR who submitted: {context.get('hr_name', 'HR User')}
+- Policy Number: {context.get('policy_number', 'N/A')}
+- Member Name: {context.get('member_name', 'N/A')}
+- Endorsement Type: {context.get('endorsement_type', 'N/A')}
+- Remarks/Reason: {context.get('remarks', 'No specific reason provided')}
+- Processed At: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+Generate two versions:
+1. EMAIL_SUBJECT: A brief subject line (max 60 chars) - professional, not harsh
+2. EMAIL_BODY: HTML formatted email body (empathetic, constructive, explain next steps)
+3. WHATSAPP_MESSAGE: Plain text with WhatsApp formatting, professional tone
+
+Format your response exactly as:
+EMAIL_SUBJECT: [subject here]
+---EMAIL_BODY---
+[html body here]
+---WHATSAPP_MESSAGE---
+[whatsapp message here]"""
+
+        elif notification_type == "user_registered":
+            prompt = f"""Generate notification content for a NEW USER REGISTRATION.
+
+Context:
+- New User: {context.get('full_name', 'New User')}
+- Username: {context.get('username', 'N/A')}
+- Role: {context.get('role', 'N/A')}
+- Email: {context.get('email', 'N/A')}
+- Phone: {context.get('phone', 'Not provided')}
+- Registered At: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}
+
+Generate TWO sets of notifications:
+A) WELCOME EMAIL for the new user (warm, welcoming)
+B) NOTIFICATION for existing HR/Admin users about the new registration
+
+Format your response exactly as:
+WELCOME_SUBJECT: [subject here]
+---WELCOME_BODY---
+[html body here]
+---WELCOME_WHATSAPP---
+[whatsapp message here]
+---NOTIFY_SUBJECT---
+[subject here]
+---NOTIFY_BODY---
+[html body here]
+---NOTIFY_WHATSAPP---
+[whatsapp message here]"""
+
+        else:
+            return None
+        
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        
+        # Parse the response
+        result = parse_ai_notification_response(response, notification_type)
+        return result
+        
+    except Exception as e:
+        logging.error(f"AI notification generation failed: {e}")
+        return None
+
+
+def parse_ai_notification_response(response: str, notification_type: str) -> dict:
+    """Parse AI response into structured notification content"""
+    result = {}
+    
+    try:
+        if notification_type == "user_registered":
+            # Parse welcome and notify sections
+            if "WELCOME_SUBJECT:" in response:
+                result['welcome_subject'] = response.split("WELCOME_SUBJECT:")[1].split("---")[0].strip()
+            if "---WELCOME_BODY---" in response:
+                result['welcome_body'] = response.split("---WELCOME_BODY---")[1].split("---WELCOME_WHATSAPP---")[0].strip()
+            if "---WELCOME_WHATSAPP---" in response:
+                result['welcome_whatsapp'] = response.split("---WELCOME_WHATSAPP---")[1].split("---NOTIFY_SUBJECT---")[0].strip()
+            if "---NOTIFY_SUBJECT---" in response:
+                result['notify_subject'] = response.split("---NOTIFY_SUBJECT---")[1].split("---")[0].strip()
+            if "---NOTIFY_BODY---" in response:
+                result['notify_body'] = response.split("---NOTIFY_BODY---")[1].split("---NOTIFY_WHATSAPP---")[0].strip()
+            if "---NOTIFY_WHATSAPP---" in response:
+                result['notify_whatsapp'] = response.split("---NOTIFY_WHATSAPP---")[1].strip()
+        else:
+            # Parse standard notification
+            if "EMAIL_SUBJECT:" in response:
+                result['email_subject'] = response.split("EMAIL_SUBJECT:")[1].split("---")[0].strip()
+            if "---EMAIL_BODY---" in response:
+                result['email_body'] = response.split("---EMAIL_BODY---")[1].split("---WHATSAPP_MESSAGE---")[0].strip()
+            if "---WHATSAPP_MESSAGE---" in response:
+                result['whatsapp_message'] = response.split("---WHATSAPP_MESSAGE---")[1].strip()
+        
+        return result
+    except Exception as e:
+        logging.error(f"Failed to parse AI notification response: {e}")
+        return {}
+
+
 def generate_pdf_report(endorsements: List[dict], policies: dict, report_type: str = "detailed") -> bytes:
     """Generate PDF report for endorsements"""
     buffer = io.BytesIO()
@@ -800,6 +979,29 @@ async def get_user_contact(user_id: str, current_user: User = Depends(get_curren
     return user
 
 
+# ==================== AI NOTIFICATION GENERATION ENDPOINT ====================
+
+class AINotificationRequest(BaseModel):
+    notification_type: str  # endorsement_submitted, endorsement_approved, endorsement_rejected
+    context: dict
+
+@api_router.post("/notifications/generate")
+async def generate_notification_content(request: AINotificationRequest, current_user: User = Depends(get_current_user)):
+    """Generate AI-powered notification content for email and WhatsApp"""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=503, detail="AI notifications not configured")
+    
+    ai_content = await generate_ai_notification(request.notification_type, request.context)
+    
+    if not ai_content:
+        raise HTTPException(status_code=500, detail="Failed to generate AI notification")
+    
+    return {
+        "success": True,
+        "content": ai_content
+    }
+
+
 # ==================== ENDORSEMENT ENDPOINTS ====================
 
 @api_router.post("/endorsements", response_model=Endorsement)
@@ -848,7 +1050,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     
     await db.endorsements.insert_one(doc)
     
-    # Send email notification to all Admins about new endorsement submission
+    # Generate AI notification and send to Admins
     if SMTP_USERNAME:
         admin_users = await db.users.find(
             {"role": "Admin"},
@@ -858,32 +1060,47 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         admin_emails = [u['email'] for u in admin_users if u.get('email')]
         
         if admin_emails:
-            notify_subject = f"New Endorsement Submitted - {endorsement_data.member_name}"
-            notify_body = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0;">InsureHub</h1>
-                    <p style="color: #fef3c7; margin: 10px 0 0;">New Endorsement Pending Approval</p>
-                </div>
-                <div style="padding: 30px; background: #f8fafc;">
-                    <h2 style="color: #f59e0b;">New Endorsement Submitted</h2>
-                    <p style="color: #475569;">A new endorsement has been submitted and requires your approval.</p>
-                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
-                        <p style="margin: 5px 0;"><strong>Submitted By:</strong> {current_user.full_name}</p>
-                        <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement_data.policy_number}</p>
-                        <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement_data.member_name}</p>
-                        <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement_data.endorsement_type.value}</p>
-                        <p style="margin: 5px 0;"><strong>Relationship:</strong> {endorsement_data.relationship_type.value}</p>
-                        <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{prorata_premium:,.2f}</p>
-                        <p style="margin: 5px 0;"><strong>Submitted At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+            # Try AI-generated content first
+            ai_content = await generate_ai_notification("endorsement_submitted", {
+                "submitted_by": current_user.full_name,
+                "policy_number": endorsement_data.policy_number,
+                "member_name": endorsement_data.member_name,
+                "endorsement_type": endorsement_data.endorsement_type.value,
+                "relationship_type": endorsement_data.relationship_type.value,
+                "prorata_premium": prorata_premium
+            })
+            
+            if ai_content and ai_content.get('email_subject') and ai_content.get('email_body'):
+                notify_subject = ai_content['email_subject']
+                notify_body = ai_content['email_body']
+            else:
+                # Fallback to static template
+                notify_subject = f"New Endorsement Submitted - {endorsement_data.member_name}"
+                notify_body = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0;">InsureHub</h1>
+                        <p style="color: #fef3c7; margin: 10px 0 0;">New Endorsement Pending Approval</p>
                     </div>
-                    <p style="color: #475569;">Please log in to the Admin portal to review and approve/reject this endorsement.</p>
-                    <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                        This is an automated notification from InsureHub by Aarogya-Assist.
-                    </p>
+                    <div style="padding: 30px; background: #f8fafc;">
+                        <h2 style="color: #f59e0b;">New Endorsement Submitted</h2>
+                        <p style="color: #475569;">A new endorsement has been submitted and requires your approval.</p>
+                        <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                            <p style="margin: 5px 0;"><strong>Submitted By:</strong> {current_user.full_name}</p>
+                            <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement_data.policy_number}</p>
+                            <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement_data.member_name}</p>
+                            <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement_data.endorsement_type.value}</p>
+                            <p style="margin: 5px 0;"><strong>Relationship:</strong> {endorsement_data.relationship_type.value}</p>
+                            <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{prorata_premium:,.2f}</p>
+                            <p style="margin: 5px 0;"><strong>Submitted At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                        </div>
+                        <p style="color: #475569;">Please log in to the Admin portal to review and approve/reject this endorsement.</p>
+                        <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                            This is an automated notification from InsureHub by Aarogya-Assist.
+                        </p>
+                    </div>
                 </div>
-            </div>
-            """
+                """
             background_tasks.add_task(send_email_notification, admin_emails, notify_subject, notify_body)
     
     return endorsement
@@ -1046,37 +1263,54 @@ async def approve_reject_endorsement(
         )
         
         if submitter and submitter.get('email'):
-            status_color = "#059669" if approval.status == EndorsementStatus.APPROVED else "#dc2626"
             status_text = "Approved" if approval.status == EndorsementStatus.APPROVED else "Rejected"
+            notification_type = "endorsement_approved" if approval.status == EndorsementStatus.APPROVED else "endorsement_rejected"
             
-            notify_subject = f"Endorsement {status_text} - {endorsement['member_name']}"
-            notify_body = f"""
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <div style="background: linear-gradient(135deg, {status_color} 0%, {status_color}cc 100%); padding: 30px; text-align: center;">
-                    <h1 style="color: white; margin: 0;">InsureHub</h1>
-                    <p style="color: #ffffffcc; margin: 10px 0 0;">Endorsement {status_text}</p>
-                </div>
-                <div style="padding: 30px; background: #f8fafc;">
-                    <h2 style="color: {status_color};">Your Endorsement Has Been {status_text}</h2>
-                    <p style="color: #475569;">Dear {submitter['full_name']},</p>
-                    <p style="color: #475569;">Your endorsement submission has been <strong>{status_text.lower()}</strong> by {current_user.full_name}.</p>
-                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {status_color};">
-                        <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement['policy_number']}</p>
-                        <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement['member_name']}</p>
-                        <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement['endorsement_type']}</p>
-                        <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: {status_color}; font-weight: bold;">{status_text}</span></p>
-                        <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{endorsement['prorata_premium']:,.2f}</p>
-                        {f'<p style="margin: 5px 0;"><strong>Remarks:</strong> {approval.remarks}</p>' if approval.remarks else ''}
-                        <p style="margin: 5px 0;"><strong>Processed By:</strong> {current_user.full_name}</p>
-                        <p style="margin: 5px 0;"><strong>Processed At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+            # Try AI-generated content first
+            ai_content = await generate_ai_notification(notification_type, {
+                "approved_by": current_user.full_name,
+                "hr_name": submitter.get('full_name', 'HR User'),
+                "policy_number": endorsement['policy_number'],
+                "member_name": endorsement['member_name'],
+                "endorsement_type": endorsement['endorsement_type'],
+                "prorata_premium": endorsement['prorata_premium'],
+                "remarks": approval.remarks or "None"
+            })
+            
+            if ai_content and ai_content.get('email_subject') and ai_content.get('email_body'):
+                notify_subject = ai_content['email_subject']
+                notify_body = ai_content['email_body']
+            else:
+                # Fallback to static template
+                status_color = "#059669" if approval.status == EndorsementStatus.APPROVED else "#dc2626"
+                notify_subject = f"Endorsement {status_text} - {endorsement['member_name']}"
+                notify_body = f"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                    <div style="background: linear-gradient(135deg, {status_color} 0%, {status_color}cc 100%); padding: 30px; text-align: center;">
+                        <h1 style="color: white; margin: 0;">InsureHub</h1>
+                        <p style="color: #ffffffcc; margin: 10px 0 0;">Endorsement {status_text}</p>
                     </div>
-                    <p style="color: #475569;">Please log in to the HR portal to view the details.</p>
-                    <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                        This is an automated notification from InsureHub by Aarogya-Assist.
-                    </p>
+                    <div style="padding: 30px; background: #f8fafc;">
+                        <h2 style="color: {status_color};">Your Endorsement Has Been {status_text}</h2>
+                        <p style="color: #475569;">Dear {submitter['full_name']},</p>
+                        <p style="color: #475569;">Your endorsement submission has been <strong>{status_text.lower()}</strong> by {current_user.full_name}.</p>
+                        <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {status_color};">
+                            <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement['policy_number']}</p>
+                            <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement['member_name']}</p>
+                            <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement['endorsement_type']}</p>
+                            <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: {status_color}; font-weight: bold;">{status_text}</span></p>
+                            <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{endorsement['prorata_premium']:,.2f}</p>
+                            {f'<p style="margin: 5px 0;"><strong>Remarks:</strong> {approval.remarks}</p>' if approval.remarks else ''}
+                            <p style="margin: 5px 0;"><strong>Processed By:</strong> {current_user.full_name}</p>
+                            <p style="margin: 5px 0;"><strong>Processed At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                        </div>
+                        <p style="color: #475569;">Please log in to the HR portal to view the details.</p>
+                        <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                            This is an automated notification from InsureHub by Aarogya-Assist.
+                        </p>
+                    </div>
                 </div>
-            </div>
-            """
+                """
             background_tasks.add_task(send_email_notification, [submitter['email']], notify_subject, notify_body)
     
     updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
