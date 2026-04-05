@@ -126,6 +126,8 @@ class PolicyType(str, Enum):
     GROUP_HEALTH = "Group Health"
     GROUP_ACCIDENT = "Group Accident"
     GROUP_TERM = "Group Term"
+    GPA = "GPA"
+    GTL = "GTL"
 
 
 class Gender(str, Enum):
@@ -1327,9 +1329,13 @@ async def preview_excel_import(
 # ==================== IMPORT BATCHES ENDPOINT ====================
 @api_router.get("/endorsements/import-batches")
 async def get_import_batches(current_user: User = Depends(get_current_user)):
-    """Get list of import batches for Admin to review"""
+    """Get list of import batches - HR sees only their own, Admin sees all"""
+    match_filter = {"import_batch_id": {"$exists": True, "$ne": None}}
+    if current_user.role == UserRole.HR:
+        match_filter["submitted_by"] = current_user.id
+    
     pipeline = [
-        {"$match": {"import_batch_id": {"$exists": True, "$ne": None}}},
+        {"$match": match_filter},
         {"$group": {
             "_id": "$import_batch_id",
             "count": {"$sum": 1},
@@ -1366,8 +1372,11 @@ async def get_import_batches(current_user: User = Depends(get_current_user)):
 @api_router.get("/endorsements/batch/{batch_id}")
 async def get_batch_endorsements(batch_id: str, current_user: User = Depends(get_current_user)):
     """Get all endorsements in an import batch"""
+    query = {"import_batch_id": batch_id}
+    if current_user.role == UserRole.HR:
+        query["submitted_by"] = current_user.id
     endorsements = await db.endorsements.find(
-        {"import_batch_id": batch_id}, {"_id": 0}
+        query, {"_id": 0}
     ).to_list(10000)
     
     for e in endorsements:
@@ -1380,8 +1389,11 @@ async def get_batch_endorsements(batch_id: str, current_user: User = Depends(get
 @api_router.get("/endorsements/batch/{batch_id}/download")
 async def download_batch_excel(batch_id: str, current_user: User = Depends(get_current_user)):
     """Download all endorsements from a batch as Excel"""
+    query = {"import_batch_id": batch_id}
+    if current_user.role == UserRole.HR:
+        query["submitted_by"] = current_user.id
     endorsements = await db.endorsements.find(
-        {"import_batch_id": batch_id}, {"_id": 0}
+        query, {"_id": 0}
     ).to_list(10000)
     
     if not endorsements:

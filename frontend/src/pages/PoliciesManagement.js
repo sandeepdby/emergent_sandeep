@@ -22,6 +22,7 @@ const PoliciesPage = () => {
     policy_holder_name: "",
     inception_date: "",
     expiry_date: "",
+    policy_type: "Group Health",
     annual_premium_per_life: "",
     status: "Active",
   });
@@ -84,6 +85,7 @@ const PoliciesPage = () => {
       policy_holder_name: policy.policy_holder_name,
       inception_date: policy.inception_date,
       expiry_date: policy.expiry_date,
+      policy_type: policy.policy_type || "Group Health",
       annual_premium_per_life: policy.annual_premium_per_life.toString(),
       status: policy.status,
     });
@@ -113,6 +115,7 @@ const PoliciesPage = () => {
       policy_holder_name: "",
       inception_date: "",
       expiry_date: "",
+      policy_type: "Group Health",
       annual_premium_per_life: "",
       status: "Active",
     });
@@ -154,6 +157,7 @@ const PoliciesPage = () => {
                 <TableRow>
                   <TableHead>Policy Number</TableHead>
                   <TableHead>Policy Holder</TableHead>
+                  <TableHead>Product Type</TableHead>
                   <TableHead>Inception Date</TableHead>
                   <TableHead>Expiry Date</TableHead>
                   <TableHead>Premium/Life</TableHead>
@@ -167,6 +171,7 @@ const PoliciesPage = () => {
                   <TableRow key={policy.id} data-testid={`policy-row-${policy.policy_number}`}>
                     <TableCell className="font-medium">{policy.policy_number}</TableCell>
                     <TableCell>{policy.policy_holder_name}</TableCell>
+                    <TableCell><Badge variant="outline">{policy.policy_type || "Group Health"}</Badge></TableCell>
                     <TableCell>{new Date(policy.inception_date).toLocaleDateString()}</TableCell>
                     <TableCell>{new Date(policy.expiry_date).toLocaleDateString()}</TableCell>
                     <TableCell>₹{policy.annual_premium_per_life.toLocaleString()}</TableCell>
@@ -232,6 +237,24 @@ const PoliciesPage = () => {
                   onChange={(e) => setFormData({ ...formData, policy_holder_name: e.target.value })}
                   required
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="policy_type">Product Type</Label>
+                <Select
+                  value={formData.policy_type}
+                  onValueChange={(value) => setFormData({ ...formData, policy_type: value })}
+                >
+                  <SelectTrigger data-testid="policy-type-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Group Health">Group Health</SelectItem>
+                    <SelectItem value="Group Accident">Group Accident</SelectItem>
+                    <SelectItem value="Group Term">Group Term</SelectItem>
+                    <SelectItem value="GPA">GPA</SelectItem>
+                    <SelectItem value="GTL">GTL</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

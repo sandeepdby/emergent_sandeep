@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -16,6 +17,8 @@ export default function CDLedger() {
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [policies, setPolicies] = useState([]);
+  const [selectedPolicy, setSelectedPolicy] = useState("all");
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     reference: "",
@@ -24,10 +27,26 @@ export default function CDLedger() {
     policy_number: "",
   });
 
+  const fetchPolicies = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${API}/policies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setPolicies(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
   const fetchLedger = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${API}/cd-ledger`, {
+      let url = `${API}/cd-ledger`;
+      if (selectedPolicy && selectedPolicy !== "all") {
+        url += `?policy_number=${encodeURIComponent(selectedPolicy)}`;
+      }
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setEntries(res.data.entries || []);
@@ -37,9 +56,10 @@ export default function CDLedger() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedPolicy]);
 
-  useEffect(() => { fetchLedger(); }, [fetchLedger]);
+  useEffect(() => { fetchPolicies(); }, [fetchPolicies]);
+  useEffect(() => { setLoading(true); fetchLedger(); }, [fetchLedger]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -84,15 +104,36 @@ export default function CDLedger() {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
   }
 
+  const totalDeposits = entries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0);
+  const totalDeductions = Math.abs(entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0));
+
   return (
     <div className="space-y-6" data-testid="cd-ledger-page">
+      {/* Policy Filter */}
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium whitespace-nowrap">Filter by Policy:</Label>
+          <Select value={selectedPolicy} onValueChange={setSelectedPolicy}>
+            <SelectTrigger className="w-[260px]" data-testid="cd-policy-filter">
+              <SelectValue placeholder="All Policies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Policies</SelectItem>
+              {policies.map((p) => (
+                <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       {/* Balance Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className={`border-l-4 ${totalBalance >= 0 ? 'border-l-emerald-500' : 'border-l-red-500'}`}>
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 font-medium">CD Balance</p>
+                <p className="text-sm text-gray-500 font-medium">CD Balance{selectedPolicy !== "all" ? ` (${selectedPolicy})` : ""}</p>
                 <p className={`text-2xl font-bold ${totalBalance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                   {totalBalance >= 0 ? '+' : ''}₹{totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </p>
@@ -107,7 +148,7 @@ export default function CDLedger() {
               <div>
                 <p className="text-sm text-gray-500 font-medium">Total Deposits</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  ₹{entries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{totalDeposits.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <TrendingUp className="w-10 h-10 text-blue-200" />
@@ -120,7 +161,7 @@ export default function CDLedger() {
               <div>
                 <p className="text-sm text-gray-500 font-medium">Total Deductions</p>
                 <p className="text-2xl font-bold text-amber-600">
-                  ₹{Math.abs(entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  ₹{totalDeductions.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </p>
               </div>
               <TrendingDown className="w-10 h-10 text-amber-200" />
@@ -145,7 +186,7 @@ export default function CDLedger() {
 
         {showForm && (
           <CardContent className="border-b bg-gray-50 pb-4">
-            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
               <div className="space-y-1">
                 <Label className="text-xs">Date *</Label>
                 <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} required data-testid="cd-date-input" />
@@ -157,6 +198,18 @@ export default function CDLedger() {
               <div className="space-y-1">
                 <Label className="text-xs">Description</Label>
                 <Input placeholder="Cash deposit" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} data-testid="cd-description-input" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Policy</Label>
+                <Select value={formData.policy_number || "none"} onValueChange={(v) => setFormData({ ...formData, policy_number: v === "none" ? "" : v })}>
+                  <SelectTrigger data-testid="cd-policy-select"><SelectValue placeholder="Select Policy" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No Policy</SelectItem>
+                    {policies.map((p) => (
+                      <SelectItem key={p.id} value={p.policy_number}>{p.policy_number}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Amount (₹) *</Label>
@@ -173,7 +226,7 @@ export default function CDLedger() {
           {entries.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <Wallet className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-              <p className="font-medium">No CD Ledger entries yet</p>
+              <p className="font-medium">No CD Ledger entries{selectedPolicy !== "all" ? ` for ${selectedPolicy}` : ""}</p>
               <p className="text-sm mt-1">Click "Add Deposit / Entry" to start tracking</p>
             </div>
           ) : (
@@ -184,6 +237,7 @@ export default function CDLedger() {
                     <TableHead>Date</TableHead>
                     <TableHead>Reference</TableHead>
                     <TableHead>Description</TableHead>
+                    <TableHead>Policy</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
@@ -196,6 +250,7 @@ export default function CDLedger() {
                       <TableCell className="whitespace-nowrap">{entry.date}</TableCell>
                       <TableCell className="font-mono text-sm">{entry.reference}</TableCell>
                       <TableCell className="max-w-[200px] truncate">{entry.description || "—"}</TableCell>
+                      <TableCell className="text-sm">{entry.policy_number || "—"}</TableCell>
                       <TableCell>
                         <Badge variant={entry.entry_type === "Manual" ? "secondary" : entry.entry_type === "Refund Credit" ? "default" : "destructive"} className="text-xs">
                           {entry.entry_type}

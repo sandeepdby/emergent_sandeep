@@ -71,21 +71,31 @@ export default function SubmitEndorsement() {
     return policies.find(p => p.policy_number === formData.policy_number);
   }, [policies, formData.policy_number]);
 
-  // Dynamic relationship options based on endorsement type
+  // Dynamic relationship options based on endorsement type AND policy type
   const relationshipOptions = useMemo(() => {
     const all = ["Employee", "Spouse", "Kids", "Mother", "Father"];
+    // GPA & GTL policies: only Employee allowed
+    if (selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL")) {
+      return ["Employee"];
+    }
     if (formData.endorsement_type === "Midterm addition") {
       return all.filter(r => r !== "Employee");
     }
     return all;
-  }, [formData.endorsement_type]);
+  }, [formData.endorsement_type, selectedPolicy]);
 
   // Reset relationship if it becomes invalid
   useEffect(() => {
     if (formData.endorsement_type === "Midterm addition" && formData.relationship_type === "Employee") {
       setFormData(prev => ({ ...prev, relationship_type: "" }));
     }
-  }, [formData.endorsement_type, formData.relationship_type]);
+    // GPA/GTL: auto-set to Employee
+    if (selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL")) {
+      if (formData.relationship_type !== "Employee") {
+        setFormData(prev => ({ ...prev, relationship_type: "Employee" }));
+      }
+    }
+  }, [formData.endorsement_type, formData.relationship_type, selectedPolicy]);
 
   const showDOJ = formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition";
   const showDOL = formData.endorsement_type === "Deletion";
@@ -269,6 +279,9 @@ export default function SubmitEndorsement() {
                 </Select>
                 {formData.endorsement_type === "Midterm addition" && (
                   <p className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Employee not allowed for Midterm Addition</p>
+                )}
+                {selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL") && (
+                  <p className="text-xs text-blue-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {selectedPolicy.policy_type} product: Employee only</p>
                 )}
               </div>
 
