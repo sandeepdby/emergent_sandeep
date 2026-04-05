@@ -1,8 +1,9 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, CloudUpload } from "lucide-react";
+import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard } from "lucide-react";
 import { AuthContext } from "../auth";
+import HRSummary from "./HRSummary";
 import SubmitEndorsement from "./SubmitEndorsement";
 import MyEndorsements from "./MyEndorsements";
 import ImportEndorsements from "./ImportEndorsements";
@@ -12,6 +13,7 @@ const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
   
   const navItems = [
+    { path: "/hr/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
     { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
     { path: "/hr/import", label: "Import Excel", icon: FileSpreadsheet },
@@ -34,7 +36,7 @@ const Navigation = ({ onLogout, user }) => {
                 <span className="text-xs text-gray-500">HR Portal</span>
               </div>
             </div>
-            <div className="ml-6 flex space-x-4">
+            <div className="ml-6 flex space-x-1 overflow-x-auto">
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname === item.path;
@@ -42,13 +44,13 @@ const Navigation = ({ onLogout, user }) => {
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t ${
+                    className={`inline-flex items-center px-3 py-2 border-b-2 text-sm font-medium rounded-t whitespace-nowrap ${
                       isActive
                         ? "border-blue-500 text-blue-600 bg-blue-50"
                         : "border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50"
                     }`}
                   >
-                    <Icon className="w-4 h-4 mr-2" />
+                    <Icon className="w-4 h-4 mr-1.5" />
                     {item.label}
                   </Link>
                 );
@@ -82,11 +84,12 @@ class HRDashboard extends React.Component {
         <Navigation onLogout={logout} user={user} />
         <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
+            <Route path="/dashboard" element={<HRSummary />} />
             <Route path="/submit" element={<SubmitEndorsement />} />
             <Route path="/my-endorsements" element={<MyEndorsements />} />
             <Route path="/import" element={<ImportEndorsements />} />
             <Route path="/storage" element={<CloudStorage />} />
-            <Route path="/" element={<Navigate to="/hr/submit" />} />
+            <Route path="/" element={<Navigate to="/hr/dashboard" />} />
           </Routes>
         </div>
       </div>
