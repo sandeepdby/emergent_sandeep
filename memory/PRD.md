@@ -9,13 +9,14 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - JWT-based authentication with "HR" and "Admin" roles
 - Registration and login functionality
 - Role-based access control
-- Phone number field for users
+- Phone number field for users (for WhatsApp notifications)
 
 ### HR Portal
 - Submit individual endorsements with all member details
 - Import endorsements in bulk via Excel file upload
 - View and manage submitted endorsements
 - Download Excel template for bulk imports
+- **WhatsApp notification dialog** after submission to notify Admins
 
 ### Admin Portal  
 - Review pending endorsements
@@ -23,13 +24,22 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - Manage policies (CRUD operations)
 - Download approved endorsements as Excel report
 - Email Settings for Gmail SMTP configuration
+- **WhatsApp notification dialog** after approval/rejection to notify HR
 
 ### Email Notifications (SMTP - Gmail App Password)
 - **SMTP Configured**: connect@aarogya-assist.com
 - **Welcome Email**: Sent to new users upon registration
 - **Notification Email**: Sent to all existing HR/Admin users when new user registers
+- **Endorsement Submission Email**: Sent to all Admins when HR submits new endorsement
+- **Approval/Rejection Email**: Sent to HR who submitted when Admin approves/rejects
 - **Custom Email**: Admin can send emails with Excel/PDF attachments
-- **Bulk Approval Notification**: Email sent when endorsements are approved/rejected
+
+### WhatsApp Web Notifications
+- **WhatsApp Web Links**: Using wa.me format (click-to-open)
+- **HR Submission**: After submitting endorsement, HR sees dialog with WhatsApp links to notify all Admin users
+- **Admin Approval/Rejection**: After processing, Admin sees dialog with WhatsApp link to notify the HR who submitted
+- **Pre-filled Messages**: Links include formatted message with endorsement details
+- **Dual Notification**: Email sent automatically + WhatsApp link for manual sending
 
 ### Excel Import/Export
 - **Import Template (19 columns)**:
@@ -62,6 +72,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - Async motor driver for MongoDB operations
 - Pandas/openpyxl for Excel processing
 - smtplib for email sending via Gmail SMTP
+- Background tasks for async email notifications
 
 ### Frontend (React)
 - `/app/frontend/src/` - React application
@@ -69,6 +80,7 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - Role-based routing and dashboards
 - Axios for API calls
 - Sonner for toast notifications
+- WhatsApp Web link generation (wa.me format)
 
 ### Database Collections
 - **users**: username, password_hash, role, full_name, email, phone
@@ -82,6 +94,11 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - `POST /api/auth/login` - Login and get JWT token
 - `GET /api/auth/me` - Get current user info
 
+### User Notifications
+- `GET /api/users/admins` - Get all admin users for notifications
+- `GET /api/users/hr` - Get all HR users (Admin only)
+- `GET /api/users/{user_id}/contact` - Get user contact info
+
 ### Policies (Admin only)
 - `GET /api/policies` - List all policies
 - `POST /api/policies` - Create policy
@@ -90,10 +107,10 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 
 ### Endorsements
 - `GET /api/endorsements` - List endorsements (filtered by role)
-- `POST /api/endorsements` - Create endorsement
+- `POST /api/endorsements` - Create endorsement (sends email to Admins)
 - `PUT /api/endorsements/{id}` - Update endorsement
 - `DELETE /api/endorsements/{id}` - Delete endorsement
-- `POST /api/endorsements/{id}/approve` - Approve/reject (Admin only)
+- `POST /api/endorsements/{id}/approve` - Approve/reject (sends email to HR)
 - `POST /api/endorsements/import` - Import from Excel
 - `GET /api/endorsements/download/approved` - Download approved as Excel
 - `GET /api/endorsements/template/download` - Download import template
@@ -105,13 +122,22 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 
 ## Completed Features (April 2026)
 
-### Session - SMTP Email Setup
+### Session 1 - SMTP Email Setup
 - [x] Configured Gmail SMTP with App Password (connect@aarogya-assist.com)
 - [x] Added phone number field to user model and registration form
 - [x] Welcome email sent to new users upon registration
 - [x] Notification email sent to all HR/Admin users when new user registers
 - [x] Email settings page shows "Email configured" status
 - [x] Custom email sending with Excel/PDF attachments working
+
+### Session 2 - WhatsApp Web Notifications
+- [x] WhatsApp Web link generation (wa.me format)
+- [x] HR submission triggers email to all Admins + WhatsApp dialog
+- [x] Admin approval/rejection triggers email to HR + WhatsApp dialog
+- [x] Pre-filled WhatsApp messages with endorsement details
+- [x] Added /api/users/admins endpoint for HR to get admin contacts
+- [x] Added /api/users/{id}/contact endpoint for Admin to get HR contact
+- [x] Notification dialogs show email sent confirmation + WhatsApp buttons
 
 ## Test Credentials
 - **Admin User**: admin / admin123
@@ -128,3 +154,5 @@ InsureHub is a comprehensive endorsement management portal for insurance compani
 - [ ] Audit log for all user actions
 - [ ] Multi-policy comparison view
 - [ ] Export templates for different insurers
+- [ ] Push notifications for mobile
+- [ ] WhatsApp Business API integration for automated messages
