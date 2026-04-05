@@ -11,7 +11,16 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Loader2, CheckCircle, XCircle, CheckSquare } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, CheckSquare, MessageCircle, Mail, Phone } from "lucide-react";
+
+// WhatsApp Web link generator
+const generateWhatsAppLink = (phone, message) => {
+  if (!phone) return null;
+  // Clean phone number - remove spaces, dashes, etc.
+  const cleanPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^\+/, '');
+  const encodedMessage = encodeURIComponent(message);
+  return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
+};
 
 export default function ApproveEndorsements() {
   const [endorsements, setEndorsements] = useState([]);
@@ -27,6 +36,10 @@ export default function ApproveEndorsements() {
   const [bulkDialog, setBulkDialog] = useState(false);
   const [bulkAction, setBulkAction] = useState("Approved");
   const [bulkRemarks, setBulkRemarks] = useState("");
+  
+  // Notification dialog state
+  const [notificationDialog, setNotificationDialog] = useState(false);
+  const [notificationData, setNotificationData] = useState(null);
 
   const fetchPendingEndorsements = useCallback(async () => {
     try {
@@ -60,13 +73,44 @@ export default function ApproveEndorsements() {
     try {
       setProcessing(true);
       const token = localStorage.getItem('token');
+      
+      // Get submitter info for notifications
+      let submitterInfo = null;
+      if (selectedEndorsement.submitted_by) {
+        try {
+          const userResponse = await axios.get(
+            `${API}/users/${selectedEndorsement.submitted_by}/contact`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          submitterInfo = userResponse.data;
+        } catch (e) {
+          console.log("Could not fetch submitter info");
+        }
+      }
+      
       await axios.post(
         `${API}/endorsements/${selectedEndorsement.id}/approve`,
         { status: approvalAction, remarks },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      
       toast.success(`Endorsement ${approvalAction.toLowerCase()} successfully`);
       setApprovalDialog(false);
+      
+      // Show notification dialog with WhatsApp option
+      if (submitterInfo) {
+        const message = `*InsureHub Notification*\n\nYour endorsement has been *${approvalAction}*.\n\n*Member:* ${selectedEndorsement.member_name}\n*Policy:* ${selectedEndorsement.policy_number}\n*Type:* ${selectedEndorsement.endorsement_type}\n*Premium:* ₹${Math.abs(selectedEndorsement.prorata_premium).toLocaleString()}${selectedEndorsement.prorata_premium < 0 ? ' (Refund)' : ''}\n${remarks ? `*Remarks:* ${remarks}` : ''}\n\nPlease log in to InsureHub portal for details.`;
+        
+        setNotificationData({
+          user: submitterInfo,
+          action: approvalAction,
+          endorsement: selectedEndorsement,
+          message: message,
+          whatsappLink: generateWhatsAppLink(submitterInfo.phone, message)
+        });
+        setNotificationDialog(true);
+      }
+      
       fetchPendingEndorsements();
     } catch (error) {
       console.error("Error processing endorsement:", error);
@@ -352,6 +396,77 @@ export default function ApproveEndorsements() {
               {bulkAction === "Approved" ? "Approve" : "Reject"} {selectedIds.length} Endorsement(s)
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* WhatsApp Notification Dialog */}
+      <Dialog open={notificationDialog} onOpenChange={setNotificationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-green-500" />
+              Notify HR via WhatsApp
+            </DialogTitle>
+            <DialogDescription>
+              {notificationData && (
+                <>
+                  Endorsement has been {notificationData.action.toLowerCase()}. 
+                  Email notification sent automatically.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {notificationData && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">HR:</span> 
+                  <span>{notificationData.user.full_name}</span>
+                </div>
+                {notificationData.user.email && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Mail className="w-4 h-4" />
+                    <span>{notificationData.user.email}</span>
+                    <Badge variant="outline" className="text-green-600 border-green-600">Email Sent</Badge>
+                  </div>
+                )}
+                {notificationData.user.phone && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Phone className="w-4 h-4" />
+                    <span>{notificationData.user.phone}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {notificationData.whatsappLink ? (
+                  <a
+                    href={notificationData.whatsappLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 w-full bg-green-500 hover:bg-green-600 text-white py-3 px-4 rounded-lg font-medium transition-colors"
+                    data-testid="whatsapp-notify-btn"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Send WhatsApp Message
+                  </a>
+                ) : (
+                  <div className="text-center text-gray-500 py-3">
+                    No phone number registered for this user
+                  </div>
+                )}
+                
+                <Button 
+                  variant="outline" 
+                  onClick={() => setNotificationDialog(false)}
+                  className="w-full"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

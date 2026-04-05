@@ -763,11 +763,48 @@ async def delete_policy(policy_id: str, current_user: User = Depends(get_current
     return {"message": "Policy deleted successfully"}
 
 
+# ==================== USER NOTIFICATION ENDPOINTS ====================
+
+@api_router.get("/users/admins")
+async def get_admin_users(current_user: User = Depends(get_current_user)):
+    """Get all admin users for notifications (phone and email)"""
+    admins = await db.users.find(
+        {"role": "Admin"},
+        {"_id": 0, "id": 1, "full_name": 1, "email": 1, "phone": 1}
+    ).to_list(100)
+    return admins
+
+
+@api_router.get("/users/hr")
+async def get_hr_users(current_user: User = Depends(get_current_user)):
+    """Get all HR users for notifications (phone and email)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view HR users")
+    
+    hr_users = await db.users.find(
+        {"role": "HR"},
+        {"_id": 0, "id": 1, "full_name": 1, "email": 1, "phone": 1}
+    ).to_list(100)
+    return hr_users
+
+
+@api_router.get("/users/{user_id}/contact")
+async def get_user_contact(user_id: str, current_user: User = Depends(get_current_user)):
+    """Get a specific user's contact info for notifications"""
+    user = await db.users.find_one(
+        {"id": user_id},
+        {"_id": 0, "id": 1, "full_name": 1, "email": 1, "phone": 1, "role": 1}
+    )
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
 # ==================== ENDORSEMENT ENDPOINTS ====================
 
 @api_router.post("/endorsements", response_model=Endorsement)
-async def create_endorsement(endorsement_data: EndorsementCreate, current_user: User = Depends(get_current_user)):
-    """Create a new endorsement (HR can submit, goes to Pending status)"""
+async def create_endorsement(endorsement_data: EndorsementCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
+    """Create a new endorsement (HR can submit, goes to Pending status) and notify Admins"""
     policy = await db.policies.find_one({"policy_number": endorsement_data.policy_number}, {"_id": 0})
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {endorsement_data.policy_number} not found")
@@ -810,6 +847,44 @@ async def create_endorsement(endorsement_data: EndorsementCreate, current_user: 
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.endorsements.insert_one(doc)
+    
+    # Send email notification to all Admins about new endorsement submission
+    if SMTP_USERNAME:
+        admin_users = await db.users.find(
+            {"role": "Admin"},
+            {"_id": 0, "email": 1, "phone": 1, "full_name": 1}
+        ).to_list(100)
+        
+        admin_emails = [u['email'] for u in admin_users if u.get('email')]
+        
+        if admin_emails:
+            notify_subject = f"New Endorsement Submitted - {endorsement_data.member_name}"
+            notify_body = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">InsureHub</h1>
+                    <p style="color: #fef3c7; margin: 10px 0 0;">New Endorsement Pending Approval</p>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <h2 style="color: #f59e0b;">New Endorsement Submitted</h2>
+                    <p style="color: #475569;">A new endorsement has been submitted and requires your approval.</p>
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                        <p style="margin: 5px 0;"><strong>Submitted By:</strong> {current_user.full_name}</p>
+                        <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement_data.policy_number}</p>
+                        <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement_data.member_name}</p>
+                        <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement_data.endorsement_type.value}</p>
+                        <p style="margin: 5px 0;"><strong>Relationship:</strong> {endorsement_data.relationship_type.value}</p>
+                        <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{prorata_premium:,.2f}</p>
+                        <p style="margin: 5px 0;"><strong>Submitted At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                    </div>
+                    <p style="color: #475569;">Please log in to the Admin portal to review and approve/reject this endorsement.</p>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                        This is an automated notification from InsureHub by Aarogya-Assist.
+                    </p>
+                </div>
+            </div>
+            """
+            background_tasks.add_task(send_email_notification, admin_emails, notify_subject, notify_body)
     
     return endorsement
 
@@ -924,10 +999,11 @@ async def delete_endorsement(endorsement_id: str, current_user: User = Depends(g
 @api_router.post("/endorsements/{endorsement_id}/approve", response_model=Endorsement)
 async def approve_reject_endorsement(
     endorsement_id: str, 
-    approval: EndorsementApproval, 
+    approval: EndorsementApproval,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
-    """Approve or reject an endorsement (Admin only)"""
+    """Approve or reject an endorsement (Admin only) and notify HR who submitted"""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Only admins can approve/reject endorsements")
     
@@ -961,6 +1037,47 @@ async def approve_reject_endorsement(
                 {"id": endorsement['policy_id']},
                 {"$inc": {"total_lives_covered": -1}}
             )
+    
+    # Send email notification to HR who submitted the endorsement
+    if SMTP_USERNAME and endorsement.get('submitted_by'):
+        submitter = await db.users.find_one(
+            {"id": endorsement['submitted_by']},
+            {"_id": 0, "email": 1, "phone": 1, "full_name": 1}
+        )
+        
+        if submitter and submitter.get('email'):
+            status_color = "#059669" if approval.status == EndorsementStatus.APPROVED else "#dc2626"
+            status_text = "Approved" if approval.status == EndorsementStatus.APPROVED else "Rejected"
+            
+            notify_subject = f"Endorsement {status_text} - {endorsement['member_name']}"
+            notify_body = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, {status_color} 0%, {status_color}cc 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">InsureHub</h1>
+                    <p style="color: #ffffffcc; margin: 10px 0 0;">Endorsement {status_text}</p>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <h2 style="color: {status_color};">Your Endorsement Has Been {status_text}</h2>
+                    <p style="color: #475569;">Dear {submitter['full_name']},</p>
+                    <p style="color: #475569;">Your endorsement submission has been <strong>{status_text.lower()}</strong> by {current_user.full_name}.</p>
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid {status_color};">
+                        <p style="margin: 5px 0;"><strong>Policy Number:</strong> {endorsement['policy_number']}</p>
+                        <p style="margin: 5px 0;"><strong>Member Name:</strong> {endorsement['member_name']}</p>
+                        <p style="margin: 5px 0;"><strong>Endorsement Type:</strong> {endorsement['endorsement_type']}</p>
+                        <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: {status_color}; font-weight: bold;">{status_text}</span></p>
+                        <p style="margin: 5px 0;"><strong>Pro-rata Premium:</strong> ₹{endorsement['prorata_premium']:,.2f}</p>
+                        {f'<p style="margin: 5px 0;"><strong>Remarks:</strong> {approval.remarks}</p>' if approval.remarks else ''}
+                        <p style="margin: 5px 0;"><strong>Processed By:</strong> {current_user.full_name}</p>
+                        <p style="margin: 5px 0;"><strong>Processed At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
+                    </div>
+                    <p style="color: #475569;">Please log in to the HR portal to view the details.</p>
+                    <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
+                        This is an automated notification from InsureHub by Aarogya-Assist.
+                    </p>
+                </div>
+            </div>
+            """
+            background_tasks.add_task(send_email_notification, [submitter['email']], notify_subject, notify_body)
     
     updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if isinstance(updated_endorsement['created_at'], str):
