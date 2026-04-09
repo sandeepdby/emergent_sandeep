@@ -65,5 +65,8 @@ chainlit.md
 
 # Build caches
 .cache/
+
+# Legacy nested project
+emergent_sandeep-main/
 frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/13.pack
