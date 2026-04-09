@@ -85,6 +85,14 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Promote HR to Admin: PUT /api/users/{id}/promote (Admin only, ArrowUp button in UI)
 - [x] Endorsement submission sends email with Excel attachment to ks@aarogya-assist.com, connect@aarogya-assist.com + all Admin users
 
+### Session 12 - Password Toggle, Policy & Claims Dashboards (April 2026)
+- [x] Password visibility toggle (eye icon) on login and registration forms
+- [x] HR Policies Dashboard tab (/hr/policies) with summary cards, pie chart (status), bar chart (by type), and policy table
+- [x] HR Claims Dashboard tab (/hr/claims) with summary cards, 3 charts (status, type, monthly trend), policy type filter, and claims table
+- [x] Admin Claims Management tab (/admin/claims) with full CRUD (create, read, update, delete)
+- [x] Backend: Claims model, CRUD endpoints (POST/GET/PUT/DELETE /api/claims), analytics endpoint (/api/claims-analytics), policies analytics endpoint (/api/policies-analytics)
+- [x] Policy type filter support (GMC, GTL, GPA) on claims dashboard
+
 ## API Endpoints
 
 ### Auth
@@ -117,6 +125,15 @@ Build a comprehensive health insurance endorsement management system with:
 - POST /api/cd-ledger - Add manual entry (Admin only)
 - DELETE /api/cd-ledger/{id} - Delete manual entry (Admin only)
 
+### Claims
+- POST /api/claims - Create claim (Admin only)
+- GET /api/claims - List claims (with optional filters: policy_number, status, policy_type)
+- GET /api/claims/{id} - Get specific claim
+- PUT /api/claims/{id} - Update claim (Admin only)
+- DELETE /api/claims/{id} - Delete claim (Admin only)
+- GET /api/claims-analytics - Claims analytics dashboard data
+- GET /api/policies-analytics - Policy analytics dashboard data
+
 ### Documents
 - POST /api/documents/upload?category=...
 - GET /api/documents
@@ -133,6 +150,7 @@ Build a comprehensive health insurance endorsement management system with:
 - `policies`: id, policy_number, inception_date, expiry_date, annual_premium_per_life, ...
 - `cd_ledger`: id, date, reference, description, amount, entry_type, endorsement_id, ...
 - `documents`: id, storage_path, original_filename, category, uploaded_by, is_deleted, ...
+- `claims`: id, claim_number, policy_number, employee_name, patient_name, relationship, claim_type, diagnosis, hospital_name, admission_date, discharge_date, claimed_amount, approved_amount, settled_amount, status, policy_type, created_by, ...
 
 ## Future/Backlog Tasks
 - P1: SMS notifications via Twilio
