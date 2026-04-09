@@ -1,29 +1,9 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# IDE and editors
-.idea/
-.vscode/
-
 # Dependencies
 node_modules/
 /node_modules
-/.pnp
-.pnp.js
-.yarn/install-state.gz
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # Testing
 /coverage
-
-# Next.js
-/.next/
-/out/
-next-env.d.ts
-*.tsbuildinfo
 
 # Production builds
 /build
@@ -33,7 +13,7 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+*.pnpm-debug.log*
 dump.rdb
 
 # System files
@@ -45,16 +25,13 @@ __pycache__/
 *.pyc
 venv/
 .venv/
+.pytest_cache/
 
-# Development tools
-chainlit.md
-.chainlit
-.ipynb_checkpoints/
+# IDE
+.idea/
+.vscode/
 
-# Deployment
-.vercel
-
-# Archive files and large assets
+# Large/unnecessary files
 **/*.zip
 **/*.tar.gz
 **/*.tar
@@ -63,10 +40,20 @@ chainlit.md
 *.deb
 *.dylib
 
-# Build caches
-.cache/
-
 # Legacy nested project
 emergent_sandeep-main/
+
+# Test artifacts (not needed for deployment)
+test_reports/
+test_result.md
+whatsapp_test.py
+backend_test.py
+design_guidelines.json
+
+# Root yarn.lock (frontend has its own)
+/yarn.lock
+
+# Build caches
+.cache/
 frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/13.pack
