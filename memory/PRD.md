@@ -80,6 +80,11 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] My Endorsements table now shows DOB, Gender, Sum Insured columns
 - [x] View dialog shows all 17 fields (including DOJ, DOL, annual premium, prorata)
 
+### Session 11 - Master Admin, Promote & Email Notifications (April 2026)
+- [x] Master Admin seeded on startup: masteradmin / Admin@123 (email: sandeepdby@gmail.com, phone: 9886260579)
+- [x] Promote HR to Admin: PUT /api/users/{id}/promote (Admin only, ArrowUp button in UI)
+- [x] Endorsement submission sends email with Excel attachment to ks@aarogya-assist.com, connect@aarogya-assist.com + all Admin users
+
 ## API Endpoints
 
 ### Auth
