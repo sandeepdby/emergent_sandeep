@@ -123,6 +123,14 @@ class EndorsementType(str, Enum):
 
 
 class PolicyType(str, Enum):
+    GROUP_HEALTH = "Group Health"
+    GROUP_ACCIDENT = "Group Accident"
+    GROUP_TERM = "Group Term"
+    GPA = "GPA"
+    GTL = "GTL"
+
+
+class FamilyDefinition(str, Enum):
     ESKP = "ESKP"
     ESK = "ESK"
     E = "E"
@@ -185,7 +193,8 @@ class PolicyCreate(BaseModel):
     policy_date: Optional[str] = None
     inception_date: Optional[str] = None
     expiry_date: Optional[str] = None
-    policy_type: str = "ESKP"
+    policy_type: str = "Group Health"
+    family_definition: Optional[str] = None
     premium: float = 0
     employees_count: int = 0
     spouse_count: int = 0
@@ -205,7 +214,8 @@ class Policy(BaseModel):
     policy_date: Optional[str] = None
     inception_date: Optional[str] = None
     expiry_date: Optional[str] = None
-    policy_type: str = "ESKP"
+    policy_type: str = "Group Health"
+    family_definition: Optional[str] = None
     premium: float = 0
     employees_count: int = 0
     spouse_count: int = 0
@@ -830,6 +840,23 @@ def generate_pdf_report(endorsements: List[dict], policies: dict, report_type: s
     return buffer.getvalue()
 
 
+# ==================== Audit Log Helper ====================
+async def log_audit(user_id: str, username: str, role: str, action: str, resource: str, resource_id: str = None, details: str = None):
+    """Log a user action to the audit_log collection"""
+    entry = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "username": username,
+        "role": role,
+        "action": action,
+        "resource": resource,
+        "resource_id": resource_id,
+        "details": details,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.audit_log.insert_one(entry)
+
+
 # API Endpoints
 
 @api_router.get("/")
@@ -867,6 +894,8 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.users.insert_one(doc)
+    
+    await log_audit(user.id, user.username, user.role.value, "REGISTER", "user", user.id, f"New {user.role.value} user registered: {user.full_name}")
     
     # Send notification email to the newly registered user
     if user_data.email and SMTP_USERNAME:
@@ -947,6 +976,8 @@ async def login(credentials: UserLogin):
     
     token = create_access_token({"user_id": user['id'], "role": user['role']})
     
+    await log_audit(user['id'], user['username'], user['role'], "LOGIN", "auth", details="User logged in")
+    
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -989,6 +1020,7 @@ async def create_policy(policy_data: PolicyCreate, current_user: User = Depends(
     
     await db.policies.insert_one(doc)
     result = await db.policies.find_one({"id": policy.id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "policy", policy.id, f"Created policy {policy_data.policy_number}")
     return result
 
 
@@ -1025,6 +1057,7 @@ async def update_policy(policy_id: str, policy_data: PolicyCreate, current_user:
     await db.policies.update_one({"id": policy_id}, {"$set": update_data})
     
     updated_policy = await db.policies.find_one({"id": policy_id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "policy", policy_id, f"Updated policy {policy_data.policy_number}")
     return updated_policy
 
 
@@ -1038,6 +1071,7 @@ async def delete_policy(policy_id: str, current_user: User = Depends(get_current
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Policy not found")
     
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "policy", policy_id, "Deleted policy")
     return {"message": "Policy deleted successfully"}
 
 
@@ -1104,6 +1138,7 @@ async def admin_create_user(user_data: UserCreate, current_user: User = Depends(
     user_dict['created_at'] = datetime.now(timezone.utc).isoformat()
     await db.users.insert_one(user_dict)
     
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE_USER", "user", user.id, f"Created {user.role.value} user: {user.username}")
     return {"id": user.id, "username": user.username, "role": user.role.value, "message": f"{user.role.value} user created successfully"}
 
 
@@ -1118,6 +1153,7 @@ async def admin_delete_user(user_id: str, current_user: User = Depends(get_curre
     result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE_USER", "user", user_id, "Deleted user")
     return {"message": "User deleted"}
 
 
@@ -1135,6 +1171,7 @@ async def promote_user_to_admin(user_id: str, current_user: User = Depends(get_c
         raise HTTPException(status_code=400, detail="User is already an Admin")
     
     await db.users.update_one({"id": user_id}, {"$set": {"role": "Admin"}})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "PROMOTE", "user", user_id, f"Promoted '{target.get('username')}' to Admin")
     return {"message": f"User '{target.get('username')}' promoted to Admin"}
 
 
@@ -1333,6 +1370,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                 """
             background_tasks.add_task(send_email_notification, all_notify_emails, notify_subject, notify_body, None, None, None, excel_attachment)
     
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "endorsement", endorsement.id, f"Created endorsement for {endorsement_data.member_name} on {endorsement_data.policy_number}")
     return endorsement
 
 
@@ -1640,6 +1678,7 @@ async def delete_endorsement(endorsement_id: str, current_user: User = Depends(g
     
     result = await db.endorsements.delete_one({"id": endorsement_id})
     
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "endorsement", endorsement_id, "Deleted endorsement")
     return {"message": "Endorsement deleted successfully"}
 
 
@@ -1765,6 +1804,7 @@ async def approve_reject_endorsement(
     if isinstance(updated_endorsement['created_at'], str):
         updated_endorsement['created_at'] = datetime.fromisoformat(updated_endorsement['created_at'])
     
+    await log_audit(current_user.id, current_user.username, current_user.role.value, approval.status.value.upper(), "endorsement", endorsement_id, f"{approval.status.value} endorsement for {endorsement.get('member_name')}")
     return updated_endorsement
 
 
@@ -2740,6 +2780,7 @@ async def delete_cd_ledger_entry(entry_id: str, current_user: User = Depends(get
         raise HTTPException(status_code=400, detail="Only manual entries can be deleted")
     
     await db.cd_ledger.delete_one({"id": entry_id})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "cd_ledger", entry_id, "Deleted CD ledger entry")
     return {"message": "Entry deleted"}
 
 
@@ -2814,6 +2855,7 @@ async def create_claim(claim_data: ClaimCreate, current_user: User = Depends(get
     doc['created_at'] = datetime.now(timezone.utc).isoformat()
     await db.claims.insert_one(doc)
     result = await db.claims.find_one({"id": claim.id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "claim", claim.id, f"Created claim for {claim_data.employee_name}")
     return result
 
 
@@ -2857,6 +2899,7 @@ async def update_claim(claim_id: str, claim_data: ClaimCreate, current_user: Use
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.claims.update_one({"id": claim_id}, {"$set": update_data})
     updated = await db.claims.find_one({"id": claim_id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "claim", claim_id, f"Updated claim for {claim_data.employee_name}")
     return updated
 
 
@@ -2868,6 +2911,7 @@ async def delete_claim(claim_id: str, current_user: User = Depends(get_current_u
     result = await db.claims.delete_one({"id": claim_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Claim not found")
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "claim", claim_id, "Deleted claim")
     return {"message": "Claim deleted"}
 
 
@@ -2999,6 +3043,7 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
             "policy_holder_name": p.get("policy_holder_name"),
             "policy_date": p.get("policy_date") or p.get("inception_date"),
             "policy_type": p.get("policy_type"),
+            "family_definition": p.get("family_definition"),
             "status": p.get("status"),
             "premium": p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)),
             "employees_count": p.get("employees_count", 0),
@@ -3009,6 +3054,41 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
             "addition_lives": p.get("addition_lives", 0),
             "deletion_lives": p.get("deletion_lives", 0),
         } for p in policies],
+    }
+
+
+# ==================== Audit Log Endpoints ====================
+
+@api_router.get("/audit-log")
+async def get_audit_log(
+    page: int = 1,
+    limit: int = 50,
+    action: Optional[str] = None,
+    resource: Optional[str] = None,
+    username: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get audit log entries (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view audit logs")
+    
+    query = {}
+    if action:
+        query["action"] = action
+    if resource:
+        query["resource"] = resource
+    if username:
+        query["username"] = {"$regex": username, "$options": "i"}
+    
+    skip = (page - 1) * limit
+    total = await db.audit_log.count_documents(query)
+    entries = await db.audit_log.find(query, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "entries": entries,
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
     }
 
 
@@ -3154,6 +3234,7 @@ async def delete_document(
         raise HTTPException(status_code=403, detail="Not authorized to delete this document")
     
     await db.documents.update_one({"id": doc_id}, {"$set": {"is_deleted": True}})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "document", doc_id, "Deleted document")
     return {"message": "Document deleted successfully"}
 
 

@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck } from "lucide-react";
+import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText } from "lucide-react";
 import { AuthContext } from "../auth";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
@@ -14,6 +14,7 @@ import CDLedger from "./CDLedger";
 import ImportBatches from "./ImportBatches";
 import UserManagement from "./UserManagement";
 import ClaimsManagement from "./ClaimsManagement";
+import AuditLog from "./AuditLog";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
@@ -29,6 +30,7 @@ const Navigation = ({ onLogout, user }) => {
     { path: "/admin/download", label: "Download", icon: Download },
     { path: "/admin/storage", label: "Storage", icon: CloudUpload },
     { path: "/admin/users", label: "Users", icon: Users },
+    { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
     { path: "/admin/email", label: "Email", icon: Mail },
   ];
 
@@ -107,6 +109,7 @@ class AdminDashboard extends React.Component {
             <Route path="/email" element={<EmailSettings />} />
             <Route path="/storage" element={<CloudStorage />} />
             <Route path="/users" element={<UserManagement />} />
+            <Route path="/audit-log" element={<AuditLog />} />
             <Route path="/" element={<Navigate to="/admin/analytics" />} />
           </Routes>
         </div>

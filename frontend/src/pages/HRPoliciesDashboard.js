@@ -233,6 +233,7 @@ export default function HRPoliciesDashboard() {
                     <TableHead className="text-xs">Holder</TableHead>
                     <TableHead className="text-xs">Date</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs">Family</TableHead>
                     <TableHead className="text-xs text-right">Premium</TableHead>
                     <TableHead className="text-xs text-right">Emp</TableHead>
                     <TableHead className="text-xs text-right">Spouse</TableHead>
@@ -251,6 +252,7 @@ export default function HRPoliciesDashboard() {
                       <TableCell className="text-xs">{p.policy_holder_name}</TableCell>
                       <TableCell className="text-xs">{p.policy_date || "-"}</TableCell>
                       <TableCell className="text-xs"><Badge variant="secondary" className="text-xs">{p.policy_type}</Badge></TableCell>
+                      <TableCell className="text-xs"><Badge variant="outline" className="text-xs">{p.family_definition || "-"}</Badge></TableCell>
                       <TableCell className="text-xs text-right font-medium">{(p.premium || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</TableCell>
                       <TableCell className="text-xs text-right">{p.employees_count || 0}</TableCell>
                       <TableCell className="text-xs text-right">{p.spouse_count || 0}</TableCell>

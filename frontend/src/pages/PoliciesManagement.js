@@ -21,7 +21,8 @@ const PoliciesPage = () => {
     policy_number: "",
     policy_holder_name: "",
     policy_date: "",
-    policy_type: "ESKP",
+    policy_type: "Group Health",
+    family_definition: "ESKP",
     premium: "",
     employees_count: "",
     spouse_count: "",
@@ -65,6 +66,7 @@ const PoliciesPage = () => {
         policy_holder_name: formData.policy_holder_name,
         policy_date: formData.policy_date,
         policy_type: formData.policy_type,
+        family_definition: formData.family_definition || null,
         premium: parseFloat(formData.premium) || 0,
         employees_count: parseInt(formData.employees_count) || 0,
         spouse_count: parseInt(formData.spouse_count) || 0,
@@ -102,7 +104,8 @@ const PoliciesPage = () => {
       policy_number: policy.policy_number || "",
       policy_holder_name: policy.policy_holder_name || "",
       policy_date: policy.policy_date || policy.inception_date || "",
-      policy_type: policy.policy_type || "ESKP",
+      policy_type: policy.policy_type || "Group Health",
+      family_definition: policy.family_definition || "ESKP",
       premium: (policy.premium || 0).toString(),
       employees_count: (policy.employees_count || 0).toString(),
       spouse_count: (policy.spouse_count || 0).toString(),
@@ -131,7 +134,8 @@ const PoliciesPage = () => {
 
   const resetForm = () => {
     setFormData({
-      policy_number: "", policy_holder_name: "", policy_date: "", policy_type: "ESKP",
+      policy_number: "", policy_holder_name: "", policy_date: "", policy_type: "Group Health",
+      family_definition: "ESKP",
       premium: "", employees_count: "", spouse_count: "", kids_count: "", parents_count: "",
       addition_lives: "", deletion_lives: "", status: "Active",
     });
@@ -176,6 +180,7 @@ const PoliciesPage = () => {
                     <TableHead className="text-xs">Holder</TableHead>
                     <TableHead className="text-xs">Date</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs">Family Def.</TableHead>
                     <TableHead className="text-xs text-right">Premium</TableHead>
                     <TableHead className="text-xs text-right">Emp</TableHead>
                     <TableHead className="text-xs text-right">Spouse</TableHead>
@@ -195,6 +200,7 @@ const PoliciesPage = () => {
                       <TableCell className="text-xs">{policy.policy_holder_name}</TableCell>
                       <TableCell className="text-xs">{policy.policy_date || policy.inception_date || "-"}</TableCell>
                       <TableCell className="text-xs"><Badge variant="outline">{policy.policy_type || "-"}</Badge></TableCell>
+                      <TableCell className="text-xs"><Badge variant="secondary">{policy.family_definition || "-"}</Badge></TableCell>
                       <TableCell className="text-xs text-right font-medium">{(policy.premium || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</TableCell>
                       <TableCell className="text-xs text-right">{policy.employees_count || 0}</TableCell>
                       <TableCell className="text-xs text-right">{policy.spouse_count || 0}</TableCell>
@@ -257,17 +263,30 @@ const PoliciesPage = () => {
                   <Select value={formData.policy_type} onValueChange={(v) => setFormData({ ...formData, policy_type: v })}>
                     <SelectTrigger data-testid="policy-type-select"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ESKP">ESKP</SelectItem>
-                      <SelectItem value="ESK">ESK</SelectItem>
-                      <SelectItem value="E">E</SelectItem>
+                      <SelectItem value="Group Health">Group Health (GMC)</SelectItem>
+                      <SelectItem value="GTL">Group Term (GTL)</SelectItem>
+                      <SelectItem value="GPA">Group Accident (GPA)</SelectItem>
+                      <SelectItem value="Group Accident">Group Accident</SelectItem>
+                      <SelectItem value="Group Term">Group Term</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Premium (Total)</Label>
-                  <Input type="number" step="0.01" data-testid="premium-input" value={formData.premium}
-                    onChange={(e) => setFormData({ ...formData, premium: e.target.value })} />
+                  <Label>Family Definition</Label>
+                  <Select value={formData.family_definition} onValueChange={(v) => setFormData({ ...formData, family_definition: v })}>
+                    <SelectTrigger data-testid="family-definition-select"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ESKP">ESKP (Emp+Spouse+Kids+Parents)</SelectItem>
+                      <SelectItem value="ESK">ESK (Emp+Spouse+Kids)</SelectItem>
+                      <SelectItem value="E">E (Employee Only)</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Premium (Total)</Label>
+                <Input type="number" step="0.01" data-testid="premium-input" value={formData.premium}
+                  onChange={(e) => setFormData({ ...formData, premium: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
