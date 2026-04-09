@@ -102,6 +102,15 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Audit Log system: captures all user actions (LOGIN, REGISTER, CREATE, UPDATE, DELETE, APPROVE, REJECT, CREATE_USER, DELETE_USER, PROMOTE)
 - [x] Admin Audit Log page (/admin/audit-log) with filters (action, resource, username search) and pagination
 
+### Session 14 - CD Ledger HR, Master Admin User Mgmt (April 2026)
+- [x] CD Ledger tab added to HR portal (/hr/cd-ledger) — read-only (no Add/Delete buttons for HR)
+- [x] Admin and Master Admin can both approve endorsements (both have role=Admin)
+- [x] Master Admin User Management shows ALL users (HR + Admin) with stats cards
+- [x] Master Admin badge displayed next to master admin user in Users table
+- [x] Master Admin protected from deletion (frontend hides button + backend 400 error)
+- [x] Backend: password_hash properly excluded from user list response
+- [x] Health check endpoint added (GET /api/health) for deployment monitoring
+
 ## API Endpoints
 
 ### Auth
