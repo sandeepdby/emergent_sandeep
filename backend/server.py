@@ -828,7 +828,11 @@ async def root():
 
 @api_router.post("/auth/register")
 async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks):
-    """Register a new user (HR or Admin) and send notifications"""
+    """Register a new user (HR only via public registration) and send notifications"""
+    # Public registration restricted to HR role only
+    if user_data.role != UserRole.HR:
+        raise HTTPException(status_code=403, detail="Only HR accounts can be registered. Contact an Admin for Admin access.")
+    
     existing = await db.users.find_one({"username": user_data.username}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")

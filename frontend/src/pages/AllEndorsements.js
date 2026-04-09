@@ -10,13 +10,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Edit, Trash2, Loader2, Filter, X } from "lucide-react";
+import { Edit, Trash2, Loader2, Filter, X, Eye } from "lucide-react";
 
 const EndorsementsPage = () => {
   const [endorsements, setEndorsements] = useState([]);
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewEndorsement, setViewEndorsement] = useState(null);
   const [editingEndorsement, setEditingEndorsement] = useState(null);
   const [filters, setFilters] = useState({
     policy_number: "all",
@@ -351,6 +353,14 @@ const EndorsementsPage = () => {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => { setViewEndorsement(endorsement); setViewDialogOpen(true); }}
+                          data-testid={`view-endorsement-${endorsement.id}`}
+                        >
+                          <Eye className="w-4 h-4 text-blue-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleEdit(endorsement)}
                           data-testid={`edit-endorsement-${endorsement.id}`}
                         >
@@ -459,6 +469,37 @@ const EndorsementsPage = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={() => setViewDialogOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Endorsement Details</DialogTitle>
+            <DialogDescription>Full details of the selected endorsement</DialogDescription>
+          </DialogHeader>
+          {viewEndorsement && (
+            <div className="grid grid-cols-2 gap-3 text-sm" data-testid="view-endorsement-dialog">
+              <div><span className="text-gray-500 block text-xs">Policy Number</span><strong>{viewEndorsement.policy_number}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Employee ID</span><strong>{viewEndorsement.employee_id || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Member Name</span><strong>{viewEndorsement.member_name}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Relationship</span><strong>{viewEndorsement.relationship_type}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Endorsement Type</span><strong>{viewEndorsement.endorsement_type}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Status</span><Badge variant={viewEndorsement.status === "Approved" ? "default" : viewEndorsement.status === "Rejected" ? "destructive" : "secondary"}>{viewEndorsement.status}</Badge></div>
+              <div><span className="text-gray-500 block text-xs">DOB</span><strong>{viewEndorsement.dob || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Age</span><strong>{viewEndorsement.age || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Gender</span><strong>{viewEndorsement.gender || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Sum Insured</span><strong>{viewEndorsement.sum_insured ? `₹${viewEndorsement.sum_insured.toLocaleString()}` : "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Endorsement Date</span><strong>{viewEndorsement.endorsement_date}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Effective Date</span><strong>{viewEndorsement.effective_date}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Date of Joining</span><strong>{viewEndorsement.date_of_joining || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Date of Leaving</span><strong>{viewEndorsement.date_of_leaving || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Annual Premium/Life</span><strong>₹{viewEndorsement.annual_premium_per_life?.toLocaleString() || "—"}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Pro-rata Premium</span><strong className={viewEndorsement.prorata_premium < 0 ? "text-red-600" : "text-green-600"}>₹{viewEndorsement.prorata_premium?.toLocaleString()}</strong></div>
+              <div className="col-span-2"><span className="text-gray-500 block text-xs">Remarks</span><strong>{viewEndorsement.remarks || "—"}</strong></div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

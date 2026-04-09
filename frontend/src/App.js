@@ -113,15 +113,10 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-              <select
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                value={registerData.role}
-                onChange={(e) => setRegisterData({...registerData, role: e.target.value})}
-                data-testid="register-role-select"
-              >
-                <option value="HR">HR User</option>
-                <option value="Admin">Admin User</option>
-              </select>
+              <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 font-medium">
+                HR User
+              </div>
+              <input type="hidden" value="HR" />
             </div>
             
             <button
