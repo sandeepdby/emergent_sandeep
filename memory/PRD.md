@@ -74,6 +74,12 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Registration restricted to HR role only — Admin registration blocked (403)
 - [x] Frontend registration form shows "HR User" as fixed role (no dropdown)
 
+### Session 10 - User Management & Data Display (April 2026)
+- [x] Admin User Management page: create HR or Admin accounts, list all users, delete users
+- [x] One email per login — unique email enforcement on both registration and admin creation (400 error)
+- [x] My Endorsements table now shows DOB, Gender, Sum Insured columns
+- [x] View dialog shows all 17 fields (including DOJ, DOL, annual premium, prorata)
+
 ## API Endpoints
 
 ### Auth
