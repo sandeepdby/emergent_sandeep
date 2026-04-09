@@ -68,6 +68,12 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Recent Endorsements table (latest 8)
 - [x] Dashboard is default tab for HR (redirects from /hr to /hr/dashboard)
 
+### Session 9 - View/Edit & Registration Security (April 2026)
+- [x] HR My Endorsements: View (all), Edit (Pending only), Delete (Pending only) with full detail dialog
+- [x] Admin All Endorsements: View, Edit, Delete with full detail dialog (16 fields)
+- [x] Registration restricted to HR role only — Admin registration blocked (403)
+- [x] Frontend registration form shows "HR User" as fixed role (no dropdown)
+
 ## API Endpoints
 
 ### Auth
