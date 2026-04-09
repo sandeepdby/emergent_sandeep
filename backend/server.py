@@ -864,6 +864,18 @@ async def root():
     return {"message": "InsureHub - Endorsement Portal with Approval Workflow"}
 
 
+@api_router.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring"""
+    return {"status": "healthy", "service": "insurehub-api"}
+
+
+@app.get("/health")
+async def app_health_check():
+    """Root-level health check endpoint"""
+    return {"status": "healthy", "service": "insurehub-api"}
+
+
 # ==================== AUTHENTICATION ENDPOINTS ====================
 
 @api_router.post("/auth/register")
