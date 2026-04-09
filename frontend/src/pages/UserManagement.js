@@ -150,7 +150,10 @@ export default function UserManagement() {
                     <TableCell className="text-sm">{u.email}</TableCell>
                     <TableCell className="text-sm">{u.phone || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={u.role === "Admin" ? "default" : "secondary"}>{u.role}</Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant={u.role === "Admin" ? "default" : "secondary"}>{u.role}</Badge>
+                        {u.is_master_admin && <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-600">Master</Badge>}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
@@ -159,9 +162,11 @@ export default function UserManagement() {
                             <ArrowUpCircle className="w-4 h-4" />
                           </Button>
                         )}
-                        <Button variant="ghost" size="sm" onClick={() => handleDelete(u.id, u.username)} className="text-red-500 hover:text-red-700" data-testid={`delete-user-${u.id}`}>
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {!u.is_master_admin && (
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(u.id, u.username)} className="text-red-500 hover:text-red-700" data-testid={`delete-user-${u.id}`}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

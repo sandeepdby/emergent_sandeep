@@ -1117,7 +1117,7 @@ async def list_all_users(current_user: User = Depends(get_current_user)):
     """List all users (Admin only)"""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Only admins can view users")
-    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("created_at", -1).to_list(500)
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(500)
     return users
 
 
@@ -1161,6 +1161,10 @@ async def admin_delete_user(user_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=403, detail="Only admins can delete users")
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if target_user and target_user.get("is_master_admin"):
+        raise HTTPException(status_code=400, detail="Cannot delete Master Admin account")
     
     result = await db.users.delete_one({"id": user_id})
     if result.deleted_count == 0:

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useContext } from "react";
 import axios from "axios";
-import { API } from "../auth";
+import { API, AuthContext } from "../auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { Plus, Trash2, Loader2, Wallet, TrendingUp, TrendingDown, RefreshCw } from "lucide-react";
 
 export default function CDLedger() {
+  const { user } = useContext(AuthContext);
+  const isAdmin = user?.role === "Admin";
   const [entries, setEntries] = useState([]);
   const [totalBalance, setTotalBalance] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -178,9 +180,11 @@ export default function CDLedger() {
             <Button variant="outline" size="sm" onClick={fetchLedger} data-testid="refresh-ledger-btn">
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
-            <Button size="sm" onClick={() => setShowForm(!showForm)} data-testid="add-entry-btn">
-              <Plus className="w-4 h-4 mr-1" /> Add Deposit / Entry
-            </Button>
+            {isAdmin && (
+              <Button size="sm" onClick={() => setShowForm(!showForm)} data-testid="add-entry-btn">
+                <Plus className="w-4 h-4 mr-1" /> Add Deposit / Entry
+              </Button>
+            )}
           </div>
         </CardHeader>
 
@@ -241,7 +245,7 @@ export default function CDLedger() {
                     <TableHead>Type</TableHead>
                     <TableHead className="text-right">Amount</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
-                    <TableHead>Actions</TableHead>
+                    {isAdmin && <TableHead>Actions</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -262,15 +266,17 @@ export default function CDLedger() {
                       <TableCell className={`text-right font-bold ${entry.running_balance >= 0 ? 'text-gray-800' : 'text-red-600'}`}>
                         ₹{entry.running_balance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </TableCell>
-                      <TableCell>
-                        {entry.entry_type === "Manual" ? (
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(entry.id)} className="text-red-500 hover:text-red-700" data-testid={`cd-delete-${entry.id}`}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-gray-400">Auto</span>
-                        )}
-                      </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          {entry.entry_type === "Manual" ? (
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(entry.id)} className="text-red-500 hover:text-red-700" data-testid={`cd-delete-${entry.id}`}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-gray-400">Auto</span>
+                          )}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

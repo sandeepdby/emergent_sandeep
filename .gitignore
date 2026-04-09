@@ -57,3 +57,8 @@ design_guidelines.json
 .cache/
 frontend/node_modules/.cache/default-development/6.pack
 frontend/node_modules/.cache/default-development/13.pack
+-e 
+# Environment files
+*.env
+*.env.*
+frontend/node_modules/.cache/default-development/8.pack
