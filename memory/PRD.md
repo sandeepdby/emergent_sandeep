@@ -93,11 +93,14 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Backend: Claims model, CRUD endpoints, analytics endpoints
 
 ### Session 13 - Policy & Claims Redesign (April 2026)
-- [x] Policy model redesigned: policy_date, policy_type (ESKP/ESK/E), premium, employees_count, spouse_count, kids_count, parents_count, total_lives_count (auto-sum), addition_lives, deletion_lives
-- [x] Admin Policies form updated with all new fields and auto-calculated Total Lives display
-- [x] HR Policies Dashboard: 6 key stats + 4 life category cards + 3 charts (Status, Lives Breakdown, By Type) + full table
-- [x] HR Claims Dashboard: Total Claims, Reimbursement, Cashless, Rejected, Under Process cards + Claims Ratio (Claims/Premium) + Renewal Expected Pricing (Claims*1.30) + 3 charts + table
-- [x] Claims analytics endpoint returns all new metrics including claims_ratio and renewal_expected_pricing
+- [x] Policy model redesigned with new count fields: employees_count, spouse_count, kids_count, parents_count, total_lives_count (auto-sum), addition_lives, deletion_lives, premium (total)
+- [x] Policy Type restored to legacy: Group Health (GMC), GTL, GPA, Group Accident, Group Term
+- [x] Family Definition added as separate field: ESKP (Emp+Spouse+Kids+Parents), ESK (Emp+Spouse+Kids), E (Employee Only)
+- [x] Admin Policies form has Policy Type + Family Definition dropdowns
+- [x] HR Policies Dashboard: 6 key stats + 4 life category cards + 3 charts (Status Pie, Lives Breakdown Pie, Type Bar) + table with Family column
+- [x] HR Claims Dashboard: Total/Reimbursement/Cashless/Rejected cards + Under Process, Total Premium, Claims Ratio (Claims/Premium), Renewal Expected Pricing (Claims*1.30) + 3 charts + table
+- [x] Audit Log system: captures all user actions (LOGIN, REGISTER, CREATE, UPDATE, DELETE, APPROVE, REJECT, CREATE_USER, DELETE_USER, PROMOTE)
+- [x] Admin Audit Log page (/admin/audit-log) with filters (action, resource, username search) and pagination
 
 ## API Endpoints
 
