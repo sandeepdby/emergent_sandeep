@@ -17,7 +17,7 @@ const emptyForm = {
   claim_type: "Cashless", diagnosis: "", hospital_name: "",
   admission_date: "", discharge_date: "",
   claimed_amount: 0, approved_amount: 0, settled_amount: 0,
-  status: "Submitted", remarks: "", policy_type: "Group Health",
+  status: "Submitted", remarks: "", policy_type: "ESKP",
 };
 
 export default function ClaimsManagement() {
@@ -152,9 +152,9 @@ export default function ClaimsManagement() {
                 <Select value={form.policy_type} onValueChange={v => setForm({ ...form, policy_type: v })}>
                   <SelectTrigger data-testid="claim-policy-type"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Group Health">Group Health (GMC)</SelectItem>
-                    <SelectItem value="GTL">Group Term (GTL)</SelectItem>
-                    <SelectItem value="GPA">Group Accident (GPA)</SelectItem>
+                    <SelectItem value="ESKP">ESKP</SelectItem>
+                    <SelectItem value="ESK">ESK</SelectItem>
+                    <SelectItem value="E">E</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

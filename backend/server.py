@@ -123,11 +123,9 @@ class EndorsementType(str, Enum):
 
 
 class PolicyType(str, Enum):
-    GROUP_HEALTH = "Group Health"
-    GROUP_ACCIDENT = "Group Accident"
-    GROUP_TERM = "Group Term"
-    GPA = "GPA"
-    GTL = "GTL"
+    ESKP = "ESKP"
+    ESK = "ESK"
+    E = "E"
 
 
 class Gender(str, Enum):
@@ -184,11 +182,17 @@ class User(BaseModel):
 class PolicyCreate(BaseModel):
     policy_number: str
     policy_holder_name: str
-    inception_date: str
-    expiry_date: str
-    policy_type: PolicyType = PolicyType.GROUP_HEALTH
-    annual_premium_per_life: float
-    total_lives_covered: int = 0
+    policy_date: Optional[str] = None
+    inception_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    policy_type: str = "ESKP"
+    premium: float = 0
+    employees_count: int = 0
+    spouse_count: int = 0
+    kids_count: int = 0
+    parents_count: int = 0
+    addition_lives: int = 0
+    deletion_lives: int = 0
     status: PolicyStatus = PolicyStatus.ACTIVE
 
 
@@ -198,12 +202,21 @@ class Policy(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     policy_number: str
     policy_holder_name: str
-    inception_date: str
-    expiry_date: str
-    policy_type: PolicyType = PolicyType.GROUP_HEALTH
-    annual_premium_per_life: float
-    total_lives_covered: int
-    status: PolicyStatus
+    policy_date: Optional[str] = None
+    inception_date: Optional[str] = None
+    expiry_date: Optional[str] = None
+    policy_type: str = "ESKP"
+    premium: float = 0
+    employees_count: int = 0
+    spouse_count: int = 0
+    kids_count: int = 0
+    parents_count: int = 0
+    total_lives_count: int = 0
+    addition_lives: int = 0
+    deletion_lives: int = 0
+    annual_premium_per_life: Optional[float] = 0
+    total_lives_covered: Optional[int] = 0
+    status: PolicyStatus = PolicyStatus.ACTIVE
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -956,7 +969,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 
 # ==================== POLICY ENDPOINTS ====================
 
-@api_router.post("/policies", response_model=Policy)
+@api_router.post("/policies")
 async def create_policy(policy_data: PolicyCreate, current_user: User = Depends(get_current_user)):
     """Create a new insurance policy (Admin only)"""
     if current_user.role != UserRole.ADMIN:
@@ -966,40 +979,36 @@ async def create_policy(policy_data: PolicyCreate, current_user: User = Depends(
     if existing:
         raise HTTPException(status_code=400, detail="Policy number already exists")
     
-    policy = Policy(**policy_data.model_dump())
+    data = policy_data.model_dump()
+    data["total_lives_count"] = data.get("employees_count", 0) + data.get("spouse_count", 0) + data.get("kids_count", 0) + data.get("parents_count", 0)
+    data["total_lives_covered"] = data["total_lives_count"]
+    data["annual_premium_per_life"] = round(data.get("premium", 0) / data["total_lives_count"], 2) if data["total_lives_count"] > 0 else 0
+    policy = Policy(**data)
     doc = policy.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.policies.insert_one(doc)
-    return policy
+    result = await db.policies.find_one({"id": policy.id}, {"_id": 0})
+    return result
 
 
-@api_router.get("/policies", response_model=List[Policy])
+@api_router.get("/policies")
 async def get_policies(current_user: User = Depends(get_current_user)):
     """Get all policies"""
     policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
-    
-    for policy in policies:
-        if isinstance(policy['created_at'], str):
-            policy['created_at'] = datetime.fromisoformat(policy['created_at'])
-    
     return policies
 
 
-@api_router.get("/policies/{policy_id}", response_model=Policy)
+@api_router.get("/policies/{policy_id}")
 async def get_policy(policy_id: str, current_user: User = Depends(get_current_user)):
     """Get a specific policy by ID"""
     policy = await db.policies.find_one({"id": policy_id}, {"_id": 0})
     if not policy:
         raise HTTPException(status_code=404, detail="Policy not found")
-    
-    if isinstance(policy['created_at'], str):
-        policy['created_at'] = datetime.fromisoformat(policy['created_at'])
-    
     return policy
 
 
-@api_router.put("/policies/{policy_id}", response_model=Policy)
+@api_router.put("/policies/{policy_id}")
 async def update_policy(policy_id: str, policy_data: PolicyCreate, current_user: User = Depends(get_current_user)):
     """Update a policy (Admin only)"""
     if current_user.role != UserRole.ADMIN:
@@ -1010,12 +1019,12 @@ async def update_policy(policy_id: str, policy_data: PolicyCreate, current_user:
         raise HTTPException(status_code=404, detail="Policy not found")
     
     update_data = policy_data.model_dump()
+    update_data["total_lives_count"] = update_data.get("employees_count", 0) + update_data.get("spouse_count", 0) + update_data.get("kids_count", 0) + update_data.get("parents_count", 0)
+    update_data["total_lives_covered"] = update_data["total_lives_count"]
+    update_data["annual_premium_per_life"] = round(update_data.get("premium", 0) / update_data["total_lives_count"], 2) if update_data["total_lives_count"] > 0 else 0
     await db.policies.update_one({"id": policy_id}, {"$set": update_data})
     
     updated_policy = await db.policies.find_one({"id": policy_id}, {"_id": 0})
-    if isinstance(updated_policy['created_at'], str):
-        updated_policy['created_at'] = datetime.fromisoformat(updated_policy['created_at'])
-    
     return updated_policy
 
 
@@ -2874,10 +2883,27 @@ async def get_claims_analytics(
 
     claims = await db.claims.find(query, {"_id": 0}).to_list(10000)
 
-    total_claims = len(claims)
+    total_claims_count = len(claims)
     total_claimed = sum(c.get("claimed_amount", 0) for c in claims)
     total_approved = sum(c.get("approved_amount", 0) for c in claims)
     total_settled = sum(c.get("settled_amount", 0) for c in claims)
+
+    reimbursement_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Reimbursement")
+    cashless_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Cashless")
+    rejected_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("status") == "Rejected")
+    under_process_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("status") == "In Process")
+
+    reimbursement_count = sum(1 for c in claims if c.get("claim_type") == "Reimbursement")
+    cashless_count = sum(1 for c in claims if c.get("claim_type") == "Cashless")
+    rejected_count = sum(1 for c in claims if c.get("status") == "Rejected")
+    under_process_count = sum(1 for c in claims if c.get("status") == "In Process")
+
+    # Get total premium from policies for claims ratio
+    policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
+    total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
+
+    claims_ratio = round((total_claimed / total_premium * 100) if total_premium > 0 else 0, 1)
+    renewal_expected_pricing = round(total_claimed * 1.30, 2)
 
     status_counts = {}
     type_counts = {}
@@ -2899,10 +2925,21 @@ async def get_claims_analytics(
             monthly_data[month_key]["amount"] += c.get("claimed_amount", 0)
 
     return {
-        "total_claims": total_claims,
+        "total_claims": total_claims_count,
         "total_claimed_amount": round(total_claimed, 2),
         "total_approved_amount": round(total_approved, 2),
         "total_settled_amount": round(total_settled, 2),
+        "reimbursement_claims": round(reimbursement_amount, 2),
+        "reimbursement_count": reimbursement_count,
+        "cashless_claims": round(cashless_amount, 2),
+        "cashless_count": cashless_count,
+        "rejected_claims": round(rejected_amount, 2),
+        "rejected_count": rejected_count,
+        "under_process_claims": round(under_process_amount, 2),
+        "under_process_count": under_process_count,
+        "total_premium": round(total_premium, 2),
+        "claims_ratio": claims_ratio,
+        "renewal_expected_pricing": renewal_expected_pricing,
         "settlement_ratio": round((total_settled / total_claimed * 100) if total_claimed > 0 else 0, 1),
         "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
         "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
@@ -2918,8 +2955,15 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
     total_policies = len(policies)
     active_count = sum(1 for p in policies if p.get("status") == "Active")
     expired_count = sum(1 for p in policies if p.get("status") == "Expired")
-    total_lives = sum(p.get("total_lives_covered", 0) for p in policies)
-    total_premium = sum(p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0) for p in policies)
+
+    total_employees = sum(p.get("employees_count", 0) for p in policies)
+    total_spouse = sum(p.get("spouse_count", 0) for p in policies)
+    total_kids = sum(p.get("kids_count", 0) for p in policies)
+    total_parents = sum(p.get("parents_count", 0) for p in policies)
+    total_lives = sum(p.get("total_lives_count", 0) or p.get("total_lives_covered", 0) for p in policies)
+    total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
+    total_addition = sum(p.get("addition_lives", 0) for p in policies)
+    total_deletion = sum(p.get("deletion_lives", 0) for p in policies)
 
     by_type = {}
     for p in policies:
@@ -2927,8 +2971,10 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
         if pt not in by_type:
             by_type[pt] = {"count": 0, "lives": 0, "premium": 0}
         by_type[pt]["count"] += 1
-        by_type[pt]["lives"] += p.get("total_lives_covered", 0)
-        by_type[pt]["premium"] += p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)
+        lives = p.get("total_lives_count", 0) or p.get("total_lives_covered", 0)
+        prem = p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0))
+        by_type[pt]["lives"] += lives
+        by_type[pt]["premium"] += prem
 
     type_breakdown = [
         {"name": k, "count": v["count"], "lives": v["lives"], "premium": round(v["premium"], 2)}
@@ -2939,18 +2985,29 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
         "total_policies": total_policies,
         "active_policies": active_count,
         "expired_policies": expired_count,
-        "total_lives_covered": total_lives,
-        "total_annual_premium": round(total_premium, 2),
+        "total_employees": total_employees,
+        "total_spouse": total_spouse,
+        "total_kids": total_kids,
+        "total_parents": total_parents,
+        "total_lives": total_lives,
+        "total_premium": round(total_premium, 2),
+        "total_addition_lives": total_addition,
+        "total_deletion_lives": total_deletion,
         "type_breakdown": type_breakdown,
         "policies": [{
             "policy_number": p.get("policy_number"),
             "policy_holder_name": p.get("policy_holder_name"),
+            "policy_date": p.get("policy_date") or p.get("inception_date"),
             "policy_type": p.get("policy_type"),
             "status": p.get("status"),
-            "inception_date": p.get("inception_date"),
-            "expiry_date": p.get("expiry_date"),
-            "total_lives_covered": p.get("total_lives_covered", 0),
-            "annual_premium_per_life": p.get("annual_premium_per_life", 0),
+            "premium": p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)),
+            "employees_count": p.get("employees_count", 0),
+            "spouse_count": p.get("spouse_count", 0),
+            "kids_count": p.get("kids_count", 0),
+            "parents_count": p.get("parents_count", 0),
+            "total_lives_count": p.get("total_lives_count", 0) or p.get("total_lives_covered", 0),
+            "addition_lives": p.get("addition_lives", 0),
+            "deletion_lives": p.get("deletion_lives", 0),
         } for p in policies],
     }
 

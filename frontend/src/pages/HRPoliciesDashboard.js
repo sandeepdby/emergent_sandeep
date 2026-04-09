@@ -4,7 +4,7 @@ import { API } from "../auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Shield, Users, DollarSign, Activity, Layers } from "lucide-react";
+import { Loader2, Shield, Users, DollarSign, UserPlus, UserMinus } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -47,7 +47,13 @@ export default function HRPoliciesDashboard() {
     );
   }
 
-  const { total_policies, active_policies, expired_policies, total_lives_covered, total_annual_premium, type_breakdown, policies } = analytics;
+  const {
+    total_policies, active_policies, expired_policies,
+    total_employees, total_spouse, total_kids, total_parents,
+    total_lives, total_premium,
+    total_addition_lives, total_deletion_lives,
+    type_breakdown, policies
+  } = analytics;
 
   const statusData = [
     { name: "Active", value: active_policies, color: "#10b981" },
@@ -55,12 +61,21 @@ export default function HRPoliciesDashboard() {
     { name: "Other", value: Math.max(0, total_policies - active_policies - expired_policies), color: "#94a3b8" },
   ].filter(d => d.value > 0);
 
+  const livesBreakdown = [
+    { name: "Employees", value: total_employees, fill: "#3b82f6" },
+    { name: "Spouse", value: total_spouse, fill: "#8b5cf6" },
+    { name: "Kids", value: total_kids, fill: "#f59e0b" },
+    { name: "Parents", value: total_parents, fill: "#10b981" },
+  ].filter(d => d.value > 0);
+
   const typeBarData = type_breakdown.map((t, i) => ({
     name: t.name,
+    policies: t.count,
     lives: t.lives,
-    premium: Math.round(t.premium / 1000),
     fill: COLORS[i % COLORS.length],
   }));
+
+  const fmt = (v) => v.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
   return (
     <div className="space-y-6" data-testid="hr-policies-dashboard">
@@ -69,95 +84,134 @@ export default function HRPoliciesDashboard() {
         <h2 className="text-lg font-semibold text-gray-800">Policy Dashboard</h2>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      {/* Row 1 — Key Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card className="border-l-4 border-l-blue-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Total Policies</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1" data-testid="total-policies-count">{total_policies}</p>
+          <CardContent className="p-3">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Policies</p>
+            <p className="text-xl font-bold text-gray-900 mt-0.5" data-testid="total-policies-count">{total_policies}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Active</p>
-            <p className="text-2xl font-bold text-emerald-600 mt-1" data-testid="active-policies-count">{active_policies}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-red-500">
-          <CardContent className="p-4">
-            <p className="text-xs text-gray-500 uppercase tracking-wide">Expired</p>
-            <p className="text-2xl font-bold text-red-600 mt-1">{expired_policies}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-l-4 border-l-purple-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-1">
-              <Users className="w-3.5 h-3.5 text-purple-400" />
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Lives Covered</p>
-            </div>
-            <p className="text-2xl font-bold text-purple-600 mt-1" data-testid="total-lives-count">{total_lives_covered.toLocaleString("en-IN")}</p>
+          <CardContent className="p-3">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Active</p>
+            <p className="text-xl font-bold text-emerald-600 mt-0.5">{active_policies}</p>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
+            <p className="text-[10px] text-gray-500 uppercase tracking-wide">Premium</p>
+            <p className="text-xl font-bold text-amber-600 mt-0.5">{fmt(total_premium)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-purple-500">
+          <CardContent className="p-3">
             <div className="flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-amber-400" />
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Annual Premium</p>
+              <Users className="w-3 h-3 text-purple-400" />
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Total Lives</p>
             </div>
-            <p className="text-2xl font-bold text-amber-600 mt-1">{total_annual_premium.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</p>
+            <p className="text-xl font-bold text-purple-600 mt-0.5" data-testid="total-lives-count">{total_lives}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-teal-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <UserPlus className="w-3 h-3 text-teal-400" />
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Additions</p>
+            </div>
+            <p className="text-xl font-bold text-teal-600 mt-0.5">{total_addition_lives}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-red-500">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-1">
+              <UserMinus className="w-3 h-3 text-red-400" />
+              <p className="text-[10px] text-gray-500 uppercase tracking-wide">Deletions</p>
+            </div>
+            <p className="text-xl font-bold text-red-600 mt-0.5">{total_deletion_lives}</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Row 2 — Life Category Counts */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card><CardContent className="p-3">
+          <p className="text-[10px] text-gray-500 uppercase">Employees</p>
+          <p className="text-xl font-bold text-blue-600">{total_employees}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-[10px] text-gray-500 uppercase">Spouse</p>
+          <p className="text-xl font-bold text-purple-600">{total_spouse}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-[10px] text-gray-500 uppercase">Kids</p>
+          <p className="text-xl font-bold text-amber-600">{total_kids}</p>
+        </CardContent></Card>
+        <Card><CardContent className="p-3">
+          <p className="text-[10px] text-gray-500 uppercase">Parents</p>
+          <p className="text-xl font-bold text-emerald-600">{total_parents}</p>
+        </CardContent></Card>
+      </div>
+
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Status Pie Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Status Pie */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Policy Status
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold text-gray-700">Policy Status</CardTitle>
           </CardHeader>
           <CardContent>
             {statusData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
-                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
                     {statusData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                   </Pie>
-                  <Tooltip />
-                  <Legend />
+                  <Tooltip /><Legend />
                 </PieChart>
               </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-gray-400 py-8">No policies yet</p>
-            )}
+            ) : <p className="text-center text-gray-400 py-8">No data</p>}
           </CardContent>
         </Card>
 
-        {/* Type Breakdown Bar Chart */}
+        {/* Lives Breakdown Pie */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-              <Layers className="w-4 h-4" /> By Policy Type (Lives)
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold text-gray-700">Lives Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {livesBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={livesBreakdown} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                    {livesBreakdown.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                  </Pie>
+                  <Tooltip /><Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <p className="text-center text-gray-400 py-8">No data</p>}
+          </CardContent>
+        </Card>
+
+        {/* Type Bar */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-gray-700">By Policy Type</CardTitle>
           </CardHeader>
           <CardContent>
             {typeBarData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
+              <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={typeBarData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(val, name) => name === "premium" ? `${val}K` : val} />
+                  <Tooltip />
                   <Bar dataKey="lives" name="Lives" radius={[4, 4, 0, 0]}>
                     {typeBarData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <p className="text-center text-gray-400 py-8">No data</p>
-            )}
+            ) : <p className="text-center text-gray-400 py-8">No data</p>}
           </CardContent>
         </Card>
       </div>
@@ -169,7 +223,7 @@ export default function HRPoliciesDashboard() {
         </CardHeader>
         <CardContent>
           {policies.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">No policies available. Contact Admin to add policies.</p>
+            <p className="text-center text-gray-400 py-8">No policies available. Contact Admin.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table data-testid="hr-policies-table">
@@ -177,12 +231,17 @@ export default function HRPoliciesDashboard() {
                   <TableRow>
                     <TableHead className="text-xs">Policy #</TableHead>
                     <TableHead className="text-xs">Holder</TableHead>
+                    <TableHead className="text-xs">Date</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs text-right">Premium</TableHead>
+                    <TableHead className="text-xs text-right">Emp</TableHead>
+                    <TableHead className="text-xs text-right">Spouse</TableHead>
+                    <TableHead className="text-xs text-right">Kids</TableHead>
+                    <TableHead className="text-xs text-right">Parents</TableHead>
+                    <TableHead className="text-xs text-right">Total</TableHead>
+                    <TableHead className="text-xs text-right">Add</TableHead>
+                    <TableHead className="text-xs text-right">Del</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
-                    <TableHead className="text-xs">Inception</TableHead>
-                    <TableHead className="text-xs">Expiry</TableHead>
-                    <TableHead className="text-xs text-right">Lives</TableHead>
-                    <TableHead className="text-xs text-right">Premium/Life</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -190,16 +249,19 @@ export default function HRPoliciesDashboard() {
                     <TableRow key={idx}>
                       <TableCell className="text-xs font-medium">{p.policy_number}</TableCell>
                       <TableCell className="text-xs">{p.policy_holder_name}</TableCell>
-                      <TableCell className="text-xs">
-                        <Badge variant="secondary" className="text-xs">{p.policy_type}</Badge>
-                      </TableCell>
+                      <TableCell className="text-xs">{p.policy_date || "-"}</TableCell>
+                      <TableCell className="text-xs"><Badge variant="secondary" className="text-xs">{p.policy_type}</Badge></TableCell>
+                      <TableCell className="text-xs text-right font-medium">{(p.premium || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</TableCell>
+                      <TableCell className="text-xs text-right">{p.employees_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right">{p.spouse_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right">{p.kids_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right">{p.parents_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right font-bold">{p.total_lives_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right text-emerald-600">{p.addition_lives || 0}</TableCell>
+                      <TableCell className="text-xs text-right text-red-600">{p.deletion_lives || 0}</TableCell>
                       <TableCell className="text-xs">
                         <Badge variant={p.status === "Active" ? "default" : "destructive"} className="text-xs">{p.status}</Badge>
                       </TableCell>
-                      <TableCell className="text-xs">{p.inception_date}</TableCell>
-                      <TableCell className="text-xs">{p.expiry_date}</TableCell>
-                      <TableCell className="text-xs text-right">{p.total_lives_covered}</TableCell>
-                      <TableCell className="text-xs text-right font-medium">{p.annual_premium_per_life.toLocaleString("en-IN", { style: "currency", currency: "INR" })}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
