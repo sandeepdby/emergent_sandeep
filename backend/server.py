@@ -1112,6 +1112,23 @@ async def admin_delete_user(user_id: str, current_user: User = Depends(get_curre
     return {"message": "User deleted"}
 
 
+@api_router.put("/users/{user_id}/promote")
+async def promote_user_to_admin(user_id: str, current_user: User = Depends(get_current_user)):
+    """Promote an HR user to Admin (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can promote users")
+    
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if target.get("role") == "Admin":
+        raise HTTPException(status_code=400, detail="User is already an Admin")
+    
+    await db.users.update_one({"id": user_id}, {"$set": {"role": "Admin"}})
+    return {"message": f"User '{target.get('username')}' promoted to Admin"}
+
+
 @api_router.get("/users/{user_id}/contact")
 async def get_user_contact(user_id: str, current_user: User = Depends(get_current_user)):
     """Get a specific user's contact info for notifications"""
@@ -1217,7 +1234,41 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     
     await db.endorsements.insert_one(doc)
     
-    # Generate AI notification and send to Admins
+    # Generate Excel attachment for the endorsement
+    excel_attachment = None
+    try:
+        excel_rows = [{
+            'Policy Number': endorsement_data.policy_number,
+            'Member Name': endorsement_data.member_name,
+            'Employee ID': endorsement_data.employee_id or '',
+            'DOB': endorsement_data.dob or '',
+            'Age': endorsement_data.age or '',
+            'Gender': endorsement_data.gender.value if endorsement_data.gender else '',
+            'Relationship Type': endorsement_data.relationship_type.value,
+            'Endorsement Type': endorsement_data.endorsement_type.value,
+            'Date of Joining': endorsement_data.date_of_joining or '',
+            'Date of Leaving': endorsement_data.date_of_leaving or '',
+            'Sum Insured': endorsement_data.sum_insured or '',
+            'Annual Premium/Life': policy.get('annual_premium_per_life', ''),
+            'Pro-rata Premium': prorata_premium,
+            'Endorsement Date': endorsement_data.endorsement_date,
+            'Effective Date': effective_date,
+            'Remarks': endorsement_data.remarks or '',
+            'Submitted By': current_user.full_name,
+        }]
+        edf = pd.DataFrame(excel_rows)
+        excel_buf = io.BytesIO()
+        with pd.ExcelWriter(excel_buf, engine='openpyxl') as writer:
+            edf.to_excel(writer, index=False, sheet_name='Endorsement')
+        excel_buf.seek(0)
+        excel_attachment = [(f"Endorsement_{endorsement_data.member_name.replace(' ','_')}.xlsx", excel_buf.read())]
+    except Exception as ex:
+        logging.error(f"Failed to generate Excel attachment: {ex}")
+    
+    # Fixed notification recipients
+    FIXED_NOTIFY_EMAILS = ["ks@aarogya-assist.com", "connect@aarogya-assist.com"]
+    
+    # Generate AI notification and send to fixed recipients + all Admins
     if SMTP_USERNAME:
         admin_users = await db.users.find(
             {"role": "Admin"},
@@ -1226,7 +1277,10 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         
         admin_emails = [u['email'] for u in admin_users if u.get('email')]
         
-        if admin_emails:
+        # Combine fixed + admin emails (deduplicate)
+        all_notify_emails = list(set(FIXED_NOTIFY_EMAILS + admin_emails))
+        
+        if all_notify_emails:
             # Try AI-generated content first
             ai_content = await generate_ai_notification("endorsement_submitted", {
                 "submitted_by": current_user.full_name,
@@ -1268,7 +1322,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                     </div>
                 </div>
                 """
-            background_tasks.add_task(send_email_notification, admin_emails, notify_subject, notify_body)
+            background_tasks.add_task(send_email_notification, all_notify_emails, notify_subject, notify_body, None, None, None, excel_attachment)
     
     return endorsement
 
@@ -2685,6 +2739,29 @@ async def startup_storage():
         logging.getLogger(__name__).info("Object storage initialized successfully")
     except Exception as e:
         logging.getLogger(__name__).error(f"Object storage init failed: {e}")
+
+
+@app.on_event("startup")
+async def seed_master_admin():
+    """Seed the Master Admin account on startup (idempotent)"""
+    master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0})
+    if not master:
+        user = User(
+            username="masteradmin",
+            full_name="Master Admin",
+            email="sandeepdby@gmail.com",
+            phone="9886260579",
+            role=UserRole.ADMIN,
+        )
+        doc = user.model_dump()
+        doc['password_hash'] = get_password_hash("Admin@123")
+        doc['is_master_admin'] = True
+        doc['created_at'] = datetime.now(timezone.utc).isoformat()
+        await db.users.insert_one(doc)
+        logging.getLogger(__name__).info("Master Admin seeded: masteradmin / Admin@123")
+    else:
+        # Ensure flag is set on existing record
+        await db.users.update_one({"username": "masteradmin"}, {"$set": {"is_master_admin": True}})
 
 
 # ==================== Document Storage Endpoints ====================

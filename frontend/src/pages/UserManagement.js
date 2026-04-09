@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User, ArrowUpCircle } from "lucide-react";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -71,6 +71,20 @@ export default function UserManagement() {
       fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to delete user");
+    }
+  };
+
+  const handlePromote = async (userId, username) => {
+    if (!window.confirm(`Promote "${username}" to Admin? This grants full admin access.`)) return;
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(`${API}/users/${userId}/promote`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(`"${username}" promoted to Admin`);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to promote user");
     }
   };
 
@@ -139,9 +153,16 @@ export default function UserManagement() {
                       <Badge variant={u.role === "Admin" ? "default" : "secondary"}>{u.role}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(u.id, u.username)} className="text-red-500 hover:text-red-700" data-testid={`delete-user-${u.id}`}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        {u.role === "HR" && (
+                          <Button variant="ghost" size="sm" onClick={() => handlePromote(u.id, u.username)} className="text-indigo-600 hover:text-indigo-800" data-testid={`promote-user-${u.id}`} title="Promote to Admin">
+                            <ArrowUpCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(u.id, u.username)} className="text-red-500 hover:text-red-700" data-testid={`delete-user-${u.id}`}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
