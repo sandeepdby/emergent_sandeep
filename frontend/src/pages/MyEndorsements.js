@@ -204,9 +204,11 @@ class MyEndorsements extends React.Component {
                       <TableHead>Policy</TableHead>
                       <TableHead>Employee ID</TableHead>
                       <TableHead>Member</TableHead>
+                      <TableHead>DOB</TableHead>
+                      <TableHead>Gender</TableHead>
                       <TableHead>Relationship</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Date</TableHead>
+                      <TableHead>Sum Insured</TableHead>
                       <TableHead>Annual Premium</TableHead>
                       <TableHead>Pro-rata Premium</TableHead>
                       <TableHead>Status</TableHead>
@@ -219,13 +221,15 @@ class MyEndorsements extends React.Component {
                         <TableCell className="font-medium">{e.policy_number}</TableCell>
                         <TableCell>{e.employee_id || "—"}</TableCell>
                         <TableCell>{e.member_name}</TableCell>
+                        <TableCell className="text-xs">{e.dob || "—"}</TableCell>
+                        <TableCell className="text-xs">{e.gender || "—"}</TableCell>
                         <TableCell><Badge variant="outline">{e.relationship_type}</Badge></TableCell>
                         <TableCell>
                           <Badge variant={e.endorsement_type === "Addition" || e.endorsement_type === "Midterm addition" ? "default" : e.endorsement_type === "Deletion" ? "destructive" : "secondary"}>
                             {e.endorsement_type}
                           </Badge>
                         </TableCell>
-                        <TableCell>{new Date(e.endorsement_date).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-gray-600">{e.sum_insured ? `₹${e.sum_insured.toLocaleString()}` : "—"}</TableCell>
                         <TableCell className="text-gray-600">₹{e.annual_premium_per_life?.toLocaleString() || '—'}</TableCell>
                         <TableCell className={`font-semibold ${e.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
                           {e.prorata_premium < 0 ? `₹${Math.abs(e.prorata_premium).toLocaleString()} (Refund)` : `₹${e.prorata_premium.toLocaleString()}`}

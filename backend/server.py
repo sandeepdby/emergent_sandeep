@@ -837,6 +837,10 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
     
+    existing_email = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered. One email per account only.")
+    
     user = User(
         username=user_data.username,
         full_name=user_data.full_name,
@@ -1051,6 +1055,61 @@ async def get_hr_users(current_user: User = Depends(get_current_user)):
         {"_id": 0, "id": 1, "full_name": 1, "email": 1, "phone": 1}
     ).to_list(100)
     return hr_users
+
+
+@api_router.get("/users")
+async def list_all_users(current_user: User = Depends(get_current_user)):
+    """List all users (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view users")
+    users = await db.users.find({}, {"_id": 0, "password": 0}).sort("created_at", -1).to_list(500)
+    return users
+
+
+@api_router.post("/users/create")
+async def admin_create_user(user_data: UserCreate, current_user: User = Depends(get_current_user)):
+    """Admin-only endpoint to create any user (HR or Admin)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can create users")
+    
+    existing = await db.users.find_one({"username": user_data.username}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    existing_email = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered. One email per account only.")
+    
+    hashed_password = get_password_hash(user_data.password)
+    
+    user = User(
+        username=user_data.username,
+        full_name=user_data.full_name,
+        email=user_data.email,
+        phone=user_data.phone,
+        role=user_data.role,
+    )
+    
+    user_dict = user.model_dump()
+    user_dict['password_hash'] = hashed_password
+    user_dict['created_at'] = datetime.now(timezone.utc).isoformat()
+    await db.users.insert_one(user_dict)
+    
+    return {"id": user.id, "username": user.username, "role": user.role.value, "message": f"{user.role.value} user created successfully"}
+
+
+@api_router.delete("/users/{user_id}")
+async def admin_delete_user(user_id: str, current_user: User = Depends(get_current_user)):
+    """Admin-only endpoint to delete a user"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete users")
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    result = await db.users.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"message": "User deleted"}
 
 
 @api_router.get("/users/{user_id}/contact")
