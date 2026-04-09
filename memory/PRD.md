@@ -87,11 +87,17 @@ Build a comprehensive health insurance endorsement management system with:
 
 ### Session 12 - Password Toggle, Policy & Claims Dashboards (April 2026)
 - [x] Password visibility toggle (eye icon) on login and registration forms
-- [x] HR Policies Dashboard tab (/hr/policies) with summary cards, pie chart (status), bar chart (by type), and policy table
-- [x] HR Claims Dashboard tab (/hr/claims) with summary cards, 3 charts (status, type, monthly trend), policy type filter, and claims table
-- [x] Admin Claims Management tab (/admin/claims) with full CRUD (create, read, update, delete)
-- [x] Backend: Claims model, CRUD endpoints (POST/GET/PUT/DELETE /api/claims), analytics endpoint (/api/claims-analytics), policies analytics endpoint (/api/policies-analytics)
-- [x] Policy type filter support (GMC, GTL, GPA) on claims dashboard
+- [x] HR Policies Dashboard tab (/hr/policies) with summary cards, charts, and policy table
+- [x] HR Claims Dashboard tab (/hr/claims) with summary cards, charts, and claims table
+- [x] Admin Claims Management tab (/admin/claims) with full CRUD
+- [x] Backend: Claims model, CRUD endpoints, analytics endpoints
+
+### Session 13 - Policy & Claims Redesign (April 2026)
+- [x] Policy model redesigned: policy_date, policy_type (ESKP/ESK/E), premium, employees_count, spouse_count, kids_count, parents_count, total_lives_count (auto-sum), addition_lives, deletion_lives
+- [x] Admin Policies form updated with all new fields and auto-calculated Total Lives display
+- [x] HR Policies Dashboard: 6 key stats + 4 life category cards + 3 charts (Status, Lives Breakdown, By Type) + full table
+- [x] HR Claims Dashboard: Total Claims, Reimbursement, Cashless, Rejected, Under Process cards + Claims Ratio (Claims/Premium) + Renewal Expected Pricing (Claims*1.30) + 3 charts + table
+- [x] Claims analytics endpoint returns all new metrics including claims_ratio and renewal_expected_pricing
 
 ## API Endpoints
 
