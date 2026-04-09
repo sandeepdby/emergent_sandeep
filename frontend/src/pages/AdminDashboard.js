@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users } from "lucide-react";
+import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck } from "lucide-react";
 import { AuthContext } from "../auth";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
@@ -13,6 +13,7 @@ import CloudStorage from "./CloudStorage";
 import CDLedger from "./CDLedger";
 import ImportBatches from "./ImportBatches";
 import UserManagement from "./UserManagement";
+import ClaimsManagement from "./ClaimsManagement";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
@@ -23,6 +24,7 @@ const Navigation = ({ onLogout, user }) => {
     { path: "/admin/all-endorsements", label: "Endorsements", icon: ClipboardList },
     { path: "/admin/import-batches", label: "Imports", icon: FileSpreadsheet },
     { path: "/admin/policies", label: "Policies", icon: Layers },
+    { path: "/admin/claims", label: "Claims", icon: FileCheck },
     { path: "/admin/cd-ledger", label: "CD Ledger", icon: Wallet },
     { path: "/admin/download", label: "Download", icon: Download },
     { path: "/admin/storage", label: "Storage", icon: CloudUpload },
@@ -99,6 +101,7 @@ class AdminDashboard extends React.Component {
             <Route path="/all-endorsements" element={<AllEndorsements />} />
             <Route path="/import-batches" element={<ImportBatches />} />
             <Route path="/policies" element={<PoliciesManagement />} />
+            <Route path="/claims" element={<ClaimsManagement />} />
             <Route path="/cd-ledger" element={<CDLedger />} />
             <Route path="/download" element={<DownloadApproved />} />
             <Route path="/email" element={<EmailSettings />} />

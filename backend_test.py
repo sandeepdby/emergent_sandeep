@@ -11,7 +11,7 @@ import time
 from datetime import datetime
 
 class InsureHubAPITester:
-    def __init__(self, base_url="https://endorsement-ai.preview.emergentagent.com"):
+    def __init__(self, base_url="https://insurehub-dashboard.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0

@@ -2732,6 +2732,229 @@ async def delete_cd_ledger_entry(entry_id: str, current_user: User = Depends(get
     
     await db.cd_ledger.delete_one({"id": entry_id})
     return {"message": "Entry deleted"}
+
+
+# ==================== Claims Management Endpoints ====================
+
+class ClaimStatus(str, Enum):
+    SUBMITTED = "Submitted"
+    IN_PROCESS = "In Process"
+    SETTLED = "Settled"
+    REJECTED = "Rejected"
+    CLOSED = "Closed"
+
+
+class ClaimType(str, Enum):
+    CASHLESS = "Cashless"
+    REIMBURSEMENT = "Reimbursement"
+
+
+class ClaimCreate(BaseModel):
+    policy_number: str
+    claim_number: Optional[str] = None
+    employee_name: str
+    patient_name: str
+    relationship: str = "Self"
+    claim_type: ClaimType = ClaimType.CASHLESS
+    diagnosis: Optional[str] = None
+    hospital_name: Optional[str] = None
+    admission_date: Optional[str] = None
+    discharge_date: Optional[str] = None
+    claimed_amount: float = 0
+    approved_amount: float = 0
+    settled_amount: float = 0
+    status: ClaimStatus = ClaimStatus.SUBMITTED
+    remarks: Optional[str] = None
+    policy_type: Optional[str] = None
+
+
+class Claim(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    policy_number: str
+    claim_number: str = Field(default_factory=lambda: f"CLM-{uuid.uuid4().hex[:8].upper()}")
+    employee_name: str
+    patient_name: str
+    relationship: str = "Self"
+    claim_type: ClaimType = ClaimType.CASHLESS
+    diagnosis: Optional[str] = None
+    hospital_name: Optional[str] = None
+    admission_date: Optional[str] = None
+    discharge_date: Optional[str] = None
+    claimed_amount: float = 0
+    approved_amount: float = 0
+    settled_amount: float = 0
+    status: ClaimStatus = ClaimStatus.SUBMITTED
+    remarks: Optional[str] = None
+    policy_type: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+@api_router.post("/claims")
+async def create_claim(claim_data: ClaimCreate, current_user: User = Depends(get_current_user)):
+    """Create a new claim (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage claims")
+    data = claim_data.model_dump()
+    if not data.get("claim_number"):
+        data.pop("claim_number", None)
+    claim = Claim(**data)
+    claim.created_by = current_user.id
+    doc = claim.model_dump()
+    doc['created_at'] = datetime.now(timezone.utc).isoformat()
+    await db.claims.insert_one(doc)
+    result = await db.claims.find_one({"id": claim.id}, {"_id": 0})
+    return result
+
+
+@api_router.get("/claims")
+async def get_claims(
+    policy_number: Optional[str] = None,
+    status: Optional[str] = None,
+    policy_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all claims (filtered optionally)"""
+    query = {}
+    if policy_number:
+        query["policy_number"] = policy_number
+    if status:
+        query["status"] = status
+    if policy_type:
+        query["policy_type"] = policy_type
+    claims = await db.claims.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return claims
+
+
+@api_router.get("/claims/{claim_id}")
+async def get_claim(claim_id: str, current_user: User = Depends(get_current_user)):
+    """Get a single claim by ID"""
+    claim = await db.claims.find_one({"id": claim_id}, {"_id": 0})
+    if not claim:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return claim
+
+
+@api_router.put("/claims/{claim_id}")
+async def update_claim(claim_id: str, claim_data: ClaimCreate, current_user: User = Depends(get_current_user)):
+    """Update a claim (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage claims")
+    existing = await db.claims.find_one({"id": claim_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    update_data = claim_data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.claims.update_one({"id": claim_id}, {"$set": update_data})
+    updated = await db.claims.find_one({"id": claim_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/claims/{claim_id}")
+async def delete_claim(claim_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a claim (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage claims")
+    result = await db.claims.delete_one({"id": claim_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Claim not found")
+    return {"message": "Claim deleted"}
+
+
+@api_router.get("/claims-analytics")
+async def get_claims_analytics(
+    policy_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get claims analytics for dashboard"""
+    query = {}
+    if policy_type:
+        query["policy_type"] = policy_type
+
+    claims = await db.claims.find(query, {"_id": 0}).to_list(10000)
+
+    total_claims = len(claims)
+    total_claimed = sum(c.get("claimed_amount", 0) for c in claims)
+    total_approved = sum(c.get("approved_amount", 0) for c in claims)
+    total_settled = sum(c.get("settled_amount", 0) for c in claims)
+
+    status_counts = {}
+    type_counts = {}
+    monthly_data = {}
+
+    for c in claims:
+        st = c.get("status", "Unknown")
+        status_counts[st] = status_counts.get(st, 0) + 1
+
+        ct = c.get("claim_type", "Unknown")
+        type_counts[ct] = type_counts.get(ct, 0) + 1
+
+        created = c.get("created_at", "")
+        if created and len(created) >= 7:
+            month_key = created[:7]
+            if month_key not in monthly_data:
+                monthly_data[month_key] = {"month": month_key, "count": 0, "amount": 0}
+            monthly_data[month_key]["count"] += 1
+            monthly_data[month_key]["amount"] += c.get("claimed_amount", 0)
+
+    return {
+        "total_claims": total_claims,
+        "total_claimed_amount": round(total_claimed, 2),
+        "total_approved_amount": round(total_approved, 2),
+        "total_settled_amount": round(total_settled, 2),
+        "settlement_ratio": round((total_settled / total_claimed * 100) if total_claimed > 0 else 0, 1),
+        "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
+        "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
+        "monthly_trend": sorted(monthly_data.values(), key=lambda x: x["month"]),
+    }
+
+
+@api_router.get("/policies-analytics")
+async def get_policies_analytics(current_user: User = Depends(get_current_user)):
+    """Get policy analytics for HR dashboard"""
+    policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
+
+    total_policies = len(policies)
+    active_count = sum(1 for p in policies if p.get("status") == "Active")
+    expired_count = sum(1 for p in policies if p.get("status") == "Expired")
+    total_lives = sum(p.get("total_lives_covered", 0) for p in policies)
+    total_premium = sum(p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0) for p in policies)
+
+    by_type = {}
+    for p in policies:
+        pt = p.get("policy_type", "Unknown")
+        if pt not in by_type:
+            by_type[pt] = {"count": 0, "lives": 0, "premium": 0}
+        by_type[pt]["count"] += 1
+        by_type[pt]["lives"] += p.get("total_lives_covered", 0)
+        by_type[pt]["premium"] += p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)
+
+    type_breakdown = [
+        {"name": k, "count": v["count"], "lives": v["lives"], "premium": round(v["premium"], 2)}
+        for k, v in by_type.items()
+    ]
+
+    return {
+        "total_policies": total_policies,
+        "active_policies": active_count,
+        "expired_policies": expired_count,
+        "total_lives_covered": total_lives,
+        "total_annual_premium": round(total_premium, 2),
+        "type_breakdown": type_breakdown,
+        "policies": [{
+            "policy_number": p.get("policy_number"),
+            "policy_holder_name": p.get("policy_holder_name"),
+            "policy_type": p.get("policy_type"),
+            "status": p.get("status"),
+            "inception_date": p.get("inception_date"),
+            "expiry_date": p.get("expiry_date"),
+            "total_lives_covered": p.get("total_lives_covered", 0),
+            "annual_premium_per_life": p.get("annual_premium_per_life", 0),
+        } for p in policies],
+    }
+
+
 @app.on_event("startup")
 async def startup_storage():
     try:

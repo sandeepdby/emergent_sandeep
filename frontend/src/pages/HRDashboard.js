@@ -1,19 +1,23 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard } from "lucide-react";
+import { LogOut, User, FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck } from "lucide-react";
 import { AuthContext } from "../auth";
 import HRSummary from "./HRSummary";
 import SubmitEndorsement from "./SubmitEndorsement";
 import MyEndorsements from "./MyEndorsements";
 import ImportEndorsements from "./ImportEndorsements";
 import CloudStorage from "./CloudStorage";
+import HRPoliciesDashboard from "./HRPoliciesDashboard";
+import HRClaimsDashboard from "./HRClaimsDashboard";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
   
   const navItems = [
     { path: "/hr/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/hr/policies", label: "Policies", icon: Shield },
+    { path: "/hr/claims", label: "Claims", icon: FileCheck },
     { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
     { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
     { path: "/hr/import", label: "Import Excel", icon: FileSpreadsheet },
@@ -85,6 +89,8 @@ class HRDashboard extends React.Component {
         <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
           <Routes>
             <Route path="/dashboard" element={<HRSummary />} />
+            <Route path="/policies" element={<HRPoliciesDashboard />} />
+            <Route path="/claims" element={<HRClaimsDashboard />} />
             <Route path="/submit" element={<SubmitEndorsement />} />
             <Route path="/my-endorsements" element={<MyEndorsements />} />
             <Route path="/import" element={<ImportEndorsements />} />
