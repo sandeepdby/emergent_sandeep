@@ -29,11 +29,11 @@ export default function ClaimsManagement() {
   const [saving, setSaving] = useState(false);
 
   const token = localStorage.getItem("token");
-  const headers = { Authorization: `Bearer ${token}` };
 
   const fetchClaims = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/claims`, { headers });
+      const authHeaders = { Authorization: `Bearer ${localStorage.getItem("token")}` };
+      const res = await axios.get(`${API}/claims`, { headers: authHeaders });
       setClaims(res.data);
     } catch (err) {
       console.error(err);
@@ -79,6 +79,7 @@ export default function ClaimsManagement() {
     }
     setSaving(true);
     try {
+      const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
       const payload = {
         ...form,
         claimed_amount: parseFloat(form.claimed_amount) || 0,
@@ -104,6 +105,7 @@ export default function ClaimsManagement() {
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this claim?")) return;
     try {
+      const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
       await axios.delete(`${API}/claims/${id}`, { headers });
       toast.success("Claim deleted");
       fetchClaims();

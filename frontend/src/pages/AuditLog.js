@@ -33,16 +33,16 @@ export default function AuditLog() {
   const [filters, setFilters] = useState({ action: "", resource: "", username: "" });
 
   const token = localStorage.getItem("token");
-  const headers = { Authorization: `Bearer ${token}` };
 
   const fetchLog = useCallback(async () => {
     try {
       setLoading(true);
+      const authHeaders = { Authorization: `Bearer ${localStorage.getItem("token")}` };
       const params = { page, limit: 30 };
       if (filters.action) params.action = filters.action;
       if (filters.resource) params.resource = filters.resource;
       if (filters.username) params.username = filters.username;
-      const res = await axios.get(`${API}/audit-log`, { headers, params });
+      const res = await axios.get(`${API}/audit-log`, { headers: authHeaders, params });
       setEntries(res.data.entries);
       setTotalPages(res.data.pages);
       setTotal(res.data.total);
