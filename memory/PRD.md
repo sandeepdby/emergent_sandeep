@@ -111,6 +111,22 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Backend: password_hash properly excluded from user list response
 - [x] Health check endpoint added (GET /api/health) for deployment monitoring
 
+### Session 15 - Pricing/Contact Page & Deployment Fixes (April 2026)
+- [x] Landing Page Pricing section: 3 plan cards (Starter Free, Professional ₹4,999/mo, Enterprise Custom)
+- [x] Landing Page Contact form: Full Name, Email, Phone, Company, Message with success state
+- [x] POST /api/contact endpoint saves to contact_leads collection + sends email notification to ks@aarogya-assist.com
+- [x] Deployment fixes: CI=true ESLint compliance, pruned requirements.txt, fixed .gitignore, nested git repo removed
+
+### Session 16 - Parent Restriction Rule (April 2026)
+- [x] Parents (Father/Mother) NOT allowed for mid-term Addition or Deletion endorsements
+- [x] Backend: POST /api/endorsements returns 400 for Father/Mother + Addition/Deletion combos
+- [x] Backend: Excel preview endpoint flags parent-restricted rows with parent_restricted=true
+- [x] Backend: Excel import endpoint skips parent-restricted rows and adds to errors
+- [x] Frontend SubmitEndorsement: Relationship dropdown hides Father/Mother when Addition or Deletion is selected
+- [x] Frontend SubmitEndorsement: Warning text shown below dropdown for Addition/Deletion
+- [x] Frontend ImportEndorsements: Preview table highlights restricted rows in amber with "(Blocked)" label
+- [x] Father/Mother still allowed for Correction and Midterm addition
+
 ## API Endpoints
 
 ### Auth
@@ -172,7 +188,5 @@ Build a comprehensive health insurance endorsement management system with:
 
 ## Future/Backlog Tasks
 - P1: SMS notifications via Twilio
-- P2: Pricing/contact page for lead generation
-- P2: Audit log for all user actions
 - P2: WhatsApp Business API for automated messages
-- P3: Backend refactoring (server.py modularization)
+- P3: Backend refactoring (server.py ~3400 lines — modularize into routes/, models/, services/)
