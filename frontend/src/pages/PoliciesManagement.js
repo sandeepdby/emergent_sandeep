@@ -10,13 +10,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, Loader2, UserCheck } from "lucide-react";
 
 const PoliciesPage = () => {
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState(null);
+  const [hrUsers, setHrUsers] = useState([]);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assigningPolicy, setAssigningPolicy] = useState(null);
+  const [selectedHrForAssign, setSelectedHrForAssign] = useState("");
+  const [assignLoading, setAssignLoading] = useState(false);
   const [formData, setFormData] = useState({
     policy_number: "",
     policy_holder_name: "",
@@ -35,6 +40,7 @@ const PoliciesPage = () => {
 
   useEffect(() => {
     fetchPolicies();
+    fetchHrUsers();
   }, []);
 
   const fetchPolicies = async () => {
@@ -50,6 +56,36 @@ const PoliciesPage = () => {
       toast.error("Failed to fetch policies");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchHrUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${API}/users/hr`, { headers: { Authorization: `Bearer ${token}` } });
+      setHrUsers(res.data);
+    } catch (err) {
+      console.error("Failed to fetch HR users:", err);
+    }
+  };
+
+  const handleQuickAssign = async () => {
+    if (!selectedHrForAssign || !assigningPolicy) return;
+    setAssignLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${API}/policy-assignments`, {
+        policy_id: assigningPolicy.id,
+        hr_user_id: selectedHrForAssign,
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success(`Policy "${assigningPolicy.policy_number}" assigned successfully`);
+      setAssignDialogOpen(false);
+      setAssigningPolicy(null);
+      setSelectedHrForAssign("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to assign policy");
+    } finally {
+      setAssignLoading(false);
     }
   };
 
@@ -213,6 +249,9 @@ const PoliciesPage = () => {
                         <Badge variant={policy.status === "Active" ? "default" : "secondary"}>{policy.status}</Badge>
                       </TableCell>
                       <TableCell className="text-xs text-right">
+                        <Button variant="ghost" size="sm" onClick={() => { setAssigningPolicy(policy); setAssignDialogOpen(true); }} data-testid={`assign-policy-${policy.policy_number}`} title="Assign to HR">
+                          <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(policy)} data-testid={`edit-policy-${policy.policy_number}`}>
                           <Edit className="w-3.5 h-3.5" />
                         </Button>
@@ -346,6 +385,37 @@ const PoliciesPage = () => {
               <Button type="submit" data-testid="save-policy-button">{editingPolicy ? "Update" : "Create"}</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Assign Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={(open) => { setAssignDialogOpen(open); if (!open) { setAssigningPolicy(null); setSelectedHrForAssign(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Assign Policy to HR</DialogTitle>
+            <DialogDescription>
+              Assign <strong>{assigningPolicy?.policy_number}</strong> to an HR user
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Select HR User</Label>
+              <Select value={selectedHrForAssign} onValueChange={setSelectedHrForAssign}>
+                <SelectTrigger data-testid="quick-assign-hr-select"><SelectValue placeholder="Choose HR user..." /></SelectTrigger>
+                <SelectContent>
+                  {hrUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.full_name} ({u.email})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleQuickAssign} disabled={assignLoading || !selectedHrForAssign} data-testid="quick-assign-confirm-btn">
+              {assignLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -8,7 +8,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://insurehub-dashboard.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://insurehub-portal.preview.emergentagent.com')
 
 # Test credentials
 HR_USER = {"username": "hruser1", "password": "hr123456"}

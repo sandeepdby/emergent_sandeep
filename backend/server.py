@@ -372,6 +372,25 @@ class CDLedgerEntry(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+# Policy Assignment Models
+class PolicyAssignmentCreate(BaseModel):
+    policy_id: str
+    hr_user_id: str
+
+
+class PolicyAssignment(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    policy_id: str
+    policy_number: str
+    hr_user_id: str
+    hr_username: str
+    hr_full_name: str
+    assigned_by: str
+    assigned_by_name: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 # Helper Functions
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
@@ -409,6 +428,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user['created_at'] = datetime.fromisoformat(user['created_at'])
     
     return User(**user)
+
+
+async def get_hr_assigned_policy_numbers(hr_user_id: str) -> list:
+    """Get list of policy_numbers assigned to an HR user. Returns empty list if none assigned."""
+    assignments = await db.policy_assignments.find(
+        {"hr_user_id": hr_user_id}, {"_id": 0, "policy_number": 1}
+    ).to_list(1000)
+    return [a["policy_number"] for a in assignments]
 
 
 def calculate_prorata_premium(
@@ -1083,8 +1110,14 @@ async def create_policy(policy_data: PolicyCreate, current_user: User = Depends(
 
 @api_router.get("/policies")
 async def get_policies(current_user: User = Depends(get_current_user)):
-    """Get all policies"""
-    policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
+    """Get all policies (HR users see only assigned policies)"""
+    query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        query["policy_number"] = {"$in": assigned}
+    policies = await db.policies.find(query, {"_id": 0}).to_list(1000)
     return policies
 
 
@@ -1269,6 +1302,126 @@ async def generate_notification_content(request: AINotificationRequest, current_
         "success": True,
         "content": ai_content
     }
+
+
+# ==================== POLICY ASSIGNMENT ENDPOINTS ====================
+
+@api_router.post("/policy-assignments")
+async def assign_policy_to_hr(
+    data: PolicyAssignmentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Assign a policy to an HR user (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can assign policies")
+
+    policy = await db.policies.find_one({"id": data.policy_id}, {"_id": 0})
+    if not policy:
+        raise HTTPException(status_code=404, detail="Policy not found")
+
+    hr_user = await db.users.find_one({"id": data.hr_user_id, "role": "HR"}, {"_id": 0})
+    if not hr_user:
+        raise HTTPException(status_code=404, detail="HR user not found")
+
+    existing = await db.policy_assignments.find_one(
+        {"policy_id": data.policy_id, "hr_user_id": data.hr_user_id}, {"_id": 0}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Policy already assigned to this HR user")
+
+    assignment = PolicyAssignment(
+        policy_id=data.policy_id,
+        policy_number=policy["policy_number"],
+        hr_user_id=data.hr_user_id,
+        hr_username=hr_user["username"],
+        hr_full_name=hr_user["full_name"],
+        assigned_by=current_user.id,
+        assigned_by_name=current_user.full_name,
+    )
+    doc = assignment.model_dump()
+    await db.policy_assignments.insert_one(doc)
+    result = await db.policy_assignments.find_one({"id": assignment.id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "ASSIGN_POLICY", "policy_assignment", assignment.id, f"Assigned policy {policy['policy_number']} to HR {hr_user['username']}")
+    return result
+
+
+@api_router.get("/policy-assignments")
+async def get_policy_assignments(
+    hr_user_id: Optional[str] = None,
+    policy_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get policy assignments. Admin sees all, HR sees own."""
+    query = {}
+    if current_user.role == UserRole.HR:
+        query["hr_user_id"] = current_user.id
+    else:
+        if hr_user_id:
+            query["hr_user_id"] = hr_user_id
+        if policy_id:
+            query["policy_id"] = policy_id
+    assignments = await db.policy_assignments.find(query, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return assignments
+
+
+@api_router.delete("/policy-assignments/{assignment_id}")
+async def revoke_policy_assignment(
+    assignment_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Revoke a policy assignment (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can revoke assignments")
+
+    assignment = await db.policy_assignments.find_one({"id": assignment_id}, {"_id": 0})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    await db.policy_assignments.delete_one({"id": assignment_id})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "REVOKE_POLICY", "policy_assignment", assignment_id, f"Revoked policy {assignment['policy_number']} from HR {assignment['hr_username']}")
+    return {"message": "Policy assignment revoked successfully"}
+
+
+@api_router.post("/policy-assignments/bulk")
+async def bulk_assign_policies(
+    assignments: List[PolicyAssignmentCreate],
+    current_user: User = Depends(get_current_user)
+):
+    """Bulk assign multiple policies to HR users (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can assign policies")
+
+    results = []
+    for data in assignments:
+        policy = await db.policies.find_one({"id": data.policy_id}, {"_id": 0})
+        if not policy:
+            results.append({"policy_id": data.policy_id, "status": "error", "detail": "Policy not found"})
+            continue
+        hr_user = await db.users.find_one({"id": data.hr_user_id, "role": "HR"}, {"_id": 0})
+        if not hr_user:
+            results.append({"policy_id": data.policy_id, "status": "error", "detail": "HR user not found"})
+            continue
+        existing = await db.policy_assignments.find_one(
+            {"policy_id": data.policy_id, "hr_user_id": data.hr_user_id}, {"_id": 0}
+        )
+        if existing:
+            results.append({"policy_id": data.policy_id, "status": "skipped", "detail": "Already assigned"})
+            continue
+        assignment = PolicyAssignment(
+            policy_id=data.policy_id,
+            policy_number=policy["policy_number"],
+            hr_user_id=data.hr_user_id,
+            hr_username=hr_user["username"],
+            hr_full_name=hr_user["full_name"],
+            assigned_by=current_user.id,
+            assigned_by_name=current_user.full_name,
+        )
+        doc = assignment.model_dump()
+        await db.policy_assignments.insert_one(doc)
+        await log_audit(current_user.id, current_user.username, current_user.role.value, "ASSIGN_POLICY", "policy_assignment", assignment.id, f"Assigned policy {policy['policy_number']} to HR {hr_user['username']}")
+        results.append({"policy_id": data.policy_id, "hr_user_id": data.hr_user_id, "status": "assigned"})
+
+    return {"results": results}
 
 
 # ==================== ENDORSEMENT ENDPOINTS ====================
@@ -2956,8 +3109,13 @@ async def get_claims(
     policy_type: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get all claims (filtered optionally)"""
+    """Get all claims (HR users see only claims for assigned policies)"""
     query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        query["policy_number"] = {"$in": assigned}
     if policy_number:
         query["policy_number"] = policy_number
     if status:
@@ -3010,8 +3168,21 @@ async def get_claims_analytics(
     policy_type: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get claims analytics for dashboard"""
+    """Get claims analytics (HR sees only assigned policies' claims)"""
     query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return {
+                "total_claims": 0, "total_claimed_amount": 0, "total_approved_amount": 0,
+                "total_settled_amount": 0, "reimbursement_claims": 0, "reimbursement_count": 0,
+                "cashless_claims": 0, "cashless_count": 0, "rejected_claims": 0,
+                "rejected_count": 0, "under_process_claims": 0, "under_process_count": 0,
+                "total_premium": 0, "claims_ratio": 0, "renewal_expected_pricing": 0,
+                "settlement_ratio": 0, "status_distribution": [], "type_distribution": [],
+                "monthly_trend": []
+            }
+        query["policy_number"] = {"$in": assigned}
     if policy_type:
         query["policy_type"] = policy_type
 
@@ -3033,7 +3204,14 @@ async def get_claims_analytics(
     under_process_count = sum(1 for c in claims if c.get("status") == "In Process")
 
     # Get total premium from policies for claims ratio
-    policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
+    policy_query = {}
+    if current_user.role == UserRole.HR:
+        assigned_pn = await get_hr_assigned_policy_numbers(current_user.id)
+        if assigned_pn:
+            policy_query["policy_number"] = {"$in": assigned_pn}
+        else:
+            policy_query["policy_number"] = {"$in": []}
+    policies = await db.policies.find(policy_query, {"_id": 0}).to_list(1000)
     total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
 
     claims_ratio = round((total_claimed / total_premium * 100) if total_premium > 0 else 0, 1)
@@ -3083,8 +3261,19 @@ async def get_claims_analytics(
 
 @api_router.get("/policies-analytics")
 async def get_policies_analytics(current_user: User = Depends(get_current_user)):
-    """Get policy analytics for HR dashboard"""
-    policies = await db.policies.find({}, {"_id": 0}).to_list(1000)
+    """Get policy analytics (HR sees only assigned policies)"""
+    query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return {
+                "total_policies": 0, "active_policies": 0, "expired_policies": 0,
+                "total_employees": 0, "total_spouse": 0, "total_kids": 0, "total_parents": 0,
+                "total_lives": 0, "total_premium": 0, "total_addition_lives": 0,
+                "total_deletion_lives": 0, "type_breakdown": [], "policies": []
+            }
+        query["policy_number"] = {"$in": assigned}
+    policies = await db.policies.find(query, {"_id": 0}).to_list(1000)
 
     total_policies = len(policies)
     active_count = sum(1 for p in policies if p.get("status") == "Active")
