@@ -1309,6 +1309,7 @@ async def generate_notification_content(request: AINotificationRequest, current_
 @api_router.post("/policy-assignments")
 async def assign_policy_to_hr(
     data: PolicyAssignmentCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
     """Assign a policy to an HR user (Admin only)"""
@@ -1342,6 +1343,31 @@ async def assign_policy_to_hr(
     await db.policy_assignments.insert_one(doc)
     result = await db.policy_assignments.find_one({"id": assignment.id}, {"_id": 0})
     await log_audit(current_user.id, current_user.username, current_user.role.value, "ASSIGN_POLICY", "policy_assignment", assignment.id, f"Assigned policy {policy['policy_number']} to HR {hr_user['username']}")
+
+    # Send email notification to HR user
+    hr_email = hr_user.get("email")
+    if hr_email:
+        subject = f"Policy Assigned - {policy['policy_number']} | InsureHub"
+        body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+                <h2 style="color: white; margin: 0;">Policy Assigned to You</h2>
+            </div>
+            <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
+                <p style="color: #334155;">Hi <strong>{hr_user['full_name']}</strong>,</p>
+                <p style="color: #475569;">A new policy has been assigned to you on InsureHub. You can now view the policy details and claims.</p>
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                    <p style="margin: 5px 0;"><strong>Policy Number:</strong> {policy['policy_number']}</p>
+                    <p style="margin: 5px 0;"><strong>Policy Holder:</strong> {policy.get('policy_holder_name', 'N/A')}</p>
+                    <p style="margin: 5px 0;"><strong>Policy Type:</strong> {policy.get('policy_type', 'N/A')}</p>
+                    <p style="margin: 5px 0;"><strong>Status:</strong> {policy.get('status', 'N/A')}</p>
+                    <p style="margin: 5px 0;"><strong>Assigned By:</strong> {current_user.full_name}</p>
+                </div>
+                <p style="color: #64748b; font-size: 13px;">Log in to InsureHub to view the full policy details, claims, and analytics.</p>
+            </div>
+        </div>"""
+        background_tasks.add_task(send_email_notification, [hr_email], subject, body)
+
     return result
 
 
@@ -1385,6 +1411,7 @@ async def revoke_policy_assignment(
 @api_router.post("/policy-assignments/bulk")
 async def bulk_assign_policies(
     assignments: List[PolicyAssignmentCreate],
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user)
 ):
     """Bulk assign multiple policies to HR users (Admin only)"""
@@ -1392,6 +1419,8 @@ async def bulk_assign_policies(
         raise HTTPException(status_code=403, detail="Only admins can assign policies")
 
     results = []
+    # Track newly assigned policies per HR for email notifications
+    hr_notifications = {}
     for data in assignments:
         policy = await db.policies.find_one({"id": data.policy_id}, {"_id": 0})
         if not policy:
@@ -1420,6 +1449,58 @@ async def bulk_assign_policies(
         await db.policy_assignments.insert_one(doc)
         await log_audit(current_user.id, current_user.username, current_user.role.value, "ASSIGN_POLICY", "policy_assignment", assignment.id, f"Assigned policy {policy['policy_number']} to HR {hr_user['username']}")
         results.append({"policy_id": data.policy_id, "hr_user_id": data.hr_user_id, "status": "assigned"})
+
+        # Collect for email notification
+        hr_email = hr_user.get("email")
+        if hr_email:
+            if data.hr_user_id not in hr_notifications:
+                hr_notifications[data.hr_user_id] = {
+                    "email": hr_email,
+                    "full_name": hr_user["full_name"],
+                    "policies": [],
+                }
+            hr_notifications[data.hr_user_id]["policies"].append({
+                "policy_number": policy["policy_number"],
+                "policy_holder_name": policy.get("policy_holder_name", "N/A"),
+                "policy_type": policy.get("policy_type", "N/A"),
+                "status": policy.get("status", "N/A"),
+            })
+
+    # Send one email per HR user with all newly assigned policies
+    for hr_id, info in hr_notifications.items():
+        policy_rows = ""
+        for p in info["policies"]:
+            policy_rows += f"""<tr>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{p['policy_number']}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['policy_holder_name']}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['policy_type']}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['status']}</td>
+            </tr>"""
+        count = len(info["policies"])
+        subject = f"{count} {'Policy' if count == 1 else 'Policies'} Assigned to You | InsureHub"
+        body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+                <h2 style="color: white; margin: 0;">{count} {'Policy' if count == 1 else 'Policies'} Assigned to You</h2>
+            </div>
+            <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
+                <p style="color: #334155;">Hi <strong>{info['full_name']}</strong>,</p>
+                <p style="color: #475569;">The following {'policy has' if count == 1 else 'policies have'} been assigned to you on InsureHub by <strong>{current_user.full_name}</strong>.</p>
+                <table style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #e2e8f0; border-radius: 6px; margin: 16px 0;">
+                    <thead>
+                        <tr style="background: #f1f5f9;">
+                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Policy #</th>
+                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Holder</th>
+                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Type</th>
+                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>{policy_rows}</tbody>
+                </table>
+                <p style="color: #64748b; font-size: 13px;">Log in to InsureHub to view full policy details, claims, and analytics.</p>
+            </div>
+        </div>"""
+        background_tasks.add_task(send_email_notification, [info["email"]], subject, body)
 
     return {"results": results}
 

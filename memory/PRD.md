@@ -141,6 +141,8 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Audit logging for ASSIGN_POLICY and REVOKE_POLICY actions
 - [x] Backend: PolicyAssignment model, CRUD endpoints, get_hr_assigned_policy_numbers helper
 - [x] Backend: Modified GET /api/policies, /api/claims, /api/policies-analytics, /api/claims-analytics to filter for HR
+- [x] Email notification sent to HR user when policy is assigned (single and bulk assign)
+- [x] Bulk assign sends one consolidated email per HR user listing all newly assigned policies
 
 ## API Endpoints
 
