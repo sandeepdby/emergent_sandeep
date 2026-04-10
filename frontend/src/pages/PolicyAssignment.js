@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Loader2, Link2, UserCheck, Shield, Plus, Users } from "lucide-react";
 import AssignmentTable from "./AssignmentTable";
@@ -191,6 +191,7 @@ export default function PolicyAssignment() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Assign Policies to HR User</DialogTitle>
+            <DialogDescription>Select an HR user and policies to assign. HR can only view assigned policies.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

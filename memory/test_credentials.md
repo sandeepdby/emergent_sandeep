@@ -6,9 +6,8 @@
 - Email: sandeepdby@gmail.com
 
 ## Admin
-- Username: `admin`
+- Username: `admin@insurehub.com`
 - Password: `admin123`
-- Email: admin@insurehub.com
 
 ## HR User
 - Username: `hruser1`

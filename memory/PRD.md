@@ -127,6 +127,21 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Frontend SubmitEndorsement: Warning text shown below dropdown for Midterm addition
 - [x] Frontend ImportEndorsements: Preview table highlights restricted rows in amber with "(Blocked)" label
 
+### Session 17 - Policy Assignment to HR (April 2026)
+- [x] Admin/Master Admin can assign policies to specific HR users
+- [x] Same policy can be assigned to multiple HR users
+- [x] Dedicated "Assign Policies" page in Admin portal with stats cards and grouped assignment table
+- [x] Quick "Assign to HR" button on each policy row in Policies Management page
+- [x] HR users can only see assigned policies in Policies tab (filtered view)
+- [x] HR users can only see claims for assigned policies in Claims tab (filtered view)
+- [x] HR Policies Analytics and Claims Analytics filtered by assigned policies
+- [x] Admin can revoke policy assignments
+- [x] Duplicate assignment prevention (400 error)
+- [x] Bulk assignment support (POST /api/policy-assignments/bulk)
+- [x] Audit logging for ASSIGN_POLICY and REVOKE_POLICY actions
+- [x] Backend: PolicyAssignment model, CRUD endpoints, get_hr_assigned_policy_numbers helper
+- [x] Backend: Modified GET /api/policies, /api/claims, /api/policies-analytics, /api/claims-analytics to filter for HR
+
 ## API Endpoints
 
 ### Auth
@@ -153,6 +168,12 @@ Build a comprehensive health insurance endorsement management system with:
 
 ### Policies
 - CRUD at /api/policies
+
+### Policy Assignments
+- POST /api/policy-assignments - Assign policy to HR (Admin only)
+- GET /api/policy-assignments - List assignments (Admin=all, HR=own)
+- DELETE /api/policy-assignments/{id} - Revoke assignment (Admin only)
+- POST /api/policy-assignments/bulk - Bulk assign multiple policies
 
 ### CD Ledger
 - GET /api/cd-ledger - List entries with running balance
@@ -185,6 +206,7 @@ Build a comprehensive health insurance endorsement management system with:
 - `cd_ledger`: id, date, reference, description, amount, entry_type, endorsement_id, ...
 - `documents`: id, storage_path, original_filename, category, uploaded_by, is_deleted, ...
 - `claims`: id, claim_number, policy_number, employee_name, patient_name, relationship, claim_type, diagnosis, hospital_name, admission_date, discharge_date, claimed_amount, approved_amount, settled_amount, status, policy_type, created_by, ...
+- `policy_assignments`: id, policy_id, policy_number, hr_user_id, hr_username, hr_full_name, assigned_by, assigned_by_name, created_at
 
 ## Future/Backlog Tasks
 - P1: SMS notifications via Twilio
