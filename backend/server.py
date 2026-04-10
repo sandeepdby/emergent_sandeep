@@ -870,6 +870,51 @@ async def health_check():
     return {"status": "healthy", "service": "insurehub-api"}
 
 
+class ContactForm(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    message: str
+
+
+@api_router.post("/contact")
+async def submit_contact(form: ContactForm):
+    """Save contact form submission and send email notification"""
+    entry = {
+        "id": str(uuid.uuid4()),
+        "name": form.name,
+        "email": form.email,
+        "phone": form.phone,
+        "company": form.company,
+        "message": form.message,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.contact_leads.insert_one(entry)
+
+    # Try to send notification email to admin
+    try:
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASS")
+        if smtp_host and smtp_user and smtp_pass:
+            subject = f"New Contact Lead: {form.name} ({form.company or 'N/A'})"
+            body = f"Name: {form.name}\nEmail: {form.email}\nPhone: {form.phone or 'N/A'}\nCompany: {form.company or 'N/A'}\n\nMessage:\n{form.message}"
+            msg = MIMEMultipart()
+            msg['From'] = smtp_user
+            msg['To'] = "ks@aarogya-assist.com"
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            smtp_port = int(os.environ.get("SMTP_PORT", 465))
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+    except Exception as e:
+        logging.error(f"Failed to send contact notification: {e}")
+
+    return {"message": "Thank you! We'll get back to you shortly."}
+
+
 @app.get("/health")
 async def app_health_check():
     """Root-level health check endpoint"""
@@ -1235,6 +1280,14 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {endorsement_data.policy_number} not found")
     
+    # Parents not allowed for midterm Addition or Deletion
+    if endorsement_data.relationship_type in [RelationshipType.FATHER, RelationshipType.MOTHER]:
+        if endorsement_data.endorsement_type in [EndorsementType.ADDITION, EndorsementType.DELETION]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Parents ({endorsement_data.relationship_type.value}) are not allowed for mid-term {endorsement_data.endorsement_type.value}. Only Correction or Midterm addition is permitted for parents."
+            )
+    
     # 45-day backdating validation for DOJ and DOL
     today = date.today()
     min_allowed_date = today - __import__('datetime').timedelta(days=45)
@@ -1473,6 +1526,13 @@ async def preview_excel_import(
                         if inc and exp:
                             _, _, _, prorata_premium = calculate_prorata_premium(inc, exp, endorsement_date, annual_premium, endorsement_type)
                 
+                # Check parent midterm restriction
+                parent_restricted = False
+                parent_warning = ""
+                if relationship_type in ["Father", "Mother"] and endorsement_type in ["Addition", "Deletion"]:
+                    parent_restricted = True
+                    parent_warning = f"Parents ({relationship_type}) not allowed for mid-term {endorsement_type}"
+                
                 preview_rows.append({
                     "row_num": index + 2,
                     "policy_number": policy_number,
@@ -1488,15 +1548,19 @@ async def preview_excel_import(
                     "annual_premium_per_life": annual_premium,
                     "prorata_premium": prorata_premium,
                     "policy_exists": policy is not None,
-                    "remarks": str(row.get('remarks', '')).strip() if pd.notna(row.get('remarks')) else ''
+                    "remarks": str(row.get('remarks', '')).strip() if pd.notna(row.get('remarks')) else '',
+                    "parent_restricted": parent_restricted,
+                    "parent_warning": parent_warning
                 })
             except Exception as e:
                 errors.append({"row": index + 2, "error": str(e)})
         
+        restricted_count = sum(1 for r in preview_rows if r.get("parent_restricted"))
         return {
             "total_rows": len(df),
             "valid_rows": len(preview_rows),
             "error_count": len(errors),
+            "restricted_count": restricted_count,
             "rows": preview_rows,
             "errors": errors
         }
@@ -1975,6 +2039,16 @@ async def import_endorsements_from_excel(
                     })
                     error_count += 1
                     continue
+                
+                # Parents not allowed for midterm Addition or Deletion
+                if relationship_type in [RelationshipType.FATHER, RelationshipType.MOTHER]:
+                    if endorsement_type in [EndorsementType.ADDITION, EndorsementType.DELETION]:
+                        errors.append({
+                            "row": index + 2,
+                            "error": f"Parents ({relationship_type.value}) not allowed for mid-term {endorsement_type.value}"
+                        })
+                        error_count += 1
+                        continue
                 
                 # Parse date of joining
                 date_of_joining = None

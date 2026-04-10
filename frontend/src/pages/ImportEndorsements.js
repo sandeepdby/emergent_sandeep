@@ -7,7 +7,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, FileText, Eye, ArrowLeft } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2, FileText, Eye, ArrowLeft, AlertTriangle } from "lucide-react";
 
 class ImportEndorsements extends React.Component {
   constructor(props) {
@@ -151,6 +151,8 @@ class ImportEndorsements extends React.Component {
     const { previewData } = this.state;
     if (!previewData) return null;
     const { rows, errors } = previewData;
+    const restrictedRows = rows.filter(r => r.parent_restricted);
+    const validRows = rows.filter(r => !r.parent_restricted);
 
     return (
       <Card>
@@ -158,20 +160,26 @@ class ImportEndorsements extends React.Component {
           <div>
             <CardTitle>Review Import Data</CardTitle>
             <CardDescription>
-              {rows.length} valid rows, {errors.length} errors — Review before final submission
+              {validRows.length} valid rows, {restrictedRows.length > 0 ? `${restrictedRows.length} restricted (parent rule), ` : ''}{errors.length} errors — Review before final submission
             </CardDescription>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => this.setState({ step: "upload", previewData: null })} data-testid="back-to-upload-btn">
               <ArrowLeft className="w-4 h-4 mr-1" /> Back
             </Button>
-            <Button onClick={this.handleConfirmImport} disabled={this.state.uploading || rows.length === 0} data-testid="confirm-import-btn" className="bg-green-600 hover:bg-green-700">
+            <Button onClick={this.handleConfirmImport} disabled={this.state.uploading || validRows.length === 0} data-testid="confirm-import-btn" className="bg-green-600 hover:bg-green-700">
               {this.state.uploading ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <CheckCircle className="w-4 h-4 mr-1" />}
-              {this.state.uploading ? "Importing..." : `Confirm Import (${rows.length} rows)`}
+              {this.state.uploading ? "Importing..." : `Confirm Import (${validRows.length} rows)`}
             </Button>
           </div>
         </CardHeader>
         <CardContent>
+          {restrictedRows.length > 0 && (
+            <div className="mb-4 bg-amber-50 border border-amber-300 rounded-lg p-3" data-testid="parent-restriction-banner">
+              <h4 className="font-semibold text-amber-700 mb-1 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Parent Restriction ({restrictedRows.length} rows)</h4>
+              <p className="text-sm text-amber-600">Parents (Father/Mother) are not allowed for mid-term Addition or Deletion. These rows will be skipped during import.</p>
+            </div>
+          )}
           {errors.length > 0 && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
               <h4 className="font-semibold text-red-700 mb-1">Errors ({errors.length})</h4>
@@ -192,27 +200,36 @@ class ImportEndorsements extends React.Component {
                   <TableHead className="text-xs">Type</TableHead>
                   <TableHead className="text-xs text-right">Annual Premium</TableHead>
                   <TableHead className="text-xs text-right">Pro-rata Premium</TableHead>
-                  <TableHead className="text-xs">Policy Found</TableHead>
+                  <TableHead className="text-xs">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {rows.map((row, i) => (
-                  <TableRow key={i}>
+                  <TableRow key={i} className={row.parent_restricted ? "bg-amber-50/70" : ""} data-testid={row.parent_restricted ? `restricted-row-${row.row_num}` : undefined}>
                     <TableCell className="text-xs">{row.row_num}</TableCell>
                     <TableCell className="text-xs font-medium">{row.policy_number}</TableCell>
                     <TableCell className="text-xs">{row.member_name}</TableCell>
-                    <TableCell className="text-xs">{row.relationship_type}</TableCell>
                     <TableCell className="text-xs">
-                      <Badge variant={row.endorsement_type === "Addition" ? "default" : row.endorsement_type === "Deletion" ? "destructive" : "secondary"} className="text-xs">
+                      {row.relationship_type}
+                      {row.parent_restricted && <span className="ml-1 text-amber-600 text-[10px] font-semibold">(Blocked)</span>}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <Badge variant={row.endorsement_type === "Addition" ? "default" : row.endorsement_type === "Deletion" ? "destructive" : "secondary"} className={`text-xs ${row.parent_restricted ? 'opacity-50' : ''}`}>
                         {row.endorsement_type}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-right">₹{row.annual_premium_per_life?.toLocaleString() || 0}</TableCell>
-                    <TableCell className={`text-xs text-right font-medium ${row.prorata_premium >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                      {row.prorata_premium >= 0 ? '+' : ''}₹{row.prorata_premium?.toLocaleString() || 0}
+                    <TableCell className={`text-xs text-right font-medium ${row.parent_restricted ? 'text-gray-400' : row.prorata_premium >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {row.parent_restricted ? '—' : `${row.prorata_premium >= 0 ? '+' : ''}₹${row.prorata_premium?.toLocaleString() || 0}`}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {row.policy_exists ? <CheckCircle className="w-4 h-4 text-green-500" /> : <XCircle className="w-4 h-4 text-amber-500" />}
+                      {row.parent_restricted ? (
+                        <span className="text-amber-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Restricted</span>
+                      ) : row.policy_exists ? (
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <XCircle className="w-4 h-4 text-amber-500" />
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

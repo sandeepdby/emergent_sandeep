@@ -81,12 +81,21 @@ export default function SubmitEndorsement() {
     if (formData.endorsement_type === "Midterm addition") {
       return all.filter(r => r !== "Employee");
     }
+    // Parents not allowed for Addition / Deletion
+    if (formData.endorsement_type === "Addition" || formData.endorsement_type === "Deletion") {
+      return all.filter(r => r !== "Mother" && r !== "Father");
+    }
     return all;
   }, [formData.endorsement_type, selectedPolicy]);
 
   // Reset relationship if it becomes invalid
   useEffect(() => {
     if (formData.endorsement_type === "Midterm addition" && formData.relationship_type === "Employee") {
+      setFormData(prev => ({ ...prev, relationship_type: "" }));
+    }
+    // Parents not allowed for Addition / Deletion
+    if ((formData.endorsement_type === "Addition" || formData.endorsement_type === "Deletion") && 
+        (formData.relationship_type === "Father" || formData.relationship_type === "Mother")) {
       setFormData(prev => ({ ...prev, relationship_type: "" }));
     }
     // GPA/GTL: auto-set to Employee
@@ -279,6 +288,9 @@ export default function SubmitEndorsement() {
                 </Select>
                 {formData.endorsement_type === "Midterm addition" && (
                   <p className="text-xs text-amber-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> Employee not allowed for Midterm Addition</p>
+                )}
+                {(formData.endorsement_type === "Addition" || formData.endorsement_type === "Deletion") && (
+                  <p className="text-xs text-red-600 flex items-center gap-1" data-testid="parent-restriction-warning"><AlertCircle className="w-3 h-3" /> Parents (Father/Mother) not allowed for mid-term {formData.endorsement_type}</p>
                 )}
                 {selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL") && (
                   <p className="text-xs text-blue-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {selectedPolicy.policy_type} product: Employee only</p>

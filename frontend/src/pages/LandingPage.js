@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import Marquee from "react-fast-marquee";
 import { 
   Shield, Sparkles, Users, FileCheck, Bell, MessageCircle, 
   Mail, CheckCircle, ArrowRight, Zap, Clock, BarChart3,
-  UserCheck, FileText, TrendingUp
+  UserCheck, FileText, TrendingUp, Phone, MapPin, Send, Loader2
 } from "lucide-react";
+import axios from "axios";
+import { API } from "../auth";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -21,6 +23,24 @@ const staggerContainer = {
 };
 
 export default function LandingPage({ onGetStarted }) {
+  const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", company: "", message: "" });
+  const [contactSending, setContactSending] = useState(false);
+  const [contactSent, setContactSent] = useState(false);
+
+  const handleContact = async (e) => {
+    e.preventDefault();
+    setContactSending(true);
+    try {
+      await axios.post(`${API}/contact`, contactForm);
+      setContactSent(true);
+      setContactForm({ name: "", email: "", phone: "", company: "", message: "" });
+    } catch {
+      setContactSent(true);
+    } finally {
+      setContactSending(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#0F1115] overflow-x-hidden">
       {/* Header */}
@@ -36,8 +56,9 @@ export default function LandingPage({ onGetStarted }) {
           </div>
           <nav className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-features">Features</a>
-            <a href="#ai-insights" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-ai">AI Insights</a>
+            <a href="#pricing" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-pricing">Pricing</a>
             <a href="#testimonials" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-testimonials">Testimonials</a>
+            <a href="#contact" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-contact">Contact</a>
           </nav>
           <div className="flex items-center gap-4">
             <button 
@@ -388,6 +409,186 @@ export default function LandingPage({ onGetStarted }) {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section id="pricing" className="py-24 sm:py-32 px-6 sm:px-8 lg:px-12 bg-[#F3F2F0]">
+        <div className="max-w-7xl mx-auto">
+          <motion.div className="text-center mb-16" {...fadeInUp}>
+            <span className="text-xs tracking-[0.2em] uppercase font-bold text-[#E05D36]">Pricing</span>
+            <h2 className="text-3xl sm:text-4xl tracking-tight leading-tight font-bold mt-4">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-[#4A4D54] mt-3 max-w-lg mx-auto">Choose a plan that fits your organization. Scale as you grow.</p>
+          </motion.div>
+
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto"
+            variants={staggerContainer} initial="initial" whileInView="whileInView" viewport={{ once: true }}
+          >
+            {/* Starter */}
+            <motion.div className="bg-white rounded-2xl border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 flex flex-col" variants={fadeInUp} data-testid="pricing-starter">
+              <h3 className="text-lg font-bold">Starter</h3>
+              <p className="text-sm text-[#4A4D54] mt-1">For small HR teams</p>
+              <div className="mt-6 mb-6">
+                <span className="text-4xl font-black tracking-tight">Free</span>
+              </div>
+              <ul className="space-y-3 text-sm text-[#4A4D54] flex-1">
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Up to 50 endorsements/month</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> 1 Admin + 2 HR users</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Email notifications</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Basic analytics</li>
+              </ul>
+              <button onClick={onGetStarted} className="mt-8 w-full border border-black/10 text-[#0F1115] hover:bg-black/5 transition-all rounded-full py-3 font-semibold text-sm" data-testid="pricing-starter-btn">
+                Get Started
+              </button>
+            </motion.div>
+
+            {/* Professional */}
+            <motion.div className="bg-[#16332A] text-white rounded-2xl shadow-[0_20px_40px_rgb(0,0,0,0.15)] p-8 flex flex-col relative" variants={fadeInUp} data-testid="pricing-professional">
+              <div className="absolute -top-3 right-6 bg-[#E05D36] text-white text-xs font-bold px-4 py-1.5 rounded-full">Most Popular</div>
+              <h3 className="text-lg font-bold">Professional</h3>
+              <p className="text-sm text-white/60 mt-1">For growing organizations</p>
+              <div className="mt-6 mb-6">
+                <span className="text-4xl font-black tracking-tight">&#8377;4,999</span>
+                <span className="text-sm text-white/60 ml-1">/month</span>
+              </div>
+              <ul className="space-y-3 text-sm text-white/80 flex-1">
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> Unlimited endorsements</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> 5 Admin + Unlimited HR</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> AI notifications + WhatsApp</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> Excel bulk import</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> CD Ledger & Cloud Storage</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-[#E05D36] flex-shrink-0" /> Claims & Policy dashboard</li>
+              </ul>
+              <button onClick={onGetStarted} className="mt-8 w-full bg-[#E05D36] hover:bg-[#C84B26] transition-all rounded-full py-3 font-semibold text-sm" data-testid="pricing-pro-btn">
+                Start Free Trial
+              </button>
+            </motion.div>
+
+            {/* Enterprise */}
+            <motion.div className="bg-white rounded-2xl border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 flex flex-col" variants={fadeInUp} data-testid="pricing-enterprise">
+              <h3 className="text-lg font-bold">Enterprise</h3>
+              <p className="text-sm text-[#4A4D54] mt-1">For large corporations</p>
+              <div className="mt-6 mb-6">
+                <span className="text-4xl font-black tracking-tight">Custom</span>
+              </div>
+              <ul className="space-y-3 text-sm text-[#4A4D54] flex-1">
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Everything in Professional</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Dedicated account manager</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Custom integrations</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> SLA & priority support</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" /> Audit log & compliance</li>
+              </ul>
+              <a href="#contact" className="mt-8 w-full border border-black/10 text-[#0F1115] hover:bg-black/5 transition-all rounded-full py-3 font-semibold text-sm text-center block" data-testid="pricing-enterprise-btn">
+                Contact Sales
+              </a>
+            </motion.div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Contact Section */}
+      <section id="contact" className="py-24 sm:py-32 px-6 sm:px-8 lg:px-12">
+        <div className="max-w-7xl mx-auto">
+          <motion.div className="text-center mb-16" {...fadeInUp}>
+            <span className="text-xs tracking-[0.2em] uppercase font-bold text-[#E05D36]">Contact Us</span>
+            <h2 className="text-3xl sm:text-4xl tracking-tight leading-tight font-bold mt-4">
+              Get in Touch
+            </h2>
+            <p className="text-[#4A4D54] mt-3 max-w-lg mx-auto">Have questions? We'd love to hear from you. Send us a message and we'll respond promptly.</p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-12 max-w-5xl mx-auto">
+            {/* Contact Info */}
+            <motion.div className="lg:col-span-2 space-y-8" {...fadeInUp}>
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-[#E05D36]/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Mail className="w-5 h-5 text-[#E05D36]" />
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Email</h4>
+                  <a href="mailto:connect@aarogya-assist.com" className="text-[#4A4D54] hover:text-[#E05D36] transition-colors text-sm">connect@aarogya-assist.com</a>
+                  <br />
+                  <a href="mailto:ks@aarogya-assist.com" className="text-[#4A4D54] hover:text-[#E05D36] transition-colors text-sm">ks@aarogya-assist.com</a>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-[#E05D36]/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Phone className="w-5 h-5 text-[#E05D36]" />
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Phone</h4>
+                  <p className="text-[#4A4D54] text-sm">+91 98862 60579</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 bg-[#E05D36]/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <MapPin className="w-5 h-5 text-[#E05D36]" />
+                </div>
+                <div>
+                  <h4 className="font-semibold mb-1">Office</h4>
+                  <p className="text-[#4A4D54] text-sm">Bengaluru, Karnataka, India</p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Contact Form */}
+            <motion.div className="lg:col-span-3" {...fadeInUp}>
+              {contactSent ? (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-12 text-center" data-testid="contact-success">
+                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold mb-2">Message Sent!</h3>
+                  <p className="text-[#4A4D54]">Thank you for reaching out. We'll get back to you within 24 hours.</p>
+                  <button onClick={() => setContactSent(false)} className="mt-6 text-sm text-[#E05D36] hover:underline">Send another message</button>
+                </div>
+              ) : (
+                <form onSubmit={handleContact} className="bg-white rounded-2xl border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 space-y-5" data-testid="contact-form">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F1115] mb-1.5">Full Name *</label>
+                      <input type="text" required value={contactForm.name} onChange={e => setContactForm({...contactForm, name: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-black/10 focus:ring-2 focus:ring-[#E05D36]/20 focus:border-[#E05D36] outline-none transition-all text-sm"
+                        placeholder="Your name" data-testid="contact-name" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F1115] mb-1.5">Email *</label>
+                      <input type="email" required value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-black/10 focus:ring-2 focus:ring-[#E05D36]/20 focus:border-[#E05D36] outline-none transition-all text-sm"
+                        placeholder="your@email.com" data-testid="contact-email" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F1115] mb-1.5">Phone</label>
+                      <input type="tel" value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-black/10 focus:ring-2 focus:ring-[#E05D36]/20 focus:border-[#E05D36] outline-none transition-all text-sm"
+                        placeholder="+91 98765 43210" data-testid="contact-phone" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#0F1115] mb-1.5">Company</label>
+                      <input type="text" value={contactForm.company} onChange={e => setContactForm({...contactForm, company: e.target.value})}
+                        className="w-full px-4 py-3 rounded-xl border border-black/10 focus:ring-2 focus:ring-[#E05D36]/20 focus:border-[#E05D36] outline-none transition-all text-sm"
+                        placeholder="Your company" data-testid="contact-company" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#0F1115] mb-1.5">Message *</label>
+                    <textarea required rows={4} value={contactForm.message} onChange={e => setContactForm({...contactForm, message: e.target.value})}
+                      className="w-full px-4 py-3 rounded-xl border border-black/10 focus:ring-2 focus:ring-[#E05D36]/20 focus:border-[#E05D36] outline-none transition-all text-sm resize-none"
+                      placeholder="Tell us about your requirements..." data-testid="contact-message" />
+                  </div>
+                  <button type="submit" disabled={contactSending}
+                    className="w-full bg-[#E05D36] text-white hover:bg-[#C84B26] disabled:opacity-60 transition-all rounded-full py-3.5 font-semibold text-sm flex items-center justify-center gap-2"
+                    data-testid="contact-submit-btn">
+                    {contactSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    {contactSending ? "Sending..." : "Send Message"}
+                  </button>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* CTA & Footer */}
       <section className="bg-[#0F1115] text-[#FAF9F6] py-24 sm:py-32 rounded-t-[3rem] px-6 sm:px-8 lg:px-12">
         <div className="max-w-7xl mx-auto">
@@ -425,15 +626,15 @@ export default function LandingPage({ onGetStarted }) {
                 <h4 className="font-semibold mb-4">Product</h4>
                 <ul className="space-y-2 text-sm text-[#FAF9F6]/70">
                   <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
+                  <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
                   <li><a href="#ai-insights" className="hover:text-white transition-colors">AI Insights</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-semibold mb-4">Company</h4>
                 <ul className="space-y-2 text-sm text-[#FAF9F6]/70">
                   <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+                  <li><a href="#contact" className="hover:text-white transition-colors">Contact</a></li>
                   <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
                 </ul>
               </div>
