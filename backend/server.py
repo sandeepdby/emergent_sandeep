@@ -1280,12 +1280,12 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     if not policy:
         raise HTTPException(status_code=404, detail=f"Policy {endorsement_data.policy_number} not found")
     
-    # Parents not allowed for midterm Addition or Deletion
+    # Parents not allowed for Midterm addition
     if endorsement_data.relationship_type in [RelationshipType.FATHER, RelationshipType.MOTHER]:
-        if endorsement_data.endorsement_type in [EndorsementType.ADDITION, EndorsementType.DELETION]:
+        if endorsement_data.endorsement_type == EndorsementType.MIDTERM_ADDITION:
             raise HTTPException(
                 status_code=400,
-                detail=f"Parents ({endorsement_data.relationship_type.value}) are not allowed for mid-term {endorsement_data.endorsement_type.value}. Only Correction or Midterm addition is permitted for parents."
+                detail=f"Parents ({endorsement_data.relationship_type.value}) are not allowed for Midterm addition."
             )
     
     # 45-day backdating validation for DOJ and DOL
@@ -1529,9 +1529,9 @@ async def preview_excel_import(
                 # Check parent midterm restriction
                 parent_restricted = False
                 parent_warning = ""
-                if relationship_type in ["Father", "Mother"] and endorsement_type in ["Addition", "Deletion"]:
+                if relationship_type in ["Father", "Mother"] and endorsement_type == "Midterm addition":
                     parent_restricted = True
-                    parent_warning = f"Parents ({relationship_type}) not allowed for mid-term {endorsement_type}"
+                    parent_warning = f"Parents ({relationship_type}) not allowed for Midterm addition"
                 
                 preview_rows.append({
                     "row_num": index + 2,
@@ -2040,12 +2040,12 @@ async def import_endorsements_from_excel(
                     error_count += 1
                     continue
                 
-                # Parents not allowed for midterm Addition or Deletion
+                # Parents not allowed for Midterm addition
                 if relationship_type in [RelationshipType.FATHER, RelationshipType.MOTHER]:
-                    if endorsement_type in [EndorsementType.ADDITION, EndorsementType.DELETION]:
+                    if endorsement_type == EndorsementType.MIDTERM_ADDITION:
                         errors.append({
                             "row": index + 2,
-                            "error": f"Parents ({relationship_type.value}) not allowed for mid-term {endorsement_type.value}"
+                            "error": f"Parents ({relationship_type.value}) not allowed for Midterm addition"
                         })
                         error_count += 1
                         continue

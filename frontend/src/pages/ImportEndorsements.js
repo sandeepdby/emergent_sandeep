@@ -177,7 +177,7 @@ class ImportEndorsements extends React.Component {
           {restrictedRows.length > 0 && (
             <div className="mb-4 bg-amber-50 border border-amber-300 rounded-lg p-3" data-testid="parent-restriction-banner">
               <h4 className="font-semibold text-amber-700 mb-1 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Parent Restriction ({restrictedRows.length} rows)</h4>
-              <p className="text-sm text-amber-600">Parents (Father/Mother) are not allowed for mid-term Addition or Deletion. These rows will be skipped during import.</p>
+              <p className="text-sm text-amber-600">Parents (Father/Mother) are not allowed for Midterm addition. These rows will be skipped during import.</p>
             </div>
           )}
           {errors.length > 0 && (
