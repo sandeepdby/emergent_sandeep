@@ -8,17 +8,25 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Loader2, Plus, Pencil, Trash2, FileCheck } from "lucide-react";
 
 const emptyForm = {
-  policy_number: "", employee_name: "", patient_name: "", relationship: "Self",
-  claim_type: "Cashless", diagnosis: "", hospital_name: "",
-  admission_date: "", discharge_date: "",
-  claimed_amount: 0, approved_amount: 0, settled_amount: 0,
-  status: "Submitted", remarks: "", policy_type: "ESKP",
+  policy_number: "",
+  claim_type: "Cashless",
+  cashless_claims_count: 0,
+  reimbursement_claims_count: 0,
+  claims_report_date: "",
+  claimed_amount: 0,
+  approved_amount: 0,
+  settled_amount: 0,
+  status: "Submitted",
+  remarks: "",
+  policy_type: "ESKP",
 };
+
+const fmt = (v) => (v || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
 export default function ClaimsManagement() {
   const [claims, setClaims] = useState([]);
@@ -27,8 +35,6 @@ export default function ClaimsManagement() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
-
-  const token = localStorage.getItem("token");
 
   const fetchClaims = useCallback(async () => {
     try {
@@ -54,27 +60,23 @@ export default function ClaimsManagement() {
     setEditingId(claim.id);
     setForm({
       policy_number: claim.policy_number || "",
-      employee_name: claim.employee_name || "",
-      patient_name: claim.patient_name || "",
-      relationship: claim.relationship || "Self",
       claim_type: claim.claim_type || "Cashless",
-      diagnosis: claim.diagnosis || "",
-      hospital_name: claim.hospital_name || "",
-      admission_date: claim.admission_date || "",
-      discharge_date: claim.discharge_date || "",
+      cashless_claims_count: claim.cashless_claims_count || 0,
+      reimbursement_claims_count: claim.reimbursement_claims_count || 0,
+      claims_report_date: claim.claims_report_date || "",
       claimed_amount: claim.claimed_amount || 0,
       approved_amount: claim.approved_amount || 0,
       settled_amount: claim.settled_amount || 0,
       status: claim.status || "Submitted",
       remarks: claim.remarks || "",
-      policy_type: claim.policy_type || "Group Health",
+      policy_type: claim.policy_type || "ESKP",
     });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.policy_number || !form.employee_name || !form.patient_name) {
-      toast.error("Policy number, employee name and patient name are required");
+    if (!form.policy_number) {
+      toast.error("Policy number is required");
       return;
     }
     setSaving(true);
@@ -82,6 +84,8 @@ export default function ClaimsManagement() {
       const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
       const payload = {
         ...form,
+        cashless_claims_count: parseInt(form.cashless_claims_count) || 0,
+        reimbursement_claims_count: parseInt(form.reimbursement_claims_count) || 0,
         claimed_amount: parseFloat(form.claimed_amount) || 0,
         approved_amount: parseFloat(form.approved_amount) || 0,
         settled_amount: parseFloat(form.settled_amount) || 0,
@@ -133,6 +137,7 @@ export default function ClaimsManagement() {
         <div className="flex items-center gap-2">
           <FileCheck className="w-5 h-5 text-indigo-600" />
           <h2 className="text-lg font-semibold text-gray-800">Claims Management</h2>
+          <Badge variant="secondary" className="text-xs">{claims.length} claims</Badge>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
@@ -143,6 +148,7 @@ export default function ClaimsManagement() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? "Edit Claim" : "Add New Claim"}</DialogTitle>
+              <DialogDescription>Corporate claims synopsis - enter claim details below.</DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div>
@@ -161,26 +167,6 @@ export default function ClaimsManagement() {
                 </Select>
               </div>
               <div>
-                <Label>Employee Name *</Label>
-                <Input value={form.employee_name} onChange={e => setForm({ ...form, employee_name: e.target.value })} data-testid="claim-employee-name" />
-              </div>
-              <div>
-                <Label>Patient Name *</Label>
-                <Input value={form.patient_name} onChange={e => setForm({ ...form, patient_name: e.target.value })} data-testid="claim-patient-name" />
-              </div>
-              <div>
-                <Label>Relationship</Label>
-                <Select value={form.relationship} onValueChange={v => setForm({ ...form, relationship: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Self">Self</SelectItem>
-                    <SelectItem value="Spouse">Spouse</SelectItem>
-                    <SelectItem value="Child">Child</SelectItem>
-                    <SelectItem value="Parent">Parent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label>Claim Type</Label>
                 <Select value={form.claim_type} onValueChange={v => setForm({ ...form, claim_type: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -191,20 +177,16 @@ export default function ClaimsManagement() {
                 </Select>
               </div>
               <div>
-                <Label>Diagnosis</Label>
-                <Input value={form.diagnosis} onChange={e => setForm({ ...form, diagnosis: e.target.value })} />
+                <Label>Claims Report Date</Label>
+                <Input type="date" value={form.claims_report_date} onChange={e => setForm({ ...form, claims_report_date: e.target.value })} data-testid="claim-report-date" />
               </div>
               <div>
-                <Label>Hospital</Label>
-                <Input value={form.hospital_name} onChange={e => setForm({ ...form, hospital_name: e.target.value })} />
+                <Label>Cashless Claims Count</Label>
+                <Input type="number" value={form.cashless_claims_count} onChange={e => setForm({ ...form, cashless_claims_count: e.target.value })} data-testid="claim-cashless-count" />
               </div>
               <div>
-                <Label>Admission Date</Label>
-                <Input type="date" value={form.admission_date} onChange={e => setForm({ ...form, admission_date: e.target.value })} />
-              </div>
-              <div>
-                <Label>Discharge Date</Label>
-                <Input type="date" value={form.discharge_date} onChange={e => setForm({ ...form, discharge_date: e.target.value })} />
+                <Label>Reimbursement Claims Count</Label>
+                <Input type="number" value={form.reimbursement_claims_count} onChange={e => setForm({ ...form, reimbursement_claims_count: e.target.value })} data-testid="claim-reimb-count" />
               </div>
               <div>
                 <Label>Claimed Amount</Label>
@@ -259,9 +241,10 @@ export default function ClaimsManagement() {
                     <TableHead className="text-xs">Claim #</TableHead>
                     <TableHead className="text-xs">Policy</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
-                    <TableHead className="text-xs">Employee</TableHead>
-                    <TableHead className="text-xs">Patient</TableHead>
                     <TableHead className="text-xs">Claim Type</TableHead>
+                    <TableHead className="text-xs">Report Date</TableHead>
+                    <TableHead className="text-xs text-right">Cashless Cnt</TableHead>
+                    <TableHead className="text-xs text-right">Reimb Cnt</TableHead>
                     <TableHead className="text-xs text-right">Claimed</TableHead>
                     <TableHead className="text-xs text-right">Settled</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
@@ -274,11 +257,12 @@ export default function ClaimsManagement() {
                       <TableCell className="text-xs font-medium">{c.claim_number}</TableCell>
                       <TableCell className="text-xs">{c.policy_number}</TableCell>
                       <TableCell className="text-xs"><Badge variant="secondary" className="text-xs">{c.policy_type || "-"}</Badge></TableCell>
-                      <TableCell className="text-xs">{c.employee_name}</TableCell>
-                      <TableCell className="text-xs">{c.patient_name}</TableCell>
                       <TableCell className="text-xs">{c.claim_type}</TableCell>
-                      <TableCell className="text-xs text-right">{(c.claimed_amount || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</TableCell>
-                      <TableCell className="text-xs text-right font-medium">{(c.settled_amount || 0).toLocaleString("en-IN", { style: "currency", currency: "INR" })}</TableCell>
+                      <TableCell className="text-xs">{c.claims_report_date || "-"}</TableCell>
+                      <TableCell className="text-xs text-right">{c.cashless_claims_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right">{c.reimbursement_claims_count || 0}</TableCell>
+                      <TableCell className="text-xs text-right">{fmt(c.claimed_amount)}</TableCell>
+                      <TableCell className="text-xs text-right font-medium">{fmt(c.settled_amount)}</TableCell>
                       <TableCell className="text-xs">{statusBadge(c.status)}</TableCell>
                       <TableCell className="text-xs text-right">
                         <div className="flex justify-end gap-1">

@@ -3126,14 +3126,10 @@ class ClaimType(str, Enum):
 class ClaimCreate(BaseModel):
     policy_number: str
     claim_number: Optional[str] = None
-    employee_name: str
-    patient_name: str
-    relationship: str = "Self"
     claim_type: ClaimType = ClaimType.CASHLESS
-    diagnosis: Optional[str] = None
-    hospital_name: Optional[str] = None
-    admission_date: Optional[str] = None
-    discharge_date: Optional[str] = None
+    cashless_claims_count: int = 0
+    reimbursement_claims_count: int = 0
+    claims_report_date: Optional[str] = None
     claimed_amount: float = 0
     approved_amount: float = 0
     settled_amount: float = 0
@@ -3147,14 +3143,10 @@ class Claim(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     policy_number: str
     claim_number: str = Field(default_factory=lambda: f"CLM-{uuid.uuid4().hex[:8].upper()}")
-    employee_name: str
-    patient_name: str
-    relationship: str = "Self"
     claim_type: ClaimType = ClaimType.CASHLESS
-    diagnosis: Optional[str] = None
-    hospital_name: Optional[str] = None
-    admission_date: Optional[str] = None
-    discharge_date: Optional[str] = None
+    cashless_claims_count: int = 0
+    reimbursement_claims_count: int = 0
+    claims_report_date: Optional[str] = None
     claimed_amount: float = 0
     approved_amount: float = 0
     settled_amount: float = 0
@@ -3179,7 +3171,7 @@ async def create_claim(claim_data: ClaimCreate, current_user: User = Depends(get
     doc['created_at'] = datetime.now(timezone.utc).isoformat()
     await db.claims.insert_one(doc)
     result = await db.claims.find_one({"id": claim.id}, {"_id": 0})
-    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "claim", claim.id, f"Created claim for {claim_data.employee_name}")
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "claim", claim.id, f"Created claim {claim.claim_number}")
     return result
 
 
@@ -3228,7 +3220,7 @@ async def update_claim(claim_id: str, claim_data: ClaimCreate, current_user: Use
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.claims.update_one({"id": claim_id}, {"$set": update_data})
     updated = await db.claims.find_one({"id": claim_id}, {"_id": 0})
-    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "claim", claim_id, f"Updated claim for {claim_data.employee_name}")
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "claim", claim_id, f"Updated claim {claim_id}")
     return updated
 
 
@@ -3259,7 +3251,7 @@ async def get_claims_analytics(
                 "total_settled_amount": 0, "reimbursement_claims": 0, "reimbursement_count": 0,
                 "cashless_claims": 0, "cashless_count": 0, "rejected_claims": 0,
                 "rejected_count": 0, "under_process_claims": 0, "under_process_count": 0,
-                "total_premium": 0, "claims_ratio": 0, "renewal_expected_pricing": 0,
+                "total_premium": 0, "claims_ratio": 0, "annual_claims_trend": 0,
                 "settlement_ratio": 0, "status_distribution": [], "type_distribution": [],
                 "monthly_trend": []
             }
@@ -3296,7 +3288,23 @@ async def get_claims_analytics(
     total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
 
     claims_ratio = round((total_claimed / total_premium * 100) if total_premium > 0 else 0, 1)
-    renewal_expected_pricing = round(total_claimed * 1.30, 2)
+
+    # Annual Claims Trend = (Claims / (Policy Expiry - Policy Start in days)) * 365
+    total_policy_days = 0
+    for p in policies:
+        start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
+        end = p.get("expiry_date") or p.get("end_date")
+        if start and end:
+            try:
+                from dateutil import parser as date_parser
+                start_dt = date_parser.parse(start)
+                end_dt = date_parser.parse(end)
+                days = (end_dt - start_dt).days
+                if days > 0:
+                    total_policy_days += days
+            except Exception:
+                pass
+    annual_claims_trend = round((total_claimed / total_policy_days) * 365, 2) if total_policy_days > 0 else 0
 
     status_counts = {}
     type_counts = {}
@@ -3332,7 +3340,7 @@ async def get_claims_analytics(
         "under_process_count": under_process_count,
         "total_premium": round(total_premium, 2),
         "claims_ratio": claims_ratio,
-        "renewal_expected_pricing": renewal_expected_pricing,
+        "annual_claims_trend": annual_claims_trend,
         "settlement_ratio": round((total_settled / total_claimed * 100) if total_claimed > 0 else 0, 1),
         "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
         "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
@@ -3489,9 +3497,10 @@ async def seed_master_admin():
 async def upload_document(
     file: UploadFile = File(...),
     category: str = Query(...),
+    assigned_to_hr: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user)
 ):
-    """Upload a document to cloud storage."""
+    """Upload a document to cloud storage. Admin can assign to HR user."""
     allowed_types = [
         "application/pdf", "image/jpeg", "image/png", "image/webp",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -3527,9 +3536,19 @@ async def upload_document(
         "uploaded_by": current_user.id,
         "uploaded_by_name": current_user.full_name,
         "uploaded_by_role": current_user.role,
+        "assigned_to_hr": assigned_to_hr if assigned_to_hr and current_user.role == UserRole.ADMIN else None,
         "is_deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
+
+    # If Admin assigned to HR, look up HR details
+    if assigned_to_hr and current_user.role == UserRole.ADMIN:
+        hr_user = await db.users.find_one({"id": assigned_to_hr, "role": "HR"}, {"_id": 0})
+        if hr_user:
+            doc_record["assigned_to_hr_name"] = hr_user.get("full_name", "")
+            doc_record["assigned_to_hr_email"] = hr_user.get("email", "")
+            doc_record["assigned_to_hr_phone"] = hr_user.get("phone", "")
+
     await db.documents.insert_one(doc_record)
     
     return {
@@ -3537,6 +3556,7 @@ async def upload_document(
         "filename": file.filename,
         "category": category,
         "size": result.get("size", len(data)),
+        "assigned_to_hr": assigned_to_hr,
         "created_at": doc_record["created_at"]
     }
 
@@ -3546,10 +3566,15 @@ async def list_documents(
     category: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """List documents, optionally filtered by category."""
+    """List documents. HR users see only documents assigned to them or uploaded by them."""
     query = {"is_deleted": False}
     if category:
         query["category"] = category
+    if current_user.role == UserRole.HR:
+        query["$or"] = [
+            {"assigned_to_hr": current_user.id},
+            {"uploaded_by": current_user.id}
+        ]
     
     docs = await db.documents.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
     return docs
@@ -3596,6 +3621,87 @@ async def delete_document(
     await db.documents.update_one({"id": doc_id}, {"$set": {"is_deleted": True}})
     await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "document", doc_id, "Deleted document")
     return {"message": "Document deleted successfully"}
+
+
+@api_router.post("/documents/{doc_id}/send-ecard")
+async def send_ecard(
+    doc_id: str,
+    background_tasks: BackgroundTasks,
+    email: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user)
+):
+    """Send an E-Card document via email to the assigned HR user."""
+    record = await db.documents.find_one({"id": doc_id, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    target_email = email or record.get("assigned_to_hr_email")
+    if not target_email:
+        raise HTTPException(status_code=400, detail="No email address found for this document's HR user")
+
+    # Download file from storage
+    try:
+        file_data, ct = get_object(record["storage_path"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {str(e)}")
+
+    hr_name = record.get("assigned_to_hr_name", "HR User")
+    filename = record.get("original_filename", "e-card")
+
+    subject = f"Your E-Card: {filename} | InsureHub"
+    body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #ec4899, #f43f5e); padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+            <h2 style="color: white; margin: 0;">E-Card Shared With You</h2>
+        </div>
+        <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
+            <p style="color: #334155;">Hi <strong>{hr_name}</strong>,</p>
+            <p style="color: #475569;">An E-Card has been shared with you from InsureHub.</p>
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin: 16px 0;">
+                <p style="margin: 5px 0;"><strong>File:</strong> {filename}</p>
+                <p style="margin: 5px 0;"><strong>Sent by:</strong> {current_user.full_name}</p>
+            </div>
+            <p style="color: #64748b; font-size: 13px;">The E-Card is attached to this email. You can also log in to InsureHub to view and download it.</p>
+        </div>
+    </div>"""
+
+    # Send email with attachment
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    def send_ecard_email():
+        try:
+            smtp_email = os.environ.get("SMTP_EMAIL")
+            smtp_password = os.environ.get("SMTP_PASSWORD")
+            smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+            smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+
+            msg = MIMEMultipart()
+            msg["From"] = smtp_email
+            msg["To"] = target_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(body, "html"))
+
+            attachment = MIMEBase("application", "octet-stream")
+            attachment.set_payload(file_data)
+            encoders.encode_base64(attachment)
+            attachment.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+            msg.attach(attachment)
+
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_email, smtp_password)
+                server.sendmail(smtp_email, [target_email], msg.as_string())
+            logging.getLogger().info(f"E-Card email sent to {target_email}")
+        except Exception as e:
+            logging.getLogger().error(f"Failed to send E-Card email: {e}")
+
+    background_tasks.add_task(send_ecard_email)
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "SEND_ECARD", "document", doc_id, f"Sent E-Card {filename} to {target_email}")
+    return {"message": f"E-Card sent to {target_email}"}
 
 
 # Include the router in the main app
