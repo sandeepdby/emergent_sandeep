@@ -198,8 +198,10 @@ class ImportEndorsements extends React.Component {
                   <TableHead className="text-xs">Member</TableHead>
                   <TableHead className="text-xs">Relationship</TableHead>
                   <TableHead className="text-xs">Type</TableHead>
-                  <TableHead className="text-xs text-right">Annual Premium</TableHead>
+                  <TableHead className="text-xs text-right">Per Life Premium</TableHead>
                   <TableHead className="text-xs text-right">Pro-rata Premium</TableHead>
+                  <TableHead className="text-xs">Email</TableHead>
+                  <TableHead className="text-xs">Mobile</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -218,10 +220,12 @@ class ImportEndorsements extends React.Component {
                         {row.endorsement_type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-right">₹{row.annual_premium_per_life?.toLocaleString() || 0}</TableCell>
+                    <TableCell className="text-xs text-right">₹{(row.per_life_premium || row.annual_premium_per_life)?.toLocaleString() || 0}</TableCell>
                     <TableCell className={`text-xs text-right font-medium ${row.parent_restricted ? 'text-gray-400' : row.prorata_premium >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                       {row.parent_restricted ? '—' : `${row.prorata_premium >= 0 ? '+' : ''}₹${row.prorata_premium?.toLocaleString() || 0}`}
                     </TableCell>
+                    <TableCell className="text-xs text-gray-500 truncate max-w-[120px]">{row.employee_email || '—'}</TableCell>
+                    <TableCell className="text-xs text-gray-500">{row.employee_mobile || '—'}</TableCell>
                     <TableCell className="text-xs">
                       {row.parent_restricted ? (
                         <span className="text-amber-600 font-medium flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Restricted</span>

@@ -244,8 +244,11 @@ class EndorsementCreate(BaseModel):
     date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
+    per_life_premium: Optional[float] = None
     endorsement_date: str
     effective_date: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_mobile: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -266,6 +269,7 @@ class Endorsement(BaseModel):
     date_of_leaving: Optional[str] = None
     coverage_type: Optional[str] = None
     sum_insured: Optional[float] = None
+    per_life_premium: Optional[float] = None
     annual_premium_per_life: Optional[float] = None
     endorsement_date: str
     effective_date: str
@@ -277,6 +281,8 @@ class Endorsement(BaseModel):
     submitted_by: Optional[str] = None
     approved_by: Optional[str] = None
     approval_date: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_mobile: Optional[str] = None
     remarks: Optional[str] = None
     import_batch_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -294,8 +300,11 @@ class EndorsementUpdate(BaseModel):
     date_of_leaving: Optional[str] = None
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
+    per_life_premium: Optional[float] = None
     endorsement_date: Optional[str] = None
     effective_date: Optional[str] = None
+    employee_email: Optional[str] = None
+    employee_mobile: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -1544,11 +1553,14 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
+    # Use per_life_premium from form if provided, otherwise fall back to policy's annual_premium_per_life
+    premium_per_life = endorsement_data.per_life_premium if endorsement_data.per_life_premium is not None else policy['annual_premium_per_life']
+    
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
         policy['expiry_date'],
         endorsement_data.endorsement_date,
-        policy['annual_premium_per_life'],
+        premium_per_life,
         endorsement_data.endorsement_type.value
     )
     
@@ -1566,6 +1578,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         date_of_leaving=endorsement_data.date_of_leaving,
         coverage_type=endorsement_data.coverage_type.value if endorsement_data.coverage_type else None,
         sum_insured=endorsement_data.sum_insured,
+        per_life_premium=premium_per_life,
         annual_premium_per_life=policy['annual_premium_per_life'],
         endorsement_date=endorsement_data.endorsement_date,
         effective_date=effective_date,
@@ -1575,6 +1588,8 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         prorata_premium=prorata_premium,
         status=EndorsementStatus.PENDING,
         submitted_by=current_user.id,
+        employee_email=endorsement_data.employee_email,
+        employee_mobile=endorsement_data.employee_mobile,
         remarks=endorsement_data.remarks
     )
     
@@ -1582,6 +1597,24 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.endorsements.insert_one(doc)
+    
+    # Auto-create CD Ledger entry on submission
+    if prorata_premium != 0:
+        entry_type = "Endorsement Deduction" if prorata_premium > 0 else "Refund Credit"
+        cd_entry = {
+            "id": str(uuid.uuid4()),
+            "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            "reference": f"END-{endorsement.id[:8].upper()}",
+            "description": f"{'Premium Charge' if prorata_premium > 0 else 'Refund Credit'} - {endorsement_data.member_name} ({endorsement_data.endorsement_type.value})",
+            "amount": -prorata_premium,  # Deduct charge (negative balance), credit refund (positive)
+            "policy_number": endorsement_data.policy_number,
+            "entry_type": entry_type,
+            "endorsement_id": endorsement.id,
+            "created_by": current_user.id,
+            "created_by_name": current_user.full_name,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.cd_ledger.insert_one(cd_entry)
     
     # Generate Excel attachment for the endorsement
     excel_attachment = None
@@ -1748,17 +1781,31 @@ async def preview_excel_import(
                 
                 if policy:
                     annual_premium = policy.get('annual_premium_per_life', 0)
+                    # Use per_life_premium from Excel if provided, otherwise use policy's annual premium
+                    per_life = None
+                    if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')):
+                        per_life = float(row['per_life_premium'])
+                    premium_for_calc = per_life if per_life is not None else annual_premium
                     _, _, _, prorata_premium = calculate_prorata_premium(
                         policy['inception_date'], policy['expiry_date'],
-                        endorsement_date, annual_premium, endorsement_type
+                        endorsement_date, premium_for_calc, endorsement_type
                     )
                 elif 'annual_premium_per_life' in df.columns and pd.notna(row.get('annual_premium_per_life')):
                     annual_premium = float(row['annual_premium_per_life'])
+                    per_life = None
+                    if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')):
+                        per_life = float(row['per_life_premium'])
+                    premium_for_calc = per_life if per_life is not None else annual_premium
                     if 'policy_inception_date' in df.columns and 'policy_expiry_date' in df.columns:
                         inc = parse_date(str(row['policy_inception_date']))
                         exp = parse_date(str(row['policy_expiry_date']))
                         if inc and exp:
-                            _, _, _, prorata_premium = calculate_prorata_premium(inc, exp, endorsement_date, annual_premium, endorsement_type)
+                            _, _, _, prorata_premium = calculate_prorata_premium(inc, exp, endorsement_date, premium_for_calc, endorsement_type)
+                
+                # Parse optional employee email and mobile
+                employee_email = str(row.get('employee_email', '')).strip() if 'employee_email' in df.columns and pd.notna(row.get('employee_email')) else ''
+                employee_mobile = str(row.get('employee_mobile', '')).strip() if 'employee_mobile' in df.columns and pd.notna(row.get('employee_mobile')) else ''
+                per_life_val = float(row['per_life_premium']) if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')) else None
                 
                 # Check parent midterm restriction
                 parent_restricted = False
@@ -1779,8 +1826,11 @@ async def preview_excel_import(
                     "age": int(row['age']) if 'age' in df.columns and pd.notna(row.get('age')) else None,
                     "gender": str(row.get('gender', '')).strip() if pd.notna(row.get('gender')) else '',
                     "sum_insured": float(row.get('suminsured', 0)) if pd.notna(row.get('suminsured')) else 0,
+                    "per_life_premium": per_life_val,
                     "annual_premium_per_life": annual_premium,
                     "prorata_premium": prorata_premium,
+                    "employee_email": employee_email,
+                    "employee_mobile": employee_mobile,
                     "policy_exists": policy is not None,
                     "remarks": str(row.get('remarks', '')).strip() if pd.notna(row.get('remarks')) else '',
                     "parent_restricted": parent_restricted,
@@ -2331,12 +2381,22 @@ async def import_endorsements_from_excel(
                 # Get remarks if provided
                 remarks = str(row['remarks']).strip() if 'remarks' in df.columns and pd.notna(row.get('remarks')) else None
                 
+                # Parse employee email and mobile (optional)
+                employee_email = str(row['employee_email']).strip() if 'employee_email' in df.columns and pd.notna(row.get('employee_email')) else None
+                employee_mobile = str(row['employee_mobile']).strip() if 'employee_mobile' in df.columns and pd.notna(row.get('employee_mobile')) else None
+                
+                # Use per_life_premium from Excel if provided, otherwise use policy's annual premium
+                per_life = None
+                if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')):
+                    per_life = float(row['per_life_premium'])
+                premium_for_calc = per_life if per_life is not None else policy['annual_premium_per_life']
+                
                 # Calculate pro-rata premium based on endorsement type
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
                     policy['inception_date'],
                     policy['expiry_date'],
                     endorsement_date,
-                    policy['annual_premium_per_life'],
+                    premium_for_calc,
                     endorsement_type.value  # Pass endorsement type for refund calculation
                 )
                 
@@ -2355,6 +2415,7 @@ async def import_endorsements_from_excel(
                     date_of_leaving=parse_date(str(row.get('date_of_leaving', ''))) if 'date_of_leaving' in df.columns and pd.notna(row.get('date_of_leaving')) else None,
                     coverage_type=coverage_type,
                     sum_insured=sum_insured,
+                    per_life_premium=premium_for_calc,
                     annual_premium_per_life=policy.get('annual_premium_per_life', 0),
                     endorsement_date=endorsement_date,
                     effective_date=effective_date,
@@ -2364,6 +2425,8 @@ async def import_endorsements_from_excel(
                     prorata_premium=prorata_premium,
                     status=EndorsementStatus.PENDING,
                     submitted_by=current_user.id,
+                    employee_email=employee_email,
+                    employee_mobile=employee_mobile,
                     remarks=remarks,
                     import_batch_id=import_batch_id
                 )
@@ -2372,6 +2435,24 @@ async def import_endorsements_from_excel(
                 doc['created_at'] = doc['created_at'].isoformat()
                 
                 await db.endorsements.insert_one(doc)
+                
+                # Auto-create CD Ledger entry on submission
+                if prorata_premium != 0:
+                    entry_type = "Endorsement Deduction" if prorata_premium > 0 else "Refund Credit"
+                    cd_entry = {
+                        "id": str(uuid.uuid4()),
+                        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        "reference": f"END-{endorsement.id[:8].upper()}",
+                        "description": f"{'Premium Charge' if prorata_premium > 0 else 'Refund Credit'} - {member_name} ({endorsement_type.value})",
+                        "amount": -prorata_premium,
+                        "policy_number": policy_number,
+                        "entry_type": entry_type,
+                        "endorsement_id": endorsement.id,
+                        "created_by": current_user.id,
+                        "created_by_name": current_user.full_name,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }
+                    await db.cd_ledger.insert_one(cd_entry)
                 
                 success_count += 1
                 
@@ -2408,6 +2489,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Policy Expiry Date': '2025-12-31',
             'Type of Policy': 'Group Health',
             'Annual Premium Per Life': 5000,
+            'Per Life Premium': 5000,
             'Employee ID': 'EMP001',
             'Member Name': 'John Doe',
             'DOB': '1990-05-15',
@@ -2420,6 +2502,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Suminsured': 500000,
             'Endorsement Date': '2025-02-01',
             'Effective Date': '2025-02-01',
+            'Employee Email': 'john@company.com',
+            'Employee Mobile': '+919876543210',
             'Remarks': 'Sample endorsement - replace with actual data'
         },
         {
@@ -2429,6 +2513,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Policy Expiry Date': '2025-12-31',
             'Type of Policy': 'Group Health',
             'Annual Premium Per Life': 5000,
+            'Per Life Premium': 5000,
             'Employee ID': 'EMP001',
             'Member Name': 'Jane Doe',
             'DOB': '1992-08-20',
@@ -2441,6 +2526,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Suminsured': 500000,
             'Endorsement Date': '2025-02-01',
             'Effective Date': '2025-02-01',
+            'Employee Email': 'jane@company.com',
+            'Employee Mobile': '+919876543211',
             'Remarks': 'Spouse coverage - replace with actual data'
         },
         {
@@ -2450,6 +2537,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Policy Expiry Date': '2025-12-31',
             'Type of Policy': 'Group Health',
             'Annual Premium Per Life': 5000,
+            'Per Life Premium': 4500,
             'Employee ID': 'EMP002',
             'Member Name': 'Jack Smith',
             'DOB': '1985-03-10',
@@ -2462,6 +2550,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
             'Suminsured': 300000,
             'Endorsement Date': '2025-06-05',
             'Effective Date': '2025-06-01',
+            'Employee Email': 'jack@company.com',
+            'Employee Mobile': '',
             'Remarks': 'Midterm joining - replace with actual data'
         }
     ]
@@ -2481,6 +2571,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 'Policy Expiry Date',
                 'Type of Policy',
                 'Annual Premium Per Life',
+                'Per Life Premium',
                 'Employee ID',
                 'Member Name',
                 'DOB',
@@ -2493,6 +2584,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 'Suminsured',
                 'Endorsement Date',
                 'Effective Date',
+                'Employee Email',
+                'Employee Mobile',
                 'Remarks'
             ],
             'Description': [
@@ -2501,7 +2594,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 'Policy start date in YYYY-MM-DD format (Required if new policy)',
                 'Policy end date in YYYY-MM-DD format (Required if new policy)',
                 'Group Health, Group Accident, or Group Term (Optional)',
-                'Annual premium amount per person (Required if new policy)',
+                'Annual premium amount per person from policy (Required if new policy)',
+                'Per life premium for this endorsement (Optional - overrides Annual Premium)',
                 'Unique employee identifier (Optional)',
                 'Full name of the member (Required)',
                 'Date of birth in YYYY-MM-DD format (Optional)',
@@ -2514,6 +2608,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 'Sum insured/Coverage amount (Optional)',
                 'Date when endorsement was received (Required)',
                 'Date from which endorsement is effective (Optional)',
+                'Employee email address for notifications (Optional)',
+                'Employee mobile number with country code (Optional)',
                 'Additional notes or comments (Optional)'
             ],
             'Example': [
@@ -2523,6 +2619,7 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 '2025-12-31',
                 'Group Health',
                 '5000',
+                '4500',
                 'EMP001',
                 'John Doe',
                 '1990-05-15',
@@ -2535,6 +2632,8 @@ async def download_import_template(current_user: User = Depends(get_current_user
                 '500000',
                 '2025-02-01',
                 '2025-02-01',
+                'john@company.com',
+                '+919876543210',
                 'New employee addition'
             ]
         })

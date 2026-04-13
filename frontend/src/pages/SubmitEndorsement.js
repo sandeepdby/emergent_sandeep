@@ -8,12 +8,43 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Plus, Loader2, MessageCircle, Sparkles, AlertCircle } from "lucide-react";
+import { Plus, Loader2, MessageCircle, Sparkles, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
 
 const generateWhatsAppLink = (phone, message) => {
   if (!phone) return null;
   const cleanPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^\+/, '');
   return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+};
+
+const ProRataPreview = ({ policy, endorsementType, endorsementDate, perLifePremium }) => {
+  const calc = useMemo(() => {
+    if (!policy || !endorsementDate || !endorsementType || endorsementType === "Correction") return null;
+    try {
+      const inception = new Date(policy.inception_date);
+      const expiry = new Date(policy.expiry_date);
+      const endDate = new Date(endorsementDate);
+      const totalDays = Math.ceil((expiry - inception) / (1000 * 60 * 60 * 24));
+      const elapsed = Math.ceil((endDate - inception) / (1000 * 60 * 60 * 24));
+      const remaining = Math.max(totalDays - elapsed, 0);
+      const prorata = Math.round((perLifePremium * remaining) / 365);
+      const isRefund = endorsementType === "Deletion";
+      return { remaining, totalDays, prorata: isRefund ? -prorata : prorata, isRefund };
+    } catch { return null; }
+  }, [policy, endorsementType, endorsementDate, perLifePremium]);
+
+  if (!calc) return null;
+
+  return (
+    <div className="flex items-center gap-4 mt-1 text-sm" data-testid="prorata-preview">
+      <span className="text-gray-600">Remaining Days: <strong>{calc.remaining}</strong> / {calc.totalDays}</span>
+      <span className="text-gray-400">|</span>
+      <span className={`font-bold flex items-center gap-1 ${calc.isRefund ? 'text-red-600' : 'text-emerald-600'}`}>
+        {calc.isRefund ? <TrendingDown className="w-4 h-4" /> : <TrendingUp className="w-4 h-4" />}
+        Pro-rata: {calc.isRefund ? '-' : '+'}₹{Math.abs(calc.prorata).toLocaleString()}
+        {calc.isRefund ? ' (Refund)' : ' (Charge)'}
+      </span>
+    </div>
+  );
 };
 
 const calcAge = (dob) => {
@@ -53,8 +84,11 @@ export default function SubmitEndorsement() {
     date_of_leaving: "",
     coverage_type: "",
     sum_insured: "",
+    per_life_premium: "",
     endorsement_date: new Date().toISOString().split('T')[0],
     effective_date: "",
+    employee_email: "",
+    employee_mobile: "",
     remarks: ""
   });
 
@@ -168,7 +202,10 @@ export default function SubmitEndorsement() {
         date_of_leaving: showDOL ? (formData.date_of_leaving || null) : null,
         coverage_type: formData.coverage_type || null,
         sum_insured: formData.sum_insured ? parseFloat(formData.sum_insured) : null,
+        per_life_premium: formData.per_life_premium ? parseFloat(formData.per_life_premium) : null,
         effective_date: formData.effective_date || null,
+        employee_email: formData.employee_email || null,
+        employee_mobile: formData.employee_mobile || null,
         remarks: formData.remarks || null
       };
       const response = await axios.post(`${API}/endorsements`, submitData, {
@@ -181,8 +218,9 @@ export default function SubmitEndorsement() {
       setFormData({
         policy_number: "", employee_id: "", member_name: "", dob: "", age: "", gender: "",
         relationship_type: "", endorsement_type: "", date_of_joining: "", date_of_leaving: "",
-        coverage_type: "", sum_insured: "",
-        endorsement_date: new Date().toISOString().split('T')[0], effective_date: "", remarks: ""
+        coverage_type: "", sum_insured: "", per_life_premium: "",
+        endorsement_date: new Date().toISOString().split('T')[0], effective_date: "",
+        employee_email: "", employee_mobile: "", remarks: ""
       });
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to submit endorsement");
@@ -359,6 +397,15 @@ export default function SubmitEndorsement() {
                 <Input type="number" value={formData.sum_insured} onChange={(e) => updateFormData('sum_insured', e.target.value)} placeholder="Enter sum insured" data-testid="sum-insured-input" />
               </div>
 
+              {/* Per Life Premium */}
+              <div className="space-y-2">
+                <Label>Per Life Premium</Label>
+                <Input type="number" value={formData.per_life_premium} onChange={(e) => updateFormData('per_life_premium', e.target.value)} placeholder={selectedPolicy ? `Default: ₹${selectedPolicy.annual_premium_per_life?.toLocaleString()}` : "Enter per life premium"} data-testid="per-life-premium-input" />
+                {selectedPolicy && !formData.per_life_premium && (
+                  <p className="text-xs text-gray-500">Will use policy premium: ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</p>
+                )}
+              </div>
+
               {/* Endorsement Date */}
               <div className="space-y-2">
                 <Label>Endorsement Date *</Label>
@@ -370,18 +417,38 @@ export default function SubmitEndorsement() {
                 <Label>Effective Date</Label>
                 <Input type="date" value={formData.effective_date} onChange={(e) => updateFormData('effective_date', e.target.value)} data-testid="effective-date-input" />
               </div>
+
+              {/* Employee Email */}
+              <div className="space-y-2">
+                <Label>Employee Email</Label>
+                <Input type="email" value={formData.employee_email} onChange={(e) => updateFormData('employee_email', e.target.value)} placeholder="employee@company.com" data-testid="employee-email-input" />
+              </div>
+
+              {/* Employee Mobile */}
+              <div className="space-y-2">
+                <Label>Employee Mobile</Label>
+                <Input type="tel" value={formData.employee_mobile} onChange={(e) => updateFormData('employee_mobile', e.target.value)} placeholder="+91 9876543210" data-testid="employee-mobile-input" />
+              </div>
             </div>
 
-            {/* Annual Premium & Pro-rata info */}
+            {/* Premium & Pro-rata Calculation Display */}
             {selectedPolicy && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap gap-4 text-sm" data-testid="premium-info">
-                <span><strong>Annual Premium/Life:</strong> ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</span>
-                <span><strong>Inception:</strong> {selectedPolicy.inception_date}</span>
-                <span><strong>Expiry:</strong> {selectedPolicy.expiry_date}</span>
-                {formData.endorsement_type && (
-                  <span className={formData.endorsement_type === "Deletion" ? "text-red-600 font-medium" : "text-emerald-600 font-medium"}>
-                    {formData.endorsement_type === "Deletion" ? "Refund (Negative Premium)" : formData.endorsement_type === "Correction" ? "No Premium Change" : "Charge (Positive Premium)"}
-                  </span>
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-2" data-testid="premium-info">
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <span><strong>Policy Premium/Life:</strong> ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</span>
+                  {formData.per_life_premium && (
+                    <span className="text-indigo-700 font-medium"><strong>Custom Per Life:</strong> ₹{parseFloat(formData.per_life_premium).toLocaleString()}</span>
+                  )}
+                  <span><strong>Inception:</strong> {selectedPolicy.inception_date}</span>
+                  <span><strong>Expiry:</strong> {selectedPolicy.expiry_date}</span>
+                </div>
+                {formData.endorsement_type && formData.endorsement_date && (
+                  <ProRataPreview
+                    policy={selectedPolicy}
+                    endorsementType={formData.endorsement_type}
+                    endorsementDate={formData.endorsement_date}
+                    perLifePremium={formData.per_life_premium ? parseFloat(formData.per_life_premium) : selectedPolicy.annual_premium_per_life}
+                  />
                 )}
               </div>
             )}
