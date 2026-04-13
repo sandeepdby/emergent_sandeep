@@ -5,10 +5,7 @@
 - Password: `Admin@123`
 - Email: sandeepdby@gmail.com
 
-## Admin
-- Username: `admin@insurehub.com`
-- Password: `admin123`
-
-## HR User
-- Username: `hruser1`
-- Password: `hr123456`
+## HR User (Arpita Saxena)
+- Username: `arpita`
+- Password: `Password@123`
+- Email: arpita.saxena@nichebees.com

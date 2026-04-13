@@ -1,8 +1,8 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { LogOut, User, CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2 } from "lucide-react";
+import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2 } from "lucide-react";
 import { AuthContext } from "../auth";
+import UserProfileMenu from "./UserProfileMenu";
 import ApproveEndorsements from "./ApproveEndorsements";
 import AllEndorsements from "./AllEndorsements";
 import PoliciesManagement from "./PoliciesManagement";
@@ -73,15 +73,8 @@ const Navigation = ({ onLogout, user }) => {
               })}
             </div>
           </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <User className="w-4 h-4 text-gray-500" />
-              <span className="text-sm text-gray-700">{user?.full_name}</span>
-            </div>
-            <Button onClick={onLogout} variant="outline" size="sm">
-              <LogOut className="w-4 h-4 mr-2" />
-              Logout
-            </Button>
+          <div className="flex items-center">
+            <UserProfileMenu user={user} onLogout={onLogout} />
           </div>
         </div>
       </div>

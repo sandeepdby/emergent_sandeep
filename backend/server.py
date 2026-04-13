@@ -1091,6 +1091,107 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, background_tasks: BackgroundTasks):
+    """Send password reset link via email"""
+    user = await db.users.find_one({"email": req.email}, {"_id": 0})
+    if not user:
+        return {"message": "If an account exists with that email, a reset link has been sent."}
+
+    reset_token = str(uuid.uuid4())
+    expires = datetime.now(timezone.utc).isoformat()
+
+    await db.password_resets.insert_one({
+        "token": reset_token,
+        "user_id": user["id"],
+        "email": req.email,
+        "created_at": expires,
+        "used": False
+    })
+
+    reset_subject = "Password Reset - InsureHub"
+    reset_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #dc2626, #f43f5e); padding: 24px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h2 style="color: white; margin: 0;">Password Reset Request</h2>
+        </div>
+        <div style="padding: 24px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
+            <p style="color: #334155;">Hi <strong>{user['full_name']}</strong>,</p>
+            <p style="color: #475569;">We received a request to reset your InsureHub password.</p>
+            <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #e2e8f0;">
+                <p style="color: #64748b; font-size: 13px; margin-bottom: 10px;">Your reset code:</p>
+                <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px; color: #1e40af; margin: 0;">{reset_token[:8].upper()}</p>
+            </div>
+            <p style="color: #475569; font-size: 13px;">Enter this code on the password reset page. This code expires in 1 hour.</p>
+            <p style="color: #94a3b8; font-size: 11px; margin-top: 24px;">If you didn't request this, please ignore this email.</p>
+        </div>
+    </div>"""
+    background_tasks.add_task(send_email_notification, [req.email], reset_subject, reset_body)
+
+    return {"message": "If an account exists with that email, a reset link has been sent."}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    """Reset password using token from email"""
+    reset_record = await db.password_resets.find_one(
+        {"token": {"$regex": f"^{req.token[:8]}", "$options": "i"}, "used": False}, {"_id": 0}
+    )
+    if not reset_record:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code")
+
+    # Check if token is less than 1 hour old
+    from dateutil import parser as date_parser
+    created = date_parser.parse(reset_record["created_at"])
+    now = datetime.now(timezone.utc)
+    if hasattr(created, 'tzinfo') and created.tzinfo is None:
+        from datetime import timezone as tz
+        created = created.replace(tzinfo=tz.utc)
+    if (now - created).total_seconds() > 3600:
+        raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")
+
+    new_hash = get_password_hash(req.new_password)
+    await db.users.update_one({"id": reset_record["user_id"]}, {"$set": {"password_hash": new_hash}})
+    await db.password_resets.update_one({"token": reset_record["token"]}, {"$set": {"used": True}})
+
+    user = await db.users.find_one({"id": reset_record["user_id"]}, {"_id": 0})
+    if user:
+        await log_audit(user["id"], user["username"], user["role"], "PASSWORD_RESET", "auth", details="Password reset via email")
+
+    return {"message": "Password has been reset successfully. You can now log in."}
+
+
+@api_router.post("/auth/change-password")
+async def change_password(req: ChangePasswordRequest, current_user: User = Depends(get_current_user)):
+    """Change password for logged-in user"""
+    user = await db.users.find_one({"id": current_user.id}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(req.current_password, user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    new_hash = get_password_hash(req.new_password)
+    await db.users.update_one({"id": current_user.id}, {"$set": {"password_hash": new_hash}})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "PASSWORD_CHANGE", "auth", details="Password changed by user")
+
+    return {"message": "Password changed successfully"}
+
+
 # ==================== POLICY ENDPOINTS ====================
 
 @api_router.post("/policies")

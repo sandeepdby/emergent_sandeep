@@ -157,6 +157,21 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] HR Claims Dashboard: Improved charts (area chart for monthly trend, cashless vs reimbursement pie)
 - [x] Claims table shows corporate synopsis format (no personal data)
 
+### Session 19 - User Cleanup, Password Reset, Per Life Premium (April 2026)
+- [x] Created HR user: Arpita Saxena (arpita / Password@123 / arpita.saxena@nichebees.com)
+- [x] Deleted all test/junk admin and HR users (kept masteradmin + Arpita)
+- [x] Password reset via email: POST /api/auth/forgot-password sends 8-char reset code
+- [x] Password reset completion: POST /api/auth/reset-password validates code and resets
+- [x] Change password (logged in): POST /api/auth/change-password
+- [x] Login page: "Forgot Password?" link with email-based reset flow
+- [x] Profile dropdown in all dashboards (HR, Admin): Change Password + Logout
+- [x] Per Life Premium field added to endorsement forms (manual + Excel upload)
+- [x] Pro-rata preview on form: shows +₹ for Addition, -₹ for Deletion, live calculation
+- [x] Employee Email & Mobile Number fields in endorsement forms (optional)
+- [x] Excel template updated with Per Life Premium, Employee Email, Employee Mobile columns
+- [x] CD Ledger auto-entry: endorsement submission creates debit (Addition) or credit (Deletion)
+- [x] Excel preview table shows Per Life Premium, Email, Mobile columns
+
 ## API Endpoints
 
 ### Auth

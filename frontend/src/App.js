@@ -4,13 +4,105 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import axios from "axios";
 import { AuthContext, API } from "./auth";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowLeft, Mail } from "lucide-react";
+
+// ==================== FORGOT PASSWORD COMPONENT ====================
+const ForgotPasswordPage = ({ onBack }) => {
+  const [step, setStep] = useState(1); // 1=email, 2=code+newpass
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const handleSendCode = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage("");
+    try {
+      await axios.post(`${API}/auth/forgot-password`, { email });
+      setMessage("Reset code sent to your email. Check your inbox.");
+      setStep(2);
+    } catch (err) {
+      setMessage(err.response?.data?.detail || "Failed to send reset code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    if (newPassword.length < 6) { setMessage("Password must be at least 6 characters"); return; }
+    setLoading(true);
+    setMessage("");
+    try {
+      const res = await axios.post(`${API}/auth/reset-password`, { token: code, new_password: newPassword });
+      setMessage(res.data.message);
+      setTimeout(() => onBack(), 2000);
+    } catch (err) {
+      setMessage(err.response?.data?.detail || "Reset failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+        <div className="text-center mb-6">
+          <Mail className="w-12 h-12 text-blue-500 mx-auto mb-2" />
+          <h2 className="text-2xl font-bold text-gray-800">Reset Password</h2>
+          <p className="text-gray-500 text-sm mt-1">
+            {step === 1 ? "Enter your email to receive a reset code" : "Enter the code from your email"}
+          </p>
+        </div>
+
+        {message && (
+          <div className={`p-3 rounded-lg mb-4 text-sm ${message.includes("sent") || message.includes("success") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`} data-testid="reset-message">
+            {message}
+          </div>
+        )}
+
+        {step === 1 ? (
+          <form onSubmit={handleSendCode} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
+              <input type="email" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="your@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required data-testid="forgot-email-input" />
+            </div>
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2" data-testid="send-reset-code-btn">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Send Reset Code
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Reset Code</label>
+              <input type="text" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 font-mono text-lg tracking-widest text-center" placeholder="XXXXXXXX" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required maxLength={8} data-testid="reset-code-input" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+              <input type="password" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Minimum 6 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6} data-testid="new-password-input" />
+            </div>
+            <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium flex items-center justify-center gap-2" data-testid="reset-password-btn">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Reset Password
+            </button>
+          </form>
+        )}
+
+        <button onClick={onBack} className="w-full mt-4 text-gray-500 hover:text-gray-700 text-sm flex items-center justify-center gap-1" data-testid="back-to-login-from-reset">
+          <ArrowLeft className="w-3 h-3" /> Back to Login
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ==================== LOGIN/REGISTER COMPONENT ====================
 const LoginRegisterPage = ({ onLogin, onBack }) => {
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [registerData, setRegisterData] = useState({
@@ -44,6 +136,10 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
       setLoading(false);
     }
   };
+
+  if (showForgot) {
+    return <ForgotPasswordPage onBack={() => setShowForgot(false)} />;
+  }
 
   if (showRegister) {
     return (
@@ -222,12 +318,21 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
         
         <div className="mt-6 text-center space-y-2">
           <button
-            onClick={() => setShowRegister(true)}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-            data-testid="create-account-link"
+            onClick={() => setShowForgot(true)}
+            className="text-red-500 hover:text-red-700 text-sm font-medium"
+            data-testid="forgot-password-link"
           >
-            Create New Account
+            Forgot Password?
           </button>
+          <div>
+            <button
+              onClick={() => setShowRegister(true)}
+              className="text-blue-600 hover:text-blue-800 font-medium"
+              data-testid="create-account-link"
+            >
+              Create New Account
+            </button>
+          </div>
           {onBack && (
             <div>
               <button
