@@ -144,6 +144,19 @@ Build a comprehensive health insurance endorsement management system with:
 - [x] Email notification sent to HR user when policy is assigned (single and bulk assign)
 - [x] Bulk assign sends one consolidated email per HR user listing all newly assigned policies
 
+### Session 18 - Cloud Storage HR Assignment, E-Cards Actions, Claims Redesign (April 2026)
+- [x] Cloud Storage: Admin can select HR user when uploading documents
+- [x] Uploaded documents are automatically visible to assigned HR user
+- [x] HR users see only documents assigned to them or uploaded by them
+- [x] E-Cards: View button (opens in new tab), WhatsApp button (wa.me link), Email button (sends attachment)
+- [x] E-Cards tab shows "Assigned HR" column for Admin
+- [x] POST /api/documents/{id}/send-ecard sends email with file attachment to HR
+- [x] Claims: Removed personal fields (employee_name, patient_name, admission_date, discharge_date, diagnosis, hospital_name)
+- [x] Claims: Added cashless_claims_count, reimbursement_claims_count, claims_report_date fields
+- [x] Claims: Replaced "Renewal Expected Pricing" with "Annual Claims Trend" = (Claims / Policy Days) * 365
+- [x] HR Claims Dashboard: Improved charts (area chart for monthly trend, cashless vs reimbursement pie)
+- [x] Claims table shows corporate synopsis format (no personal data)
+
 ## API Endpoints
 
 ### Auth
