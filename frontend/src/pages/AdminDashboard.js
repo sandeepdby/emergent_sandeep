@@ -1,6 +1,6 @@
 import React from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2 } from "lucide-react";
+import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote } from "lucide-react";
 import { AuthContext } from "../auth";
 import UserProfileMenu from "./UserProfileMenu";
 import ApproveEndorsements from "./ApproveEndorsements";
@@ -16,6 +16,7 @@ import UserManagement from "./UserManagement";
 import ClaimsManagement from "./ClaimsManagement";
 import AuditLog from "./AuditLog";
 import PolicyAssignment from "./PolicyAssignment";
+import TestimonialsManagement from "./TestimonialsManagement";
 
 const Navigation = ({ onLogout, user }) => {
   const location = useLocation();
@@ -34,6 +35,7 @@ const Navigation = ({ onLogout, user }) => {
     { path: "/admin/users", label: "Users", icon: Users },
     { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
     { path: "/admin/email", label: "Email", icon: Mail },
+    { path: "/admin/testimonials", label: "Testimonials", icon: Quote },
   ];
 
   return (
@@ -106,6 +108,7 @@ class AdminDashboard extends React.Component {
             <Route path="/storage" element={<CloudStorage />} />
             <Route path="/users" element={<UserManagement />} />
             <Route path="/audit-log" element={<AuditLog />} />
+            <Route path="/testimonials" element={<TestimonialsManagement />} />
             <Route path="/" element={<Navigate to="/admin/analytics" />} />
           </Routes>
         </div>

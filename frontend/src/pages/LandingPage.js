@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import Marquee from "react-fast-marquee";
 import { 
   Shield, Sparkles, Users, FileCheck, Bell, MessageCircle, 
   Mail, CheckCircle, ArrowRight, Zap, Clock, BarChart3,
-  UserCheck, FileText, TrendingUp, Phone, MapPin, Send, Loader2
+  UserCheck, FileText, TrendingUp, Phone, MapPin, Send, Loader2, Star, Building2
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../auth";
@@ -22,10 +23,39 @@ const staggerContainer = {
   viewport: { once: true }
 };
 
+const defaultTestimonials = [
+  {
+    quote: "InsureHub has cut our endorsement processing time by 70%. The AI notifications are a game-changer.",
+    name: "Priya Sharma",
+    role: "HR Manager, TechCorp",
+    rating: 5,
+    avatar: "https://images.pexels.com/photos/6077664/pexels-photo-6077664.jpeg?w=100&h=100&fit=crop"
+  },
+  {
+    quote: "The WhatsApp integration means our team never misses an approval. Instant communication at its best.",
+    name: "Rahul Verma",
+    role: "Insurance Admin, HealthFirst",
+    rating: 5,
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop"
+  },
+  {
+    quote: "Finally, an endorsement system that understands insurance workflows. The pro-rata calculations are spot-on.",
+    name: "Anita Desai",
+    role: "Benefits Coordinator, MediCare",
+    rating: 4,
+    avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100&h=100&fit=crop"
+  }
+];
+
 export default function LandingPage({ onGetStarted }) {
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", company: "", message: "" });
   const [contactSending, setContactSending] = useState(false);
   const [contactSent, setContactSent] = useState(false);
+  const [testimonials, setTestimonials] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${API}/testimonials/public`).then(res => setTestimonials(res.data)).catch(() => {});
+  }, []);
 
   const handleContact = async (e) => {
     e.preventDefault();
@@ -59,6 +89,7 @@ export default function LandingPage({ onGetStarted }) {
             <a href="#pricing" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-pricing">Pricing</a>
             <a href="#testimonials" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-testimonials">Testimonials</a>
             <a href="#contact" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-contact">Contact</a>
+            <Link to="/careers" className="text-[#4A4D54] hover:text-[#0F1115] transition-colors" data-testid="nav-careers">Careers</Link>
           </nav>
           <div className="flex items-center gap-4">
             <button 
@@ -366,41 +397,34 @@ export default function LandingPage({ onGetStarted }) {
             whileInView="whileInView"
             viewport={{ once: true }}
           >
-            {[
-              {
-                quote: "InsureHub has cut our endorsement processing time by 70%. The AI notifications are a game-changer.",
-                name: "Priya Sharma",
-                role: "HR Manager, TechCorp",
-                avatar: "https://images.pexels.com/photos/6077664/pexels-photo-6077664.jpeg?w=100&h=100&fit=crop"
-              },
-              {
-                quote: "The WhatsApp integration means our team never misses an approval. Instant communication at its best.",
-                name: "Rahul Verma",
-                role: "Insurance Admin, HealthFirst",
-                avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop"
-              },
-              {
-                quote: "Finally, an endorsement system that understands insurance workflows. The pro-rata calculations are spot-on.",
-                name: "Anita Desai",
-                role: "Benefits Coordinator, MediCare",
-                avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=100&h=100&fit=crop"
-              }
-            ].map((testimonial, i) => (
+            {(testimonials.length > 0 ? testimonials : defaultTestimonials).map((t, i) => (
               <motion.div 
-                key={i}
+                key={t.id || i}
                 className="bg-white rounded-2xl border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8"
                 variants={fadeInUp}
+                data-testid={`landing-testimonial-${i}`}
               >
-                <p className="text-[#4A4D54] mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                {t.rating && (
+                  <div className="flex items-center gap-0.5 mb-4">
+                    {Array.from({ length: 5 }, (_, si) => (
+                      <Star key={si} className={`w-4 h-4 ${si < t.rating ? 'text-amber-400 fill-amber-400' : 'text-gray-200'}`} />
+                    ))}
+                  </div>
+                )}
+                <p className="text-[#4A4D54] mb-6 leading-relaxed">"{t.testimonial_text || t.quote}"</p>
                 <div className="flex items-center gap-4">
-                  <img 
-                    src={testimonial.avatar} 
-                    alt={testimonial.name}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
+                  {t.logo_url ? (
+                    <img src={t.logo_url} alt={t.company_name} className="w-12 h-12 rounded-full object-contain border border-black/5" />
+                  ) : t.avatar ? (
+                    <img src={t.avatar} alt={t.contact_person || t.name} className="w-12 h-12 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center">
+                      <Building2 className="w-6 h-6 text-indigo-400" />
+                    </div>
+                  )}
                   <div>
-                    <p className="font-semibold">{testimonial.name}</p>
-                    <p className="text-sm text-[#8A8D93]">{testimonial.role}</p>
+                    <p className="font-semibold">{t.contact_person || t.name || t.company_name}</p>
+                    <p className="text-sm text-[#8A8D93]">{t.designation ? `${t.designation}, ${t.company_name}` : (t.role || t.company_name)}</p>
                   </div>
                 </div>
               </motion.div>
@@ -635,19 +659,22 @@ export default function LandingPage({ onGetStarted }) {
                 <ul className="space-y-2 text-sm text-[#FAF9F6]/70">
                   <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
                   <li><a href="#contact" className="hover:text-white transition-colors">Contact</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
+                  <li><Link to="/careers" className="hover:text-white transition-colors" data-testid="footer-careers-link">Careers</Link></li>
                 </ul>
               </div>
               <div>
                 <h4 className="font-semibold mb-4">Legal</h4>
                 <ul className="space-y-2 text-sm text-[#FAF9F6]/70">
-                  <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-                  <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
+                  <li><Link to="/privacy-policy" className="hover:text-white transition-colors" data-testid="footer-privacy-link">Privacy Policy</Link></li>
+                  <li><Link to="/terms-of-service" className="hover:text-white transition-colors" data-testid="footer-terms-link">Terms of Service</Link></li>
                 </ul>
               </div>
             </div>
             <div className="text-center mt-12 pt-8 border-t border-white/10 text-sm text-[#FAF9F6]/50">
-              © {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.
+              <p>&copy; {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.</p>
+              <p className="mt-2 text-xs text-[#FAF9F6]/30">
+                InsureHub is a registered trademark of Aarogya Assist. All content, features, and functionality are owned by Aarogya Assist and protected by international copyright, trademark, and other intellectual property laws. Unauthorized reproduction or distribution is strictly prohibited.
+              </p>
             </div>
           </div>
         </div>

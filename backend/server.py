@@ -951,6 +951,58 @@ async def submit_contact(form: ContactForm):
     return {"message": "Thank you! We'll get back to you shortly."}
 
 
+# ==================== CAREER APPLICATION ENDPOINT ====================
+class CareerApplication(BaseModel):
+    full_name: str
+    email: str
+    phone: str
+    position: str
+    experience_years: Optional[str] = None
+    current_company: Optional[str] = None
+    cover_letter: Optional[str] = None
+    linkedin_url: Optional[str] = None
+
+
+@api_router.post("/careers/apply")
+async def submit_career_application(form: CareerApplication):
+    """Save career application and send notification"""
+    entry = {
+        "id": str(uuid.uuid4()),
+        "full_name": form.full_name,
+        "email": form.email,
+        "phone": form.phone,
+        "position": form.position,
+        "experience_years": form.experience_years,
+        "current_company": form.current_company,
+        "cover_letter": form.cover_letter,
+        "linkedin_url": form.linkedin_url,
+        "status": "new",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.career_applications.insert_one(entry)
+
+    try:
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASS")
+        if smtp_host and smtp_user and smtp_pass:
+            subject = f"New Career Application: {form.full_name} - {form.position}"
+            body = f"Name: {form.full_name}\nEmail: {form.email}\nPhone: {form.phone}\nPosition: {form.position}\nExperience: {form.experience_years or 'N/A'}\nCurrent Company: {form.current_company or 'N/A'}\nLinkedIn: {form.linkedin_url or 'N/A'}\n\nCover Letter:\n{form.cover_letter or 'N/A'}"
+            msg = MIMEMultipart()
+            msg['From'] = smtp_user
+            msg['To'] = "ks@aarogya-assist.com"
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body, 'plain'))
+            smtp_port = int(os.environ.get("SMTP_PORT", 465))
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+    except Exception as e:
+        logging.error(f"Failed to send career application notification: {e}")
+
+    return {"message": "Application submitted successfully! We'll review your profile and get in touch."}
+
+
 @app.get("/health")
 async def app_health_check():
     """Root-level health check endpoint"""
@@ -1613,6 +1665,114 @@ async def bulk_assign_policies(
         background_tasks.add_task(send_email_notification, [info["email"]], subject, body)
 
     return {"results": results}
+
+
+# ==================== ENDORSEMENT ENDPOINTS ====================
+
+
+# ==================== TESTIMONIAL MODELS ====================
+
+class TestimonialCreate(BaseModel):
+    company_name: str
+    testimonial_text: str
+    contact_person: Optional[str] = None
+    designation: Optional[str] = None
+    rating: int = 5
+    logo_url: Optional[str] = None
+
+
+class TestimonialUpdate(BaseModel):
+    company_name: Optional[str] = None
+    testimonial_text: Optional[str] = None
+    contact_person: Optional[str] = None
+    designation: Optional[str] = None
+    rating: Optional[int] = None
+    logo_url: Optional[str] = None
+
+
+# ==================== TESTIMONIAL ENDPOINTS ====================
+
+@api_router.get("/testimonials/public")
+async def get_public_testimonials():
+    """Get all testimonials for public landing page (no auth)"""
+    testimonials = await db.testimonials.find({"is_active": True}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return testimonials
+
+
+@api_router.get("/testimonials")
+async def get_testimonials(current_user: User = Depends(get_current_user)):
+    """Get all testimonials (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    testimonials = await db.testimonials.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return testimonials
+
+
+@api_router.post("/testimonials")
+async def create_testimonial(data: TestimonialCreate, current_user: User = Depends(get_current_user)):
+    """Create a testimonial (Master Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "company_name": data.company_name,
+        "testimonial_text": data.testimonial_text,
+        "contact_person": data.contact_person,
+        "designation": data.designation,
+        "rating": max(1, min(5, data.rating)),
+        "logo_url": data.logo_url,
+        "is_active": True,
+        "created_by": current_user.id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.testimonials.insert_one(doc)
+    result = await db.testimonials.find_one({"id": doc["id"]}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "testimonial", doc["id"], f"Created testimonial for {data.company_name}")
+    return result
+
+
+@api_router.put("/testimonials/{testimonial_id}")
+async def update_testimonial(testimonial_id: str, data: TestimonialUpdate, current_user: User = Depends(get_current_user)):
+    """Update a testimonial (Master Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    existing = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+    if "rating" in update_data:
+        update_data["rating"] = max(1, min(5, update_data["rating"]))
+    if update_data:
+        await db.testimonials.update_one({"id": testimonial_id}, {"$set": update_data})
+    result = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "testimonial", testimonial_id, f"Updated testimonial")
+    return result
+
+
+@api_router.delete("/testimonials/{testimonial_id}")
+async def delete_testimonial(testimonial_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a testimonial (Master Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    existing = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    await db.testimonials.delete_one({"id": testimonial_id})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "testimonial", testimonial_id, f"Deleted testimonial for {existing.get('company_name')}")
+    return {"message": "Testimonial deleted"}
+
+
+@api_router.patch("/testimonials/{testimonial_id}/toggle")
+async def toggle_testimonial(testimonial_id: str, current_user: User = Depends(get_current_user)):
+    """Toggle testimonial active status (Master Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    existing = await db.testimonials.find_one({"id": testimonial_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Testimonial not found")
+    new_status = not existing.get("is_active", True)
+    await db.testimonials.update_one({"id": testimonial_id}, {"$set": {"is_active": new_status}})
+    return {"is_active": new_status}
 
 
 # ==================== ENDORSEMENT ENDPOINTS ====================
