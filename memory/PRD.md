@@ -67,8 +67,9 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **PDF Upload & Analysis**: Upload policy PDF → AI extracts and explains key T&C, exclusions, waiting periods
 - **Admin Benchmark Management**: CRUD for benchmark configurations with flexible parameters
 - **Pre-loaded Benchmarks**: 8 industry benchmarks seeded (ICICI Lombard, Star Health, HDFC Ergo, ICICI Prudential, Max Life, New India Assurance, Bajaj Allianz, Aarogya Assist Wellness Add-on)
-- **Dual Portal Access**: Admin sees 4 tabs (incl. Manage Benchmarks), HR sees 3 tabs
+- **Dual Portal Access**: Admin sees 5 tabs (incl. AI Recommend + Manage Benchmarks), HR sees 4 tabs
 - **Aarogya Assist Wellness Add-ons**: AI highlights modern wellness features as premium enhancements
+- **AI Policy Recommendation Engine**: HR enters company size, industry, budget, priorities → AI recommends best-fit policies with fit scores, budget estimates, coverage gap analysis, and implementation roadmap
 
 ## Key API Endpoints
 - POST /api/auth/login, /api/auth/register
@@ -88,6 +89,7 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - POST /api/policy-explainer/explain (AI T&C explanation)
 - POST /api/policy-explainer/compare (AI policy comparison)
 - POST /api/policy-explainer/upload-pdf (PDF analysis)
+- POST /api/policy-explainer/recommend (AI policy recommendation)
 - Various Cloud Storage, CD Ledger, Analytics endpoints
 
 ## Database Collections
