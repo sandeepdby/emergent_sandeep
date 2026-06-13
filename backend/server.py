@@ -4256,6 +4256,128 @@ Format as clean markdown."""
         raise HTTPException(status_code=500, detail=f"PDF analysis failed: {str(e)}")
 
 
+@api_router.post("/policy-explainer/compare-documents")
+async def compare_uploaded_documents(
+    files: List[UploadFile] = File(default=[]),
+    benchmark_ids: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user)
+):
+    """Compare multiple uploaded PDFs and/or pre-loaded benchmarks with AI enhancement advice"""
+    import pdfplumber
+
+    bid_list = [b.strip() for b in benchmark_ids.split(",") if b.strip()] if benchmark_ids else []
+    total_sources = len(files) + len(bid_list)
+
+    if total_sources < 2:
+        raise HTTPException(status_code=400, detail="Upload at least 2 documents or select benchmarks to compare")
+    if total_sources > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 sources can be compared at once")
+
+    policies_text = ""
+    sources_info = []
+
+    # Extract text from uploaded PDFs
+    for i, file in enumerate(files, 1):
+        if not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail=f"File '{file.filename}' is not a PDF")
+        contents = await file.read()
+        if len(contents) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail=f"File '{file.filename}' exceeds 15MB limit")
+        try:
+            text = ""
+            with pdfplumber.open(io.BytesIO(contents)) as pdf:
+                for page in pdf.pages[:20]:
+                    pt = page.extract_text()
+                    if pt:
+                        text += pt + "\n"
+            if not text.strip():
+                raise HTTPException(status_code=400, detail=f"Could not extract text from '{file.filename}'")
+            policies_text += f"\n\n--- DOCUMENT {i}: {file.filename} ---\n{text[:4000]}"
+            sources_info.append({"type": "pdf", "name": file.filename})
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read '{file.filename}': {str(e)}")
+
+    # Add pre-loaded benchmarks
+    for bid in bid_list:
+        b = await db.policy_benchmarks.find_one({"id": bid}, {"_id": 0})
+        if b:
+            policies_text += f"\n\n--- BENCHMARK: {b['insurer_name']} ({b['plan_name']}) [{b['policy_type']}] ---\nParameters: {str(b.get('parameters', {}))}"
+            sources_info.append({"type": "benchmark", "name": f"{b['insurer_name']} - {b['plan_name']}", "id": bid})
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"compare-docs-{uuid.uuid4()}",
+            system_message="""You are InsureHub's senior insurance benchmarking expert by Aarogya Assist. You compare insurance policies from uploaded documents and pre-loaded benchmarks. You provide objective analysis with actionable enhancement recommendations.
+
+Guidelines:
+- Be thorough and objective
+- Use comparison tables in markdown
+- Highlight critical differences in coverage, exclusions, limits
+- Provide specific enhancement recommendations
+- Rate each policy with scores
+- Always suggest Aarogya Assist wellness add-ons"""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Compare these insurance policies and provide a comprehensive benchmarking analysis with enhancement advice:
+
+{policies_text}
+
+Provide the following in your analysis:
+
+## 1. Policy Overview Table
+Create a markdown comparison table with key parameters for each policy.
+
+## 2. Coverage Comparison
+Compare coverage breadth, sub-limits, room rent, ICU, daycare, ambulance, etc.
+
+## 3. Exclusions & Waiting Periods
+Highlight differences in exclusions and waiting periods across policies.
+
+## 4. Claims Process Comparison
+Compare cashless network, claim settlement ratio, documentation requirements.
+
+## 5. Strengths & Weaknesses
+For each policy, list top 3 strengths and top 3 weaknesses.
+
+## 6. Value Rating
+Rate each policy (out of 10) on: Coverage, Value-for-Money, Network, Claims Experience, Employee Satisfaction.
+
+## 7. AI Enhancement Recommendations
+For each policy, suggest specific improvements:
+- Coverage gaps that should be negotiated
+- Riders or add-ons to consider
+- Negotiation points for renewal
+- Areas where Aarogya Assist AI Wellness Suite can fill gaps:
+  * Preventive health checkup tracking
+  * AI health risk assessment
+  * Telemedicine integration
+  * Mental wellness programs
+  * Claims concierge service
+  * Digital health records
+
+## 8. Final Verdict
+Your overall recommendation with reasoning.
+
+Format as detailed, professional markdown."""
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        return {
+            "sources": sources_info,
+            "total_sources": len(sources_info),
+            "comparison": response,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Document comparison error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI comparison failed: {str(e)}")
+
+
 class RecommendRequest(BaseModel):
     company_size: str  # "1-50", "51-200", "201-500", "501-2000", "2000+"
     industry: str
