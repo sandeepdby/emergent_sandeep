@@ -61,6 +61,15 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **HR Visibility**: Imported claims auto-appear in HR portal filtered by assigned policies
 - **Import Result UI**: Success/error counts displayed after import with row-level error details
 
+### Phase 6 - Policy T&C Explainer & Benchmarking Tool (DONE - Feb 2026)
+- **AI T&C Explainer**: Select policy type (Group Health/Term/Accident) + focus area → AI generates comprehensive explanation
+- **Policy Benchmarking**: Select 2-4 pre-loaded benchmarks → AI generates side-by-side comparison with recommendations
+- **PDF Upload & Analysis**: Upload policy PDF → AI extracts and explains key T&C, exclusions, waiting periods
+- **Admin Benchmark Management**: CRUD for benchmark configurations with flexible parameters
+- **Pre-loaded Benchmarks**: 8 industry benchmarks seeded (ICICI Lombard, Star Health, HDFC Ergo, ICICI Prudential, Max Life, New India Assurance, Bajaj Allianz, Aarogya Assist Wellness Add-on)
+- **Dual Portal Access**: Admin sees 4 tabs (incl. Manage Benchmarks), HR sees 3 tabs
+- **Aarogya Assist Wellness Add-ons**: AI highlights modern wellness features as premium enhancements
+
 ## Key API Endpoints
 - POST /api/auth/login, /api/auth/register
 - POST /api/auth/forgot-password, /api/auth/reset-password
@@ -75,6 +84,10 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - GET /api/claims/template/download
 - GET /api/claims-analytics
 - GET /api/policies, /api/endorsements
+- GET/POST/PUT/DELETE /api/policy-benchmarks
+- POST /api/policy-explainer/explain (AI T&C explanation)
+- POST /api/policy-explainer/compare (AI policy comparison)
+- POST /api/policy-explainer/upload-pdf (PDF analysis)
 - Various Cloud Storage, CD Ledger, Analytics endpoints
 
 ## Database Collections
