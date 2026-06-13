@@ -3951,6 +3951,311 @@ async def get_policies_analytics(current_user: User = Depends(get_current_user))
     }
 
 
+# ==================== Policy Explainer & Benchmarking ====================
+
+class PolicyBenchmarkCreate(BaseModel):
+    policy_type: str  # "Group Health", "Group Term", "Group Accident"
+    insurer_name: str
+    plan_name: str
+    parameters: dict  # Flexible JSON for all params
+    is_aarogya_addon: bool = False
+    is_active: bool = True
+
+
+@api_router.get("/policy-benchmarks")
+async def get_policy_benchmarks(
+    policy_type: Optional[str] = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get all policy benchmarks"""
+    query = {"is_active": True}
+    if policy_type:
+        query["policy_type"] = policy_type
+    benchmarks = await db.policy_benchmarks.find(query, {"_id": 0}).sort("insurer_name", 1).to_list(200)
+    return benchmarks
+
+
+@api_router.post("/policy-benchmarks")
+async def create_policy_benchmark(
+    data: PolicyBenchmarkCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create a policy benchmark (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "policy_type": data.policy_type,
+        "insurer_name": data.insurer_name,
+        "plan_name": data.plan_name,
+        "parameters": data.parameters,
+        "is_aarogya_addon": data.is_aarogya_addon,
+        "is_active": data.is_active,
+        "created_by": current_user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.policy_benchmarks.insert_one(doc)
+    result = await db.policy_benchmarks.find_one({"id": doc["id"]}, {"_id": 0})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "policy_benchmark", doc["id"], f"Created benchmark: {data.insurer_name} - {data.plan_name}")
+    return result
+
+
+@api_router.put("/policy-benchmarks/{benchmark_id}")
+async def update_policy_benchmark(
+    benchmark_id: str,
+    data: PolicyBenchmarkCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Update a policy benchmark (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    existing = await db.policy_benchmarks.find_one({"id": benchmark_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+    update_data = data.model_dump()
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.policy_benchmarks.update_one({"id": benchmark_id}, {"$set": update_data})
+    result = await db.policy_benchmarks.find_one({"id": benchmark_id}, {"_id": 0})
+    return result
+
+
+@api_router.delete("/policy-benchmarks/{benchmark_id}")
+async def delete_policy_benchmark(
+    benchmark_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a policy benchmark (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    result = await db.policy_benchmarks.delete_one({"id": benchmark_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Benchmark not found")
+    return {"message": "Benchmark deleted"}
+
+
+class ExplainerRequest(BaseModel):
+    policy_type: str
+    focus_area: Optional[str] = None  # e.g. "exclusions", "claims process", "waiting periods"
+
+
+@api_router.post("/policy-explainer/explain")
+async def explain_policy_terms(
+    data: ExplainerRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """AI-powered policy T&C explainer"""
+    try:
+        # Get relevant benchmarks for context
+        benchmarks = await db.policy_benchmarks.find(
+            {"policy_type": data.policy_type, "is_active": True}, {"_id": 0}
+        ).to_list(10)
+
+        benchmark_context = ""
+        if benchmarks:
+            benchmark_context = "\n\nAvailable benchmark data for reference:\n"
+            for b in benchmarks:
+                benchmark_context += f"\n- {b['insurer_name']} ({b['plan_name']}): {str(b.get('parameters', {}))[:500]}"
+
+        focus_instruction = ""
+        if data.focus_area:
+            focus_instruction = f"\n\nFocus specifically on: {data.focus_area}"
+
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"explainer-{uuid.uuid4()}",
+            system_message="""You are InsureHub's insurance policy expert by Aarogya Assist. You explain complex insurance terms in simple, easy-to-understand language for HR professionals and employees.
+
+Guidelines:
+- Use simple language, avoid jargon
+- Structure with clear headings and bullet points
+- Include practical examples where possible
+- Highlight key watchpoints and common pitfalls
+- Always mention Aarogya Assist wellness add-ons when relevant
+- Format response in clean markdown with sections"""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Explain the key Terms & Conditions for **{data.policy_type}** insurance in India.
+
+Cover these aspects in detail:
+1. **Coverage Scope** - What is covered, sum insured structure
+2. **Key Benefits** - Hospitalization, daycare, domiciliary, ambulance, etc.
+3. **Exclusions** - Standard exclusions, permanent exclusions
+4. **Waiting Periods** - Initial waiting, specific disease waiting, pre-existing conditions
+5. **Claim Process** - Cashless vs Reimbursement, documentation needed
+6. **Sub-limits & Caps** - Room rent, ICU, specific procedure limits
+7. **Special Features** - Maternity, OPD, wellness, mental health coverage
+8. **Renewability & Portability** - IRDAI guidelines
+9. **Aarogya Assist Wellness Add-ons** - Modern AI-powered wellness features like:
+   - Preventive health checkup tracking
+   - AI health risk assessment
+   - Digital health records management
+   - Telemedicine integration
+   - Mental wellness programs
+   - Fitness & nutrition guidance
+   - Claims assistance concierge
+{focus_instruction}
+{benchmark_context}
+
+Provide a comprehensive yet easy-to-understand explanation. Use markdown formatting."""
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        return {
+            "policy_type": data.policy_type,
+            "focus_area": data.focus_area,
+            "explanation": response,
+            "benchmarks_count": len(benchmarks),
+        }
+    except Exception as e:
+        logging.error(f"Policy explainer error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI explanation failed: {str(e)}")
+
+
+class CompareRequest(BaseModel):
+    benchmark_ids: List[str]  # 2-3 benchmark IDs to compare
+
+
+@api_router.post("/policy-explainer/compare")
+async def compare_policies(
+    data: CompareRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """AI-powered policy comparison"""
+    if len(data.benchmark_ids) < 2:
+        raise HTTPException(status_code=400, detail="Select at least 2 policies to compare")
+    if len(data.benchmark_ids) > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 policies can be compared")
+
+    benchmarks = []
+    for bid in data.benchmark_ids:
+        b = await db.policy_benchmarks.find_one({"id": bid}, {"_id": 0})
+        if b:
+            benchmarks.append(b)
+
+    if len(benchmarks) < 2:
+        raise HTTPException(status_code=404, detail="Could not find enough benchmarks to compare")
+
+    try:
+        policies_text = ""
+        for i, b in enumerate(benchmarks, 1):
+            policies_text += f"\n\nPolicy {i}: {b['insurer_name']} - {b['plan_name']} ({b['policy_type']})\nParameters: {str(b.get('parameters', {}))}"
+
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"compare-{uuid.uuid4()}",
+            system_message="""You are InsureHub's insurance benchmarking expert by Aarogya Assist. You compare insurance policies objectively and help HR teams make informed decisions.
+
+Guidelines:
+- Be objective and factual
+- Use comparison tables in markdown
+- Highlight strengths and weaknesses of each
+- Give a clear recommendation with reasoning
+- Mention how Aarogya Assist add-ons can enhance any policy"""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Compare these insurance policies side-by-side:
+{policies_text}
+
+Provide:
+1. **Side-by-Side Comparison Table** - Key parameters in markdown table format
+2. **Strengths** of each policy
+3. **Weaknesses / Gaps** of each policy
+4. **Value for Money Rating** (1-5 stars for each)
+5. **Best For** - Which type of organization each policy suits
+6. **Recommendation** - Your expert pick with reasoning
+7. **Aarogya Assist Enhancement** - How our wellness add-ons can complement the chosen policy
+
+Format as clean markdown."""
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        return {
+            "policies_compared": [{"id": b["id"], "insurer": b["insurer_name"], "plan": b["plan_name"]} for b in benchmarks],
+            "comparison": response,
+        }
+    except Exception as e:
+        logging.error(f"Policy comparison error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI comparison failed: {str(e)}")
+
+
+@api_router.post("/policy-explainer/upload-pdf")
+async def analyze_policy_pdf(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a policy PDF and get AI-extracted T&C analysis"""
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+    contents = await file.read()
+    if len(contents) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File size exceeds 15MB limit")
+
+    try:
+        import pdfplumber
+        text = ""
+        with pdfplumber.open(io.BytesIO(contents)) as pdf:
+            for page in pdf.pages[:30]:  # Limit to 30 pages
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+
+        if not text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF. The file may be image-based or encrypted.")
+
+        # Truncate to ~8000 chars for LLM context
+        text_for_ai = text[:8000]
+
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"pdf-analyze-{uuid.uuid4()}",
+            system_message="""You are InsureHub's insurance document analyst by Aarogya Assist. You analyze policy documents and extract key terms, conditions, and important details in a structured format.
+
+Guidelines:
+- Extract and organize key information clearly
+- Highlight critical terms, exclusions, and waiting periods
+- Note any unusual or noteworthy clauses
+- Use structured markdown with clear sections
+- Flag any potential concerns for the policyholder"""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Analyze this insurance policy document and provide a comprehensive summary:
+
+--- DOCUMENT TEXT (excerpts) ---
+{text_for_ai}
+--- END ---
+
+Provide:
+1. **Policy Overview** - Type, insurer, plan name, sum insured
+2. **Key Coverage** - What's covered
+3. **Exclusions** - What's NOT covered (highlight critical ones)
+4. **Waiting Periods** - All waiting periods mentioned
+5. **Sub-limits & Caps** - Room rent, procedure limits, co-pay
+6. **Claim Process** - How to file claims
+7. **Special Conditions** - Any unusual/noteworthy clauses
+8. **Key Watchpoints** - Things the HR/employee should be aware of
+9. **Aarogya Assist Recommendation** - How our wellness add-ons can enhance this policy
+
+Format as clean markdown."""
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        return {
+            "filename": file.filename,
+            "pages_extracted": min(30, len(text.split("\n")) // 50 + 1),
+            "text_length": len(text),
+            "analysis": response,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"PDF analysis error: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF analysis failed: {str(e)}")
+
+
 # ==================== Audit Log Endpoints ====================
 
 @api_router.get("/audit-log")
@@ -4016,6 +4321,237 @@ async def seed_master_admin():
     else:
         # Ensure flag is set on existing record
         await db.users.update_one({"username": "masteradmin"}, {"$set": {"is_master_admin": True}})
+
+
+@app.on_event("startup")
+async def seed_policy_benchmarks():
+    """Seed pre-loaded policy benchmarks (idempotent)"""
+    count = await db.policy_benchmarks.count_documents({})
+    if count > 0:
+        return
+
+    benchmarks = [
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Health",
+            "insurer_name": "ICICI Lombard",
+            "plan_name": "Group Health Protect",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "sum_insured": "3L - 10L per family",
+                "room_rent": "Single AC, No sub-limit above 5L SI",
+                "icu_charges": "No sub-limit",
+                "pre_hospitalization": "30 days",
+                "post_hospitalization": "60 days",
+                "daycare_procedures": "590+ procedures covered",
+                "ambulance": "Up to Rs 3,000",
+                "maternity": "Normal: 50K, C-section: 75K (after 9 months waiting)",
+                "newborn_cover": "Day 1 cover for newborn",
+                "opd_cover": "Optional add-on",
+                "mental_health": "Covered as per IRDAI mandate",
+                "waiting_period_pec": "36 months",
+                "waiting_period_specific": "24 months",
+                "initial_waiting": "30 days",
+                "copay": "Nil for network hospitals",
+                "network_hospitals": "9,500+",
+                "wellness_benefits": "Annual health checkup",
+                "claim_settlement_ratio": "97.8%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Health",
+            "insurer_name": "Star Health",
+            "plan_name": "Star Comprehensive",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "sum_insured": "5L - 25L per family",
+                "room_rent": "No sub-limit",
+                "icu_charges": "No sub-limit",
+                "pre_hospitalization": "60 days",
+                "post_hospitalization": "90 days",
+                "daycare_procedures": "700+ procedures covered",
+                "ambulance": "Up to Rs 5,000",
+                "maternity": "Normal: 75K, C-section: 1L (after 12 months waiting)",
+                "newborn_cover": "Day 1 cover, vaccination included",
+                "opd_cover": "Included in higher plans",
+                "mental_health": "Full coverage including OPD counseling",
+                "waiting_period_pec": "36 months",
+                "waiting_period_specific": "24 months",
+                "initial_waiting": "30 days",
+                "copay": "Nil",
+                "network_hospitals": "14,000+",
+                "wellness_benefits": "Annual checkup + telemedicine",
+                "claim_settlement_ratio": "96.2%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Health",
+            "insurer_name": "HDFC Ergo",
+            "plan_name": "Optima Secure Corporate",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "sum_insured": "3L - 15L per family",
+                "room_rent": "1% of SI per day (No limit above 10L)",
+                "icu_charges": "2% of SI per day",
+                "pre_hospitalization": "30 days",
+                "post_hospitalization": "60 days",
+                "daycare_procedures": "550+ procedures covered",
+                "ambulance": "Up to Rs 4,000",
+                "maternity": "Normal: 40K, C-section: 60K (after 9 months waiting)",
+                "newborn_cover": "Covered from day 1",
+                "opd_cover": "Optional",
+                "mental_health": "Covered as per IRDAI mandate",
+                "waiting_period_pec": "48 months",
+                "waiting_period_specific": "24 months",
+                "initial_waiting": "30 days",
+                "copay": "10% for non-network",
+                "network_hospitals": "13,000+",
+                "wellness_benefits": "Health checkup + BMI tracking",
+                "claim_settlement_ratio": "98.1%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Term",
+            "insurer_name": "ICICI Prudential",
+            "plan_name": "Group Term Life Shield",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "cover_type": "Term Life Insurance",
+                "sum_assured": "1x - 5x Annual CTC",
+                "accidental_death": "2x cover for accidental death",
+                "natural_death": "Full sum assured",
+                "terminal_illness": "Accelerated benefit (100% payout)",
+                "suicide_clause": "Excluded in first year",
+                "age_limit": "18 - 65 years",
+                "free_cover_limit": "Rs 50L without medical",
+                "nomination": "Multiple nominees allowed",
+                "tax_benefit": "Section 80C benefit for employer",
+                "claim_settlement": "95.6%",
+                "waiting_period": "None for accidental death",
+                "premium_type": "Yearly renewable, age-banded",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Term",
+            "insurer_name": "Max Life",
+            "plan_name": "Group Term Plus",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "cover_type": "Term Life Insurance",
+                "sum_assured": "2x - 7x Annual CTC",
+                "accidental_death": "2x additional cover",
+                "natural_death": "Full sum assured",
+                "terminal_illness": "Lump sum advance benefit",
+                "critical_illness": "Optional rider - 30 conditions",
+                "suicide_clause": "Excluded in first year",
+                "age_limit": "18 - 70 years",
+                "free_cover_limit": "Rs 75L without medical",
+                "premium_type": "Flat rate or age-banded",
+                "claim_settlement": "99.3%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Accident",
+            "insurer_name": "New India Assurance",
+            "plan_name": "Group Personal Accident",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "cover_type": "Personal Accident Insurance",
+                "sum_insured": "5L - 50L",
+                "accidental_death": "100% of SI",
+                "permanent_total_disability": "100% of SI",
+                "permanent_partial_disability": "As per schedule (10-100%)",
+                "temporary_total_disability": "Weekly benefit (1% of SI, max 52 weeks)",
+                "medical_expenses": "Up to 40% of SI",
+                "transportation_of_mortal_remains": "Rs 5,000",
+                "education_benefit": "Rs 1L per child (max 2)",
+                "ambulance": "Rs 5,000 per accident",
+                "worldwide_coverage": "24/7 worldwide",
+                "adventure_sports": "Excluded unless specifically added",
+                "terrorism": "Covered",
+                "claim_settlement": "94.5%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Accident",
+            "insurer_name": "Bajaj Allianz",
+            "plan_name": "Group Guard Plus",
+            "is_aarogya_addon": False,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "cover_type": "Personal Accident Insurance",
+                "sum_insured": "3L - 1Cr",
+                "accidental_death": "100% of SI",
+                "permanent_total_disability": "125% of SI",
+                "permanent_partial_disability": "As per schedule",
+                "temporary_total_disability": "Weekly benefit (max 104 weeks)",
+                "medical_expenses": "Up to 50% of SI",
+                "transportation_of_mortal_remains": "Rs 10,000",
+                "education_benefit": "Rs 2L per child (max 2)",
+                "loan_protector": "EMI cover for 12 months",
+                "modification_expenses": "Up to Rs 5L for home modification",
+                "worldwide_coverage": "24/7 worldwide",
+                "claim_settlement": "96.8%",
+            },
+        },
+        {
+            "id": str(uuid.uuid4()),
+            "policy_type": "Group Health",
+            "insurer_name": "Aarogya Assist",
+            "plan_name": "AI Wellness Suite (Add-on)",
+            "is_aarogya_addon": True,
+            "is_active": True,
+            "created_by": "system",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "parameters": {
+                "type": "Wellness Add-on Package",
+                "ai_health_risk_assessment": "AI-powered health scoring with predictive analytics",
+                "preventive_checkup_tracking": "Automated scheduling & reminders for annual checkups",
+                "digital_health_records": "Secure cloud-based health record management",
+                "telemedicine": "24/7 video/audio doctor consultations",
+                "mental_wellness": "AI chatbot counseling + professional therapist sessions",
+                "fitness_guidance": "Personalized workout & nutrition plans via AI",
+                "claims_concierge": "AI-assisted claims filing + dedicated relationship manager",
+                "pharmacy_discounts": "Up to 25% on partner pharmacies",
+                "diagnostic_discounts": "Up to 50% on lab tests at partner centers",
+                "second_opinion": "Free medical second opinion for major diagnoses",
+                "chronic_disease_mgmt": "AI monitoring for diabetes, hypertension, cardiac conditions",
+                "employee_wellness_score": "Organization-level wellness dashboard",
+                "integration": "Works with any Group Health, Term, or Accident policy",
+                "pricing": "Rs 500 - Rs 2,000 per employee per year",
+            },
+        },
+    ]
+
+    for b in benchmarks:
+        await db.policy_benchmarks.insert_one(b)
+    logging.getLogger(__name__).info(f"Seeded {len(benchmarks)} policy benchmarks")
 
 
 # ==================== Document Storage Endpoints ====================
