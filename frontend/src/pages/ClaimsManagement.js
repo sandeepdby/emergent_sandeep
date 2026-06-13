@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
 import { API } from "../auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, FileCheck } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, FileCheck, Upload, Download, FileSpreadsheet, AlertCircle, CheckCircle2 } from "lucide-react";
 
 const emptyForm = {
   policy_number: "",
@@ -35,11 +35,15 @@ export default function ClaimsManagement() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const authHeaders = { Authorization: `Bearer ${localStorage.getItem("token")}` };
 
   const fetchClaims = useCallback(async () => {
     try {
-      const authHeaders = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-      const res = await axios.get(`${API}/claims`, { headers: authHeaders });
+      const res = await axios.get(`${API}/claims`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       setClaims(res.data);
     } catch (err) {
       console.error(err);
@@ -118,6 +122,53 @@ export default function ClaimsManagement() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const response = await axios.get(`${API}/claims/template/download`, {
+        headers: authHeaders,
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "claims_import_template.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Template downloaded");
+    } catch (err) {
+      toast.error("Failed to download template");
+    }
+  };
+
+  const handleImportExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(`${API}/claims/import`, formData, {
+        headers: { ...authHeaders, "Content-Type": "multipart/form-data" },
+      });
+      setImportResult(res.data);
+      if (res.data.success_count > 0) {
+        toast.success(`Imported ${res.data.success_count} claims successfully`);
+        fetchClaims();
+      }
+      if (res.data.error_count > 0) {
+        toast.error(`${res.data.error_count} rows had errors`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Import failed");
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const statusBadge = (status) => {
     const v = { Settled: "default", Rejected: "destructive", "In Process": "secondary", Submitted: "outline", Closed: "secondary" };
     return <Badge variant={v[status] || "secondary"} className="text-xs">{status}</Badge>;
@@ -133,18 +184,42 @@ export default function ClaimsManagement() {
 
   return (
     <div className="space-y-6" data-testid="claims-management">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <FileCheck className="w-5 h-5 text-indigo-600" />
           <h2 className="text-lg font-semibold text-gray-800">Claims Management</h2>
           <Badge variant="secondary" className="text-xs">{claims.length} claims</Badge>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={openNew} data-testid="add-claim-btn">
-              <Plus className="w-4 h-4 mr-2" /> Add Claim
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleDownloadTemplate} data-testid="download-claims-template-btn">
+            <Download className="w-3.5 h-3.5 mr-1.5" /> Template
+          </Button>
+          <div className="relative">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleImportExcel}
+              className="hidden"
+              data-testid="claims-excel-file-input"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              data-testid="import-claims-excel-btn"
+            >
+              {importing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+              {importing ? "Importing..." : "Import Excel"}
             </Button>
-          </DialogTrigger>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={openNew} data-testid="add-claim-btn">
+                <Plus className="w-4 h-4 mr-2" /> Add Claim
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{editingId ? "Edit Claim" : "Add New Claim"}</DialogTitle>
@@ -227,7 +302,46 @@ export default function ClaimsManagement() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
+
+      {/* Import Result Card */}
+      {importResult && (
+        <Card className={`border-l-4 ${importResult.error_count > 0 ? 'border-l-amber-500' : 'border-l-emerald-500'}`} data-testid="claims-import-result">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              {importResult.error_count === 0 ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />
+              )}
+              <div className="flex-1">
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="font-medium">Import Complete</span>
+                  <Badge variant="default" className="text-xs">{importResult.success_count} imported</Badge>
+                  {importResult.error_count > 0 && (
+                    <Badge variant="destructive" className="text-xs">{importResult.error_count} errors</Badge>
+                  )}
+                  <span className="text-gray-400 text-xs">{importResult.total_rows} total rows</span>
+                </div>
+                {importResult.errors?.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {importResult.errors.slice(0, 5).map((err, i) => (
+                      <p key={i} className="text-xs text-red-600">Row {err.row}: {err.error}</p>
+                    ))}
+                    {importResult.errors.length > 5 && (
+                      <p className="text-xs text-gray-400">...and {importResult.errors.length - 5} more errors</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setImportResult(null)} className="text-xs text-gray-400">
+                Dismiss
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-0">

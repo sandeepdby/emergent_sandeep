@@ -3596,6 +3596,172 @@ async def delete_claim(claim_id: str, current_user: User = Depends(get_current_u
     return {"message": "Claim deleted"}
 
 
+@api_router.post("/claims/import")
+async def import_claims_from_excel(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Import claims from Excel file (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can import claims")
+
+    try:
+        contents = await file.read()
+        df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
+
+    # Normalize column names
+    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+
+    # Column mapping
+    col_map = {
+        "policy_number": ["policy_number", "policy_no", "policy", "policyno"],
+        "claim_type": ["claim_type", "claimtype", "type"],
+        "cashless_claims_count": ["cashless_claims_count", "cashless_count", "cashless_cnt", "cashless"],
+        "reimbursement_claims_count": ["reimbursement_claims_count", "reimb_count", "reimb_cnt", "reimbursement_count", "reimbursement"],
+        "claims_report_date": ["claims_report_date", "report_date", "claim_date", "date"],
+        "claimed_amount": ["claimed_amount", "claim_amount", "claimed", "amount_claimed"],
+        "approved_amount": ["approved_amount", "approved", "amount_approved"],
+        "settled_amount": ["settled_amount", "settled", "amount_settled"],
+        "status": ["status", "claim_status"],
+        "remarks": ["remarks", "remark", "notes", "comment"],
+        "policy_type": ["policy_type", "policytype", "family_definition"],
+    }
+
+    def find_col(target_names):
+        for name in target_names:
+            if name in df.columns:
+                return name
+        return None
+
+    mapped = {}
+    for field, aliases in col_map.items():
+        found = find_col(aliases)
+        if found:
+            mapped[field] = found
+
+    if "policy_number" not in mapped:
+        raise HTTPException(status_code=400, detail="Excel must contain a 'Policy Number' column")
+
+    success_count = 0
+    error_count = 0
+    errors = []
+    batch_id = str(uuid.uuid4())
+
+    for idx, row in df.iterrows():
+        row_num = idx + 2  # Excel is 1-indexed + header
+        try:
+            policy_number = str(row.get(mapped.get("policy_number", ""), "")).strip()
+            if not policy_number or policy_number == "nan":
+                errors.append({"row": row_num, "error": "Missing policy number"})
+                error_count += 1
+                continue
+
+            claim_type_val = str(row.get(mapped.get("claim_type", ""), "Cashless")).strip()
+            if claim_type_val not in ["Cashless", "Reimbursement"]:
+                claim_type_val = "Cashless"
+
+            status_val = str(row.get(mapped.get("status", ""), "Submitted")).strip()
+            valid_statuses = ["Submitted", "In Process", "Settled", "Rejected", "Closed"]
+            if status_val not in valid_statuses:
+                status_val = "Submitted"
+
+            report_date = None
+            if "claims_report_date" in mapped:
+                raw_date = row.get(mapped["claims_report_date"])
+                if pd.notna(raw_date):
+                    report_date = parse_date(str(raw_date))
+
+            def safe_int(val, default=0):
+                try:
+                    if pd.isna(val):
+                        return default
+                    return int(float(val))
+                except (ValueError, TypeError):
+                    return default
+
+            def safe_float(val, default=0.0):
+                try:
+                    if pd.isna(val):
+                        return default
+                    return round(float(val), 2)
+                except (ValueError, TypeError):
+                    return default
+
+            claim_doc = {
+                "id": str(uuid.uuid4()),
+                "policy_number": policy_number,
+                "claim_number": f"CLM-{uuid.uuid4().hex[:8].upper()}",
+                "claim_type": claim_type_val,
+                "cashless_claims_count": safe_int(row.get(mapped.get("cashless_claims_count", ""))),
+                "reimbursement_claims_count": safe_int(row.get(mapped.get("reimbursement_claims_count", ""))),
+                "claims_report_date": report_date,
+                "claimed_amount": safe_float(row.get(mapped.get("claimed_amount", ""))),
+                "approved_amount": safe_float(row.get(mapped.get("approved_amount", ""))),
+                "settled_amount": safe_float(row.get(mapped.get("settled_amount", ""))),
+                "status": status_val,
+                "remarks": str(row.get(mapped.get("remarks", ""), "")).strip() if pd.notna(row.get(mapped.get("remarks", ""), "")) else None,
+                "policy_type": str(row.get(mapped.get("policy_type", ""), "")).strip() if pd.notna(row.get(mapped.get("policy_type", ""), "")) else None,
+                "created_by": current_user.id,
+                "import_batch_id": batch_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+
+            await db.claims.insert_one(claim_doc)
+            success_count += 1
+
+        except Exception as e:
+            errors.append({"row": row_num, "error": str(e)})
+            error_count += 1
+
+    await log_audit(
+        current_user.id, current_user.username, current_user.role.value,
+        "IMPORT", "claims", batch_id,
+        f"Imported {success_count} claims from Excel ({error_count} errors)"
+    )
+
+    return {
+        "success_count": success_count,
+        "error_count": error_count,
+        "total_rows": len(df),
+        "errors": errors[:20],
+        "batch_id": batch_id,
+    }
+
+
+@api_router.get("/claims/template/download")
+async def download_claims_template(current_user: User = Depends(get_current_user)):
+    """Download claims import Excel template (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can download templates")
+
+    data = {
+        "Policy Number": ["POL-001", "POL-001"],
+        "Claim Type": ["Cashless", "Reimbursement"],
+        "Policy Type": ["ESKP", "ESK"],
+        "Claims Report Date": ["2026-01-15", "2026-02-01"],
+        "Cashless Claims Count": [5, 0],
+        "Reimbursement Claims Count": [0, 3],
+        "Claimed Amount": [150000, 75000],
+        "Approved Amount": [140000, 70000],
+        "Settled Amount": [140000, 65000],
+        "Status": ["Settled", "In Process"],
+        "Remarks": ["Monthly claims batch", "Pending documents"],
+    }
+    df = pd.DataFrame(data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Claims Template")
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=claims_import_template.xlsx"}
+    )
+
+
 @api_router.get("/claims-analytics")
 async def get_claims_analytics(
     policy_type: Optional[str] = None,
