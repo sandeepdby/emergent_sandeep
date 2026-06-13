@@ -71,6 +71,16 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Aarogya Assist Wellness Add-ons**: AI highlights modern wellness features as premium enhancements
 - **AI Policy Recommendation Engine**: HR enters company size, industry, budget, priorities → AI recommends best-fit policies with fit scores, budget estimates, coverage gap analysis, and implementation roadmap
 
+### Phase 7 - UI/UX Redesign (DONE - Feb 2026)
+- **Sidebar Navigation**: Migrated from cramped horizontal top bar to categorized vertical left sidebar
+- **Admin Portal**: 15 nav items organized in 5 groups (Overview, Operations, Policies & Claims, Finance, System)
+- **HR Portal**: 9 nav items organized in 4 groups (Overview, Endorsements, Policies & Claims, Finance & Storage)
+- **Collapsible Sidebar**: Toggle button to collapse/expand (240px ↔ 68px) with smooth animation
+- **Glassmorphism Header**: Sticky top header with backdrop-blur-xl, semi-transparent white overlay
+- **Organic & Earthy Theme**: Warm background (#FDFBF7), terracotta accent (#E05A47), stone-based neutrals
+- **Typography**: Work Sans (headings) + IBM Plex Sans (body) via Google Fonts
+- **Active Nav State**: White card with left terracotta border accent and subtle shadow
+
 ## Key API Endpoints
 - POST /api/auth/login, /api/auth/register
 - POST /api/auth/forgot-password, /api/auth/reset-password
