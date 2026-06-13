@@ -70,6 +70,7 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Dual Portal Access**: Admin sees 5 tabs (incl. AI Recommend + Manage Benchmarks), HR sees 4 tabs
 - **Aarogya Assist Wellness Add-ons**: AI highlights modern wellness features as premium enhancements
 - **AI Policy Recommendation Engine**: HR enters company size, industry, budget, priorities → AI recommends best-fit policies with fit scores, budget estimates, coverage gap analysis, and implementation roadmap
+- **Unified Compare & Benchmark**: Upload multiple policy PDFs + select pre-loaded benchmarks → AI side-by-side comparison with enhancement advice, coverage gap analysis, and downloadable results. Removed redundant separate PDF Analysis and old Benchmarking tabs
 
 ### Phase 7 - UI/UX Redesign (DONE - Feb 2026)
 - **Sidebar Navigation**: Migrated from cramped horizontal top bar to categorized vertical left sidebar
