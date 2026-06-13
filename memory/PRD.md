@@ -53,6 +53,14 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Navigation Links**: Header and footer properly link to all new pages
 - 3 sample corporate testimonials seeded (TCS, Infosys BPM, Wipro Technologies)
 
+### Phase 5 - Claims Excel Import (DONE - Feb 2026)
+- **Claims Excel Upload**: Admin/Master Admin can bulk import claims via Excel (POST /api/claims/import)
+- **Claims Template Download**: GET /api/claims/template/download provides pre-formatted template
+- **Column Alias Support**: Handles flexible column names (policy_no, amount_claimed, etc.)
+- **Validation**: Requires Policy Number column; defaults invalid claim types and statuses
+- **HR Visibility**: Imported claims auto-appear in HR portal filtered by assigned policies
+- **Import Result UI**: Success/error counts displayed after import with row-level error details
+
 ## Key API Endpoints
 - POST /api/auth/login, /api/auth/register
 - POST /api/auth/forgot-password, /api/auth/reset-password
@@ -62,7 +70,11 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - POST /api/careers/apply
 - POST /api/contact
 - POST /api/policy-assignments/
-- GET /api/claims, /api/policies, /api/endorsements
+- GET /api/claims, POST /api/claims
+- POST /api/claims/import (Excel bulk upload)
+- GET /api/claims/template/download
+- GET /api/claims-analytics
+- GET /api/policies, /api/endorsements
 - Various Cloud Storage, CD Ledger, Analytics endpoints
 
 ## Database Collections
