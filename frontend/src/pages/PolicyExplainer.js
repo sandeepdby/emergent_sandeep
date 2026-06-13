@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import {
   Loader2, BookOpen, Scale, Upload, Sparkles, FileText, Shield, Heart,
-  Zap, Plus, Pencil, Trash2, CheckCircle2
+  Zap, Plus, Pencil, Trash2, CheckCircle2, Lightbulb
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -171,6 +171,15 @@ export default function PolicyExplainer({ isAdmin = false }) {
   const [paramVal, setParamVal] = useState("");
   const [savingBenchmark, setSavingBenchmark] = useState(false);
 
+  // Recommend state
+  const [recommendForm, setRecommendForm] = useState({
+    company_size: "51-200", industry: "", annual_budget_per_employee: "",
+    policy_types_needed: ["Group Health"], priorities: [],
+    current_insurer: "", pain_points: "", employee_avg_age: "",
+  });
+  const [recommending, setRecommending] = useState(false);
+  const [recommendation, setRecommendation] = useState(null);
+
   const fetchBenchmarks = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/policy-benchmarks`, { headers: getAuthHeaders() });
@@ -220,6 +229,31 @@ export default function PolicyExplainer({ isAdmin = false }) {
       toast.success("PDF analyzed successfully");
     } catch (err) { toast.error(err.response?.data?.detail || "PDF analysis failed"); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
+
+  const handleRecommend = async () => {
+    if (!recommendForm.industry) { toast.error("Please enter your industry"); return; }
+    if (recommendForm.policy_types_needed.length === 0) { toast.error("Select at least one policy type"); return; }
+    setRecommending(true); setRecommendation(null);
+    try {
+      const res = await axios.post(`${API}/policy-explainer/recommend`, recommendForm, { headers: getAuthHeaders() });
+      setRecommendation(res.data);
+    } catch (err) { toast.error(err.response?.data?.detail || "Recommendation failed"); }
+    finally { setRecommending(false); }
+  };
+
+  const togglePolicyType = (type) => {
+    setRecommendForm(f => {
+      const current = f.policy_types_needed;
+      return { ...f, policy_types_needed: current.includes(type) ? current.filter(t => t !== type) : [...current, type] };
+    });
+  };
+
+  const togglePriority = (p) => {
+    setRecommendForm(f => {
+      const current = f.priorities || [];
+      return { ...f, priorities: current.includes(p) ? current.filter(x => x !== p) : [...current, p] };
+    });
   };
 
   const openNewBenchmark = () => {
@@ -287,6 +321,7 @@ export default function PolicyExplainer({ isAdmin = false }) {
         <button onClick={() => setActiveTab("explainer")} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "explainer" ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} data-testid="tab-explainer"><BookOpen className="w-4 h-4" /> T&C Explainer</button>
         <button onClick={() => setActiveTab("benchmark")} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "benchmark" ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} data-testid="tab-benchmark"><Scale className="w-4 h-4" /> Benchmarking</button>
         <button onClick={() => setActiveTab("upload")} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "upload" ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} data-testid="tab-upload"><Upload className="w-4 h-4" /> PDF Analysis</button>
+        <button onClick={() => setActiveTab("recommend")} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "recommend" ? 'bg-white text-amber-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} data-testid="tab-recommend"><Lightbulb className="w-4 h-4" /> AI Recommend</button>
         {isAdmin && <button onClick={() => setActiveTab("manage")} className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === "manage" ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`} data-testid="tab-manage"><FileText className="w-4 h-4" /> Manage Benchmarks</button>}
       </div>
 
@@ -366,6 +401,19 @@ export default function PolicyExplainer({ isAdmin = false }) {
         </div>
       )}
 
+      {/* AI Recommend */}
+      {activeTab === "recommend" && (
+        <RecommendTab
+          form={recommendForm}
+          setForm={setRecommendForm}
+          recommending={recommending}
+          recommendation={recommendation}
+          onRecommend={handleRecommend}
+          onTogglePolicyType={togglePolicyType}
+          onTogglePriority={togglePriority}
+        />
+      )}
+
       {/* Manage Benchmarks (Admin) */}
       {activeTab === "manage" && isAdmin && (
         <div className="space-y-6">
@@ -433,5 +481,150 @@ function ParamList({ params, onRemove }) {
         </div>
       ))}
     </div>
+  );
+}
+
+const COMPANY_SIZES = ["1-50", "51-200", "201-500", "501-2000", "2000+"];
+const INDUSTRIES = [
+  "IT / Software", "Manufacturing", "BFSI / Finance", "Healthcare / Pharma",
+  "Retail / E-commerce", "Education", "Real Estate / Construction",
+  "Media / Entertainment", "Logistics / Transportation", "Consulting / Professional Services", "Other"
+];
+const PRIORITY_OPTIONS = [
+  "Maternity cover", "Mental health", "No room rent cap", "Low copay",
+  "Wide network hospitals", "OPD cover", "Wellness benefits", "Fast claims",
+  "Telemedicine", "Critical illness rider", "High sum insured", "Low premium"
+];
+
+function RecommendTab({ form, setForm, recommending, recommendation, onRecommend, onTogglePolicyType, onTogglePriority }) {
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Lightbulb className="w-5 h-5 text-amber-500" />
+            <CardTitle className="text-base">AI Policy Recommendation Engine</CardTitle>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Tell us about your organization and we'll recommend the best insurance policies</p>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Company Size *</Label>
+              <Select value={form.company_size} onValueChange={v => setForm(f => ({ ...f, company_size: v }))}>
+                <SelectTrigger data-testid="recommend-company-size"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1-50">1-50 employees</SelectItem>
+                  <SelectItem value="51-200">51-200 employees</SelectItem>
+                  <SelectItem value="201-500">201-500 employees</SelectItem>
+                  <SelectItem value="501-2000">501-2000 employees</SelectItem>
+                  <SelectItem value="2000+">2000+ employees</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Industry *</Label>
+              <Select value={form.industry} onValueChange={v => setForm(f => ({ ...f, industry: v }))}>
+                <SelectTrigger data-testid="recommend-industry"><SelectValue placeholder="Select industry" /></SelectTrigger>
+                <SelectContent>
+                  {INDUSTRIES.map(i => <SelectItem key={i} value={i}>{i}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Annual Budget per Employee</Label>
+              <Select value={form.annual_budget_per_employee || "flexible"} onValueChange={v => setForm(f => ({ ...f, annual_budget_per_employee: v === "flexible" ? "" : v }))}>
+                <SelectTrigger data-testid="recommend-budget"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="flexible">Flexible / Not decided</SelectItem>
+                  <SelectItem value="3000-5000">₹3,000 - ₹5,000</SelectItem>
+                  <SelectItem value="5000-10000">₹5,000 - ₹10,000</SelectItem>
+                  <SelectItem value="10000-20000">₹10,000 - ₹20,000</SelectItem>
+                  <SelectItem value="20000-50000">₹20,000 - ₹50,000</SelectItem>
+                  <SelectItem value="50000+">₹50,000+</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Average Employee Age</Label>
+              <Select value={form.employee_avg_age || "notspecified"} onValueChange={v => setForm(f => ({ ...f, employee_avg_age: v === "notspecified" ? "" : v }))}>
+                <SelectTrigger data-testid="recommend-age"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="notspecified">Not specified</SelectItem>
+                  <SelectItem value="25-30">25-30 years</SelectItem>
+                  <SelectItem value="30-35">30-35 years</SelectItem>
+                  <SelectItem value="35-40">35-40 years</SelectItem>
+                  <SelectItem value="40-45">40-45 years</SelectItem>
+                  <SelectItem value="45+">45+ years</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Policies Needed *</Label>
+            <div className="flex gap-2 flex-wrap">
+              <PolicyTypeChip label="Group Health" icon={Heart} active={form.policy_types_needed.includes("Group Health")} onClick={() => onTogglePolicyType("Group Health")} />
+              <PolicyTypeChip label="Group Term" icon={Shield} active={form.policy_types_needed.includes("Group Term")} onClick={() => onTogglePolicyType("Group Term")} />
+              <PolicyTypeChip label="Group Accident" icon={Zap} active={form.policy_types_needed.includes("Group Accident")} onClick={() => onTogglePolicyType("Group Accident")} />
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium mb-2 block">Key Priorities (select all that apply)</Label>
+            <div className="flex gap-2 flex-wrap" data-testid="recommend-priorities">
+              {PRIORITY_OPTIONS.map(p => (
+                <button
+                  key={p}
+                  onClick={() => onTogglePriority(p)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${(form.priorities || []).includes(p) ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+                  data-testid={`priority-${p.replace(/\s/g, '-').toLowerCase()}`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Current Insurer (if any)</Label>
+              <Input value={form.current_insurer} onChange={e => setForm(f => ({ ...f, current_insurer: e.target.value }))} placeholder="e.g. ICICI Lombard" data-testid="recommend-current-insurer" />
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Pain Points / Special Requirements</Label>
+              <Input value={form.pain_points} onChange={e => setForm(f => ({ ...f, pain_points: e.target.value }))} placeholder="e.g. Slow claims, limited network" data-testid="recommend-pain-points" />
+            </div>
+          </div>
+
+          <Button onClick={onRecommend} disabled={recommending} className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white" size="lg" data-testid="get-recommendation-btn">
+            {recommending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Lightbulb className="w-4 h-4 mr-2" />}
+            {recommending ? "Generating Recommendation..." : "Get AI Recommendation"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {recommendation && (
+        <MarkdownResult icon={Lightbulb} title="AI Policy Recommendation"
+          badges={<Badge className="bg-amber-100 text-amber-700 text-xs">{recommendation.benchmarks_considered} policies analyzed</Badge>}
+          content={recommendation.recommendation} testId="recommendation-result" />
+      )}
+    </div>
+  );
+}
+
+function PolicyTypeChip({ label, icon: Icon, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${active ? 'bg-indigo-50 border-indigo-300 text-indigo-700' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'}`}
+      data-testid={`policy-type-chip-${label.replace(/\s/g, '-').toLowerCase()}`}
+    >
+      <Icon className="w-4 h-4" /> {label}
+      {active && <CheckCircle2 className="w-3.5 h-3.5" />}
+    </button>
   );
 }

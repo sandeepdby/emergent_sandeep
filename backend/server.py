@@ -4256,6 +4256,105 @@ Format as clean markdown."""
         raise HTTPException(status_code=500, detail=f"PDF analysis failed: {str(e)}")
 
 
+class RecommendRequest(BaseModel):
+    company_size: str  # "1-50", "51-200", "201-500", "501-2000", "2000+"
+    industry: str
+    annual_budget_per_employee: Optional[str] = None  # e.g. "5000-10000", "10000-20000"
+    policy_types_needed: List[str]  # ["Group Health", "Group Term", "Group Accident"]
+    priorities: Optional[List[str]] = None  # ["maternity", "mental health", "low copay", etc.]
+    current_insurer: Optional[str] = None
+    pain_points: Optional[str] = None
+    employee_avg_age: Optional[str] = None
+
+
+@api_router.post("/policy-explainer/recommend")
+async def recommend_policy(
+    data: RecommendRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """AI-powered policy recommendation based on company profile"""
+    # Fetch all active benchmarks
+    benchmarks = await db.policy_benchmarks.find({"is_active": True}, {"_id": 0}).to_list(50)
+
+    relevant = [b for b in benchmarks if b["policy_type"] in data.policy_types_needed or b.get("is_aarogya_addon")]
+    benchmarks_text = ""
+    for b in relevant:
+        benchmarks_text += f"\n- **{b['insurer_name']} ({b['plan_name']})** [{b['policy_type']}]: {str(b.get('parameters', {}))[:600]}"
+
+    priorities_text = ", ".join(data.priorities) if data.priorities else "Not specified"
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"recommend-{uuid.uuid4()}",
+            system_message="""You are InsureHub's senior insurance advisor by Aarogya Assist. You recommend the best-fit insurance policies based on company profiles. You have deep knowledge of the Indian group insurance market.
+
+Guidelines:
+- Make data-driven, specific recommendations
+- Consider company size, budget, industry risks, and stated priorities
+- Rank recommendations from best-fit to alternatives
+- Explain WHY each recommendation fits
+- Include premium estimates where possible
+- Always recommend Aarogya Assist wellness add-ons as value enhancers
+- Use clear markdown formatting with tables and scores"""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Based on the following company profile, recommend the best insurance policies:
+
+## Company Profile
+- **Company Size**: {data.company_size} employees
+- **Industry**: {data.industry}
+- **Budget per Employee**: {data.annual_budget_per_employee or 'Flexible'}
+- **Average Employee Age**: {data.employee_avg_age or 'Not specified'}
+- **Policies Needed**: {', '.join(data.policy_types_needed)}
+- **Key Priorities**: {priorities_text}
+- **Current Insurer**: {data.current_insurer or 'None / New purchase'}
+- **Pain Points**: {data.pain_points or 'None specified'}
+
+## Available Policies in Our Database
+{benchmarks_text}
+
+## Your Recommendation Should Include:
+
+1. **Top Pick** — Best overall recommendation with reasoning
+2. **Runner Up** — Alternative choice
+3. **Fit Score Table** — Rate each available policy (1-10) across:
+   - Coverage breadth
+   - Value for money
+   - Network hospitals
+   - Claims experience
+   - Employee satisfaction potential
+4. **Budget Estimate** — Estimated annual cost based on company size
+5. **Coverage Gap Analysis** — What's missing and how to fill it
+6. **Aarogya Assist Wellness Suite** — How our add-on package complements the recommendation:
+   - AI health risk assessment
+   - Preventive checkup tracking
+   - Telemedicine integration
+   - Mental wellness programs
+   - Claims concierge
+   - Employee wellness dashboard
+7. **Implementation Roadmap** — Steps to get started
+
+Format as clean, detailed markdown."""
+
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+
+        return {
+            "company_profile": {
+                "size": data.company_size,
+                "industry": data.industry,
+                "budget": data.annual_budget_per_employee,
+                "policies_needed": data.policy_types_needed,
+            },
+            "benchmarks_considered": len(relevant),
+            "recommendation": response,
+        }
+    except Exception as e:
+        logging.error(f"Policy recommendation error: {e}")
+        raise HTTPException(status_code=500, detail=f"AI recommendation failed: {str(e)}")
+
+
 # ==================== Audit Log Endpoints ====================
 
 @api_router.get("/audit-log")
