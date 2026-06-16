@@ -14,16 +14,17 @@ import { Loader2, Plus, Pencil, Trash2, FileCheck, Upload, Download, FileSpreads
 
 const emptyForm = {
   policy_number: "",
+  claim_number: "",
   claim_type: "Cashless",
-  cashless_claims_count: 0,
-  reimbursement_claims_count: 0,
+  policy_type: "ESKP",
   claims_report_date: "",
+  employee_name: "",
+  patient_name: "",
   claimed_amount: 0,
-  approved_amount: 0,
-  settled_amount: 0,
+  incurred_amount: 0,
+  paid_amount: 0,
   status: "Submitted",
   remarks: "",
-  policy_type: "ESKP",
 };
 
 const fmt = (v) => (v || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
@@ -64,16 +65,17 @@ export default function ClaimsManagement() {
     setEditingId(claim.id);
     setForm({
       policy_number: claim.policy_number || "",
+      claim_number: claim.claim_number || "",
       claim_type: claim.claim_type || "Cashless",
-      cashless_claims_count: claim.cashless_claims_count || 0,
-      reimbursement_claims_count: claim.reimbursement_claims_count || 0,
+      policy_type: claim.policy_type || "ESKP",
       claims_report_date: claim.claims_report_date || "",
+      employee_name: claim.employee_name || "",
+      patient_name: claim.patient_name || "",
       claimed_amount: claim.claimed_amount || 0,
-      approved_amount: claim.approved_amount || 0,
-      settled_amount: claim.settled_amount || 0,
+      incurred_amount: claim.incurred_amount || 0,
+      paid_amount: claim.paid_amount || 0,
       status: claim.status || "Submitted",
       remarks: claim.remarks || "",
-      policy_type: claim.policy_type || "ESKP",
     });
     setDialogOpen(true);
   };
@@ -231,15 +233,8 @@ export default function ClaimsManagement() {
                 <Input value={form.policy_number} onChange={e => setForm({ ...form, policy_number: e.target.value })} data-testid="claim-policy-number" />
               </div>
               <div>
-                <Label>Policy Type</Label>
-                <Select value={form.policy_type} onValueChange={v => setForm({ ...form, policy_type: v })}>
-                  <SelectTrigger data-testid="claim-policy-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ESKP">ESKP</SelectItem>
-                    <SelectItem value="ESK">ESK</SelectItem>
-                    <SelectItem value="E">E</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Claim Number</Label>
+                <Input value={form.claim_number} onChange={e => setForm({ ...form, claim_number: e.target.value })} placeholder="Auto-generated if empty" data-testid="claim-number" />
               </div>
               <div>
                 <Label>Claim Type</Label>
@@ -252,28 +247,39 @@ export default function ClaimsManagement() {
                 </Select>
               </div>
               <div>
+                <Label>Policy Type</Label>
+                <Select value={form.policy_type} onValueChange={v => setForm({ ...form, policy_type: v })}>
+                  <SelectTrigger data-testid="claim-policy-type"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ESKP">ESKP</SelectItem>
+                    <SelectItem value="ESK">ESK</SelectItem>
+                    <SelectItem value="E">E</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <Label>Claims Report Date</Label>
                 <Input type="date" value={form.claims_report_date} onChange={e => setForm({ ...form, claims_report_date: e.target.value })} data-testid="claim-report-date" />
               </div>
               <div>
-                <Label>Cashless Claims Count</Label>
-                <Input type="number" value={form.cashless_claims_count} onChange={e => setForm({ ...form, cashless_claims_count: e.target.value })} data-testid="claim-cashless-count" />
+                <Label>Employee Name</Label>
+                <Input value={form.employee_name} onChange={e => setForm({ ...form, employee_name: e.target.value })} data-testid="claim-employee-name" />
               </div>
               <div>
-                <Label>Reimbursement Claims Count</Label>
-                <Input type="number" value={form.reimbursement_claims_count} onChange={e => setForm({ ...form, reimbursement_claims_count: e.target.value })} data-testid="claim-reimb-count" />
+                <Label>Patient Name</Label>
+                <Input value={form.patient_name} onChange={e => setForm({ ...form, patient_name: e.target.value })} data-testid="claim-patient-name" />
               </div>
               <div>
                 <Label>Claimed Amount</Label>
                 <Input type="number" value={form.claimed_amount} onChange={e => setForm({ ...form, claimed_amount: e.target.value })} data-testid="claim-claimed-amount" />
               </div>
               <div>
-                <Label>Approved Amount</Label>
-                <Input type="number" value={form.approved_amount} onChange={e => setForm({ ...form, approved_amount: e.target.value })} />
+                <Label>Incurred Amount</Label>
+                <Input type="number" value={form.incurred_amount} onChange={e => setForm({ ...form, incurred_amount: e.target.value })} data-testid="claim-incurred-amount" />
               </div>
               <div>
-                <Label>Settled Amount</Label>
-                <Input type="number" value={form.settled_amount} onChange={e => setForm({ ...form, settled_amount: e.target.value })} />
+                <Label>Paid Amount</Label>
+                <Input type="number" value={form.paid_amount} onChange={e => setForm({ ...form, paid_amount: e.target.value })} data-testid="claim-paid-amount" />
               </div>
               <div>
                 <Label>Status</Label>
@@ -357,10 +363,11 @@ export default function ClaimsManagement() {
                     <TableHead className="text-xs">Type</TableHead>
                     <TableHead className="text-xs">Claim Type</TableHead>
                     <TableHead className="text-xs">Report Date</TableHead>
-                    <TableHead className="text-xs text-right">Cashless Cnt</TableHead>
-                    <TableHead className="text-xs text-right">Reimb Cnt</TableHead>
+                    <TableHead className="text-xs">Employee</TableHead>
+                    <TableHead className="text-xs">Patient</TableHead>
                     <TableHead className="text-xs text-right">Claimed</TableHead>
-                    <TableHead className="text-xs text-right">Settled</TableHead>
+                    <TableHead className="text-xs text-right">Incurred</TableHead>
+                    <TableHead className="text-xs text-right">Paid</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                     <TableHead className="text-xs text-right">Actions</TableHead>
                   </TableRow>
@@ -373,10 +380,11 @@ export default function ClaimsManagement() {
                       <TableCell className="text-xs"><Badge variant="secondary" className="text-xs">{c.policy_type || "-"}</Badge></TableCell>
                       <TableCell className="text-xs">{c.claim_type}</TableCell>
                       <TableCell className="text-xs">{c.claims_report_date || "-"}</TableCell>
-                      <TableCell className="text-xs text-right">{c.cashless_claims_count || 0}</TableCell>
-                      <TableCell className="text-xs text-right">{c.reimbursement_claims_count || 0}</TableCell>
+                      <TableCell className="text-xs">{c.employee_name || "-"}</TableCell>
+                      <TableCell className="text-xs">{c.patient_name || "-"}</TableCell>
                       <TableCell className="text-xs text-right">{fmt(c.claimed_amount)}</TableCell>
-                      <TableCell className="text-xs text-right font-medium">{fmt(c.settled_amount)}</TableCell>
+                      <TableCell className="text-xs text-right">{fmt(c.incurred_amount || 0)}</TableCell>
+                      <TableCell className="text-xs text-right font-medium">{fmt(c.paid_amount || 0)}</TableCell>
                       <TableCell className="text-xs">{statusBadge(c.status)}</TableCell>
                       <TableCell className="text-xs text-right">
                         <div className="flex justify-end gap-1">

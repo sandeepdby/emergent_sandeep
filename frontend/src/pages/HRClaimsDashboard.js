@@ -79,11 +79,13 @@ export default function HRClaimsDashboard() {
 
   const {
     total_claims, total_claimed_amount,
+    total_incurred_amount, total_paid_amount,
     reimbursement_claims, reimbursement_count,
     cashless_claims, cashless_count,
     rejected_claims, rejected_count,
     under_process_claims, under_process_count,
     total_premium, claims_ratio, annual_claims_trend,
+    total_policy_days,
     settlement_ratio, status_distribution, type_distribution, monthly_trend
   } = analytics;
 
@@ -176,7 +178,7 @@ export default function HRClaimsDashboard() {
               <p className="text-[10px] text-gray-500 uppercase tracking-wide">Annual Claims Trend</p>
             </div>
             <p className="text-xl font-bold text-orange-600 mt-0.5" data-testid="annual-claims-trend">{fmt(annual_claims_trend)}</p>
-            <p className="text-[10px] text-gray-400">(Claims / Policy Days) x 365</p>
+            <p className="text-[10px] text-gray-400">(Claims / {total_policy_days || 0} days) x 365 x 1.1</p>
           </CardContent>
         </Card>
       </div>
@@ -297,10 +299,9 @@ export default function HRClaimsDashboard() {
                     <TableHead className="text-xs">Policy Type</TableHead>
                     <TableHead className="text-xs">Claim Type</TableHead>
                     <TableHead className="text-xs">Report Date</TableHead>
-                    <TableHead className="text-xs text-right">Cashless Cnt</TableHead>
-                    <TableHead className="text-xs text-right">Reimb Cnt</TableHead>
                     <TableHead className="text-xs text-right">Claimed</TableHead>
-                    <TableHead className="text-xs text-right">Settled</TableHead>
+                    <TableHead className="text-xs text-right">Incurred</TableHead>
+                    <TableHead className="text-xs text-right">Paid</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -312,10 +313,9 @@ export default function HRClaimsDashboard() {
                       <TableCell className="text-xs"><Badge variant="secondary" className="text-xs">{c.policy_type || "-"}</Badge></TableCell>
                       <TableCell className="text-xs">{c.claim_type}</TableCell>
                       <TableCell className="text-xs">{c.claims_report_date || "-"}</TableCell>
-                      <TableCell className="text-xs text-right">{c.cashless_claims_count || 0}</TableCell>
-                      <TableCell className="text-xs text-right">{c.reimbursement_claims_count || 0}</TableCell>
                       <TableCell className="text-xs text-right">{fmt(c.claimed_amount)}</TableCell>
-                      <TableCell className="text-xs text-right font-medium">{fmt(c.settled_amount)}</TableCell>
+                      <TableCell className="text-xs text-right">{fmt(c.incurred_amount || 0)}</TableCell>
+                      <TableCell className="text-xs text-right font-medium">{fmt(c.paid_amount || 0)}</TableCell>
                       <TableCell className="text-xs">{statusBadge(c.status)}</TableCell>
                     </TableRow>
                   ))}

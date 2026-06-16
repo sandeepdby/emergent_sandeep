@@ -3487,15 +3487,15 @@ class ClaimCreate(BaseModel):
     policy_number: str
     claim_number: Optional[str] = None
     claim_type: ClaimType = ClaimType.CASHLESS
-    cashless_claims_count: int = 0
-    reimbursement_claims_count: int = 0
+    policy_type: Optional[str] = None
     claims_report_date: Optional[str] = None
+    employee_name: Optional[str] = None
+    patient_name: Optional[str] = None
     claimed_amount: float = 0
-    approved_amount: float = 0
-    settled_amount: float = 0
+    incurred_amount: float = 0
+    paid_amount: float = 0
     status: ClaimStatus = ClaimStatus.SUBMITTED
     remarks: Optional[str] = None
-    policy_type: Optional[str] = None
 
 
 class Claim(BaseModel):
@@ -3504,15 +3504,15 @@ class Claim(BaseModel):
     policy_number: str
     claim_number: str = Field(default_factory=lambda: f"CLM-{uuid.uuid4().hex[:8].upper()}")
     claim_type: ClaimType = ClaimType.CASHLESS
-    cashless_claims_count: int = 0
-    reimbursement_claims_count: int = 0
+    policy_type: Optional[str] = None
     claims_report_date: Optional[str] = None
+    employee_name: Optional[str] = None
+    patient_name: Optional[str] = None
     claimed_amount: float = 0
-    approved_amount: float = 0
-    settled_amount: float = 0
+    incurred_amount: float = 0
+    paid_amount: float = 0
     status: ClaimStatus = ClaimStatus.SUBMITTED
     remarks: Optional[str] = None
-    policy_type: Optional[str] = None
     created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -3617,16 +3617,17 @@ async def import_claims_from_excel(
     # Column mapping
     col_map = {
         "policy_number": ["policy_number", "policy_no", "policy", "policyno"],
+        "claim_number": ["claim_number", "claim_no", "claimno", "claim_#"],
         "claim_type": ["claim_type", "claimtype", "type"],
-        "cashless_claims_count": ["cashless_claims_count", "cashless_count", "cashless_cnt", "cashless"],
-        "reimbursement_claims_count": ["reimbursement_claims_count", "reimb_count", "reimb_cnt", "reimbursement_count", "reimbursement"],
+        "policy_type": ["policy_type", "policytype", "family_definition"],
         "claims_report_date": ["claims_report_date", "report_date", "claim_date", "date"],
+        "employee_name": ["employee_name", "emp_name", "employee", "member_name"],
+        "patient_name": ["patient_name", "patient", "claimant_name", "claimant"],
         "claimed_amount": ["claimed_amount", "claim_amount", "claimed", "amount_claimed"],
-        "approved_amount": ["approved_amount", "approved", "amount_approved"],
-        "settled_amount": ["settled_amount", "settled", "amount_settled"],
+        "incurred_amount": ["incurred_amount", "incurred", "amount_incurred"],
+        "paid_amount": ["paid_amount", "paid", "amount_paid", "settled_amount", "settled"],
         "status": ["status", "claim_status"],
         "remarks": ["remarks", "remark", "notes", "comment"],
-        "policy_type": ["policy_type", "policytype", "family_definition"],
     }
 
     def find_col(target_names):
@@ -3692,17 +3693,17 @@ async def import_claims_from_excel(
             claim_doc = {
                 "id": str(uuid.uuid4()),
                 "policy_number": policy_number,
-                "claim_number": f"CLM-{uuid.uuid4().hex[:8].upper()}",
+                "claim_number": str(row.get(mapped.get("claim_number", ""), "")).strip() if "claim_number" in mapped and pd.notna(row.get(mapped.get("claim_number", ""))) else f"CLM-{uuid.uuid4().hex[:8].upper()}",
                 "claim_type": claim_type_val,
-                "cashless_claims_count": safe_int(row.get(mapped.get("cashless_claims_count", ""))),
-                "reimbursement_claims_count": safe_int(row.get(mapped.get("reimbursement_claims_count", ""))),
+                "policy_type": str(row.get(mapped.get("policy_type", ""), "")).strip() if "policy_type" in mapped and pd.notna(row.get(mapped.get("policy_type", ""), "")) else None,
                 "claims_report_date": report_date,
+                "employee_name": str(row.get(mapped.get("employee_name", ""), "")).strip() if "employee_name" in mapped and pd.notna(row.get(mapped.get("employee_name", ""), "")) else None,
+                "patient_name": str(row.get(mapped.get("patient_name", ""), "")).strip() if "patient_name" in mapped and pd.notna(row.get(mapped.get("patient_name", ""), "")) else None,
                 "claimed_amount": safe_float(row.get(mapped.get("claimed_amount", ""))),
-                "approved_amount": safe_float(row.get(mapped.get("approved_amount", ""))),
-                "settled_amount": safe_float(row.get(mapped.get("settled_amount", ""))),
+                "incurred_amount": safe_float(row.get(mapped.get("incurred_amount", ""))),
+                "paid_amount": safe_float(row.get(mapped.get("paid_amount", ""))),
                 "status": status_val,
-                "remarks": str(row.get(mapped.get("remarks", ""), "")).strip() if pd.notna(row.get(mapped.get("remarks", ""), "")) else None,
-                "policy_type": str(row.get(mapped.get("policy_type", ""), "")).strip() if pd.notna(row.get(mapped.get("policy_type", ""), "")) else None,
+                "remarks": str(row.get(mapped.get("remarks", ""), "")).strip() if "remarks" in mapped and pd.notna(row.get(mapped.get("remarks", ""), "")) else None,
                 "created_by": current_user.id,
                 "import_batch_id": batch_id,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -3737,17 +3738,18 @@ async def download_claims_template(current_user: User = Depends(get_current_user
         raise HTTPException(status_code=403, detail="Only admins can download templates")
 
     data = {
-        "Policy Number": ["POL-001", "POL-001"],
+        "Policy Number": ["GMC0001393000100", "GMC0001393000100"],
+        "Claim Number": ["A234", "C456"],
         "Claim Type": ["Cashless", "Reimbursement"],
-        "Policy Type": ["ESKP", "ESK"],
-        "Claims Report Date": ["2026-01-15", "2026-02-01"],
-        "Cashless Claims Count": [5, 0],
-        "Reimbursement Claims Count": [0, 3],
-        "Claimed Amount": [150000, 75000],
-        "Approved Amount": [140000, 70000],
-        "Settled Amount": [140000, 65000],
+        "Policy Type": ["ESKP", "ESKP"],
+        "Claims Report Date": ["2026-06-15", "2026-06-15"],
+        "Employee Name": ["John", "Albert"],
+        "Patient Name": ["John", "Albert"],
+        "Claimed Amount": [2815000, 289038],
+        "Incurred Amount": [2194218, 289038],
+        "Paid Amount": [2194218, 289038],
         "Status": ["Settled", "In Process"],
-        "Remarks": ["Monthly claims batch", "Pending documents"],
+        "Remarks": ["Till 15 June", "Till 15 June"],
     }
     df = pd.DataFrame(data)
     output = io.BytesIO()
@@ -3789,8 +3791,8 @@ async def get_claims_analytics(
 
     total_claims_count = len(claims)
     total_claimed = sum(c.get("claimed_amount", 0) for c in claims)
-    total_approved = sum(c.get("approved_amount", 0) for c in claims)
-    total_settled = sum(c.get("settled_amount", 0) for c in claims)
+    total_incurred = sum(c.get("incurred_amount", 0) for c in claims)
+    total_paid = sum(c.get("paid_amount", 0) for c in claims)
 
     reimbursement_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Reimbursement")
     cashless_amount = sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Cashless")
@@ -3815,22 +3817,24 @@ async def get_claims_analytics(
 
     claims_ratio = round((total_claimed / total_premium * 100) if total_premium > 0 else 0, 1)
 
-    # Annual Claims Trend = (Claims / (Policy Expiry - Policy Start in days)) * 365
+    # Annual Claims Trend = (Claims / No_of_Days) * 365 * 1.1
+    # No_of_Days = Today() - Policy inception/start date
+    today = datetime.now(timezone.utc)
     total_policy_days = 0
     for p in policies:
         start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
-        end = p.get("expiry_date") or p.get("end_date")
-        if start and end:
+        if start:
             try:
                 from dateutil import parser as date_parser
                 start_dt = date_parser.parse(start)
-                end_dt = date_parser.parse(end)
-                days = (end_dt - start_dt).days
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                days = (today - start_dt).days
                 if days > 0:
                     total_policy_days += days
             except Exception:
                 pass
-    annual_claims_trend = round((total_claimed / total_policy_days) * 365, 2) if total_policy_days > 0 else 0
+    annual_claims_trend = round((total_claimed / total_policy_days) * 365 * 1.1, 2) if total_policy_days > 0 else 0
 
     status_counts = {}
     type_counts = {}
@@ -3854,8 +3858,8 @@ async def get_claims_analytics(
     return {
         "total_claims": total_claims_count,
         "total_claimed_amount": round(total_claimed, 2),
-        "total_approved_amount": round(total_approved, 2),
-        "total_settled_amount": round(total_settled, 2),
+        "total_incurred_amount": round(total_incurred, 2),
+        "total_paid_amount": round(total_paid, 2),
         "reimbursement_claims": round(reimbursement_amount, 2),
         "reimbursement_count": reimbursement_count,
         "cashless_claims": round(cashless_amount, 2),
@@ -3867,7 +3871,8 @@ async def get_claims_analytics(
         "total_premium": round(total_premium, 2),
         "claims_ratio": claims_ratio,
         "annual_claims_trend": annual_claims_trend,
-        "settlement_ratio": round((total_settled / total_claimed * 100) if total_claimed > 0 else 0, 1),
+        "total_policy_days": total_policy_days,
+        "settlement_ratio": round((total_paid / total_claimed * 100) if total_claimed > 0 else 0, 1),
         "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
         "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
         "monthly_trend": sorted(monthly_data.values(), key=lambda x: x["month"]),
