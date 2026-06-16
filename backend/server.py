@@ -1132,7 +1132,8 @@ async def login(credentials: UserLogin):
             "full_name": user['full_name'],
             "email": user['email'],
             "phone": user.get('phone'),
-            "role": user['role']
+            "role": user['role'],
+            "profile_photo": user.get('profile_photo')
         }
     }
 
@@ -1141,6 +1142,25 @@ async def login(credentials: UserLogin):
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current logged-in user info"""
     return current_user
+
+
+@api_router.post("/auth/profile-photo")
+async def upload_profile_photo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload profile photo/logo"""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be under 5MB")
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "png"
+    path = f"profile_photos/{current_user.id}.{ext}"
+    result = put_object(path, contents, file.content_type)
+    photo_url = result.get("url", "")
+    await db.users.update_one({"id": current_user.id}, {"$set": {"profile_photo": photo_url}})
+    return {"profile_photo": photo_url}
 
 
 class ForgotPasswordRequest(BaseModel):
