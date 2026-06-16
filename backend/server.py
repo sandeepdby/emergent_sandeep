@@ -3775,12 +3775,13 @@ async def get_claims_analytics(
         assigned = await get_hr_assigned_policy_numbers(current_user.id)
         if not assigned:
             return {
-                "total_claims": 0, "total_claimed_amount": 0, "total_approved_amount": 0,
-                "total_settled_amount": 0, "reimbursement_claims": 0, "reimbursement_count": 0,
+                "total_claims": 0, "total_claimed_amount": 0, "total_incurred_amount": 0,
+                "total_paid_amount": 0, "reimbursement_claims": 0, "reimbursement_count": 0,
                 "cashless_claims": 0, "cashless_count": 0, "rejected_claims": 0,
                 "rejected_count": 0, "under_process_claims": 0, "under_process_count": 0,
                 "total_premium": 0, "claims_ratio": 0, "annual_claims_trend": 0,
-                "settlement_ratio": 0, "status_distribution": [], "type_distribution": [],
+                "total_policy_days": 0, "total_lives": 0,
+                "status_distribution": [], "type_distribution": [],
                 "monthly_trend": []
             }
         query["policy_number"] = {"$in": assigned}
@@ -3815,10 +3816,10 @@ async def get_claims_analytics(
     policies = await db.policies.find(policy_query, {"_id": 0}).to_list(1000)
     total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
 
-    claims_ratio = round((total_claimed / total_premium * 100) if total_premium > 0 else 0, 1)
+    claims_ratio = round((total_incurred / total_premium * 100) if total_premium > 0 else 0, 1)
 
-    # Annual Claims Trend = (Claims / No_of_Days) * 365 * 1.1
-    # No_of_Days = Today() - Policy inception/start date
+    # Policy Run Days = Today() - Policy inception/start date (sum across all policies)
+    # Annual Claims Trend = (Total Incurred / Policy Run Days) * 365 * 1.1
     today = datetime.now(timezone.utc)
     total_policy_days = 0
     for p in policies:
@@ -3834,7 +3835,10 @@ async def get_claims_analytics(
                     total_policy_days += days
             except Exception:
                 pass
-    annual_claims_trend = round((total_claimed / total_policy_days) * 365 * 1.1, 2) if total_policy_days > 0 else 0
+    annual_claims_trend = round((total_incurred / total_policy_days) * 365 * 1.1, 2) if total_policy_days > 0 else 0
+
+    # Total lives under policies
+    total_lives = sum(p.get("total_lives_count", 0) or p.get("total_lives_covered", 0) for p in policies)
 
     status_counts = {}
     type_counts = {}
@@ -3872,7 +3876,7 @@ async def get_claims_analytics(
         "claims_ratio": claims_ratio,
         "annual_claims_trend": annual_claims_trend,
         "total_policy_days": total_policy_days,
-        "settlement_ratio": round((total_paid / total_claimed * 100) if total_claimed > 0 else 0, 1),
+        "total_lives": total_lives,
         "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
         "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
         "monthly_trend": sorted(monthly_data.values(), key=lambda x: x["month"]),

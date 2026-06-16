@@ -127,7 +127,8 @@ export default function HRClaimsDashboard() {
     rejected_claims, rejected_count,
     under_process_claims, under_process_count,
     total_premium, claims_ratio, annual_claims_trend,
-    settlement_ratio, status_distribution, type_distribution, monthly_trend
+    total_policy_days, total_lives,
+    status_distribution, type_distribution, monthly_trend
   } = analytics;
 
   const statusPieData = status_distribution.map(s => ({ ...s, color: STATUS_COLORS[s.name] || "#94a3b8" }));
@@ -180,17 +181,24 @@ export default function HRClaimsDashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Under Process" value={under_process_count} subtext={fmt(under_process_claims)} color="border-l-amber-500" icon={Clock} />
         <MetricCard label="Total Premium" value={total_premium} color="border-l-indigo-500" icon={DollarSign} />
-        <MetricCard label="Claims Ratio" value={`${claims_ratio}%`} subtext="Claims / Premium" color="border-l-teal-500" icon={PieChartIcon} />
+        <MetricCard label="Claims Ratio" value={`${claims_ratio}%`} subtext="Incurred / Premium" color="border-l-teal-500" icon={PieChartIcon} />
         <MetricCard label="Annual Claims Trend" value={annual_claims_trend} color="border-l-orange-500" icon={TrendingUp} />
       </div>
 
-      {/* Row 3 - Settlement & Incurred */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Row 3 - Lives, Policy Run Days, Incurred, Paid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100 hover:shadow-lg transition-all">
           <CardContent className="p-4 text-center">
-            <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">Settlement Ratio</p>
-            <p className="text-3xl font-bold text-emerald-700 mt-2" data-testid="settlement-ratio">{settlement_ratio}%</p>
-            <p className="text-[10px] text-emerald-500 mt-1">Paid vs Claimed</p>
+            <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">Total Lives</p>
+            <p className="text-3xl font-bold text-emerald-700 mt-2" data-testid="total-lives">{total_lives || 0}</p>
+            <p className="text-[10px] text-emerald-500 mt-1">Under assigned policies</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-sky-50 to-cyan-50 border-sky-100 hover:shadow-lg transition-all">
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-sky-600 font-medium uppercase tracking-wider">Policy Run Days</p>
+            <p className="text-3xl font-bold text-sky-700 mt-2" data-testid="policy-run-days">{total_policy_days || 0}</p>
+            <p className="text-[10px] text-sky-500 mt-1">Today - Inception Date</p>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 hover:shadow-lg transition-all">
