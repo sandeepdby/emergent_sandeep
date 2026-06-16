@@ -4400,6 +4400,314 @@ Format as detailed, professional markdown."""
         raise HTTPException(status_code=500, detail=f"AI comparison failed: {str(e)}")
 
 
+@api_router.post("/policy-explainer/structured-benchmark")
+async def structured_benchmark(
+    files: List[UploadFile] = File(default=[]),
+    policy_type: str = Query("Group Health"),
+    benchmark_ids: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user)
+):
+    """Generate structured benchmark report with scores for visual preview"""
+    import pdfplumber
+
+    bid_list = [b.strip() for b in benchmark_ids.split(",") if b.strip()] if benchmark_ids else []
+    total_sources = len(files) + len(bid_list)
+
+    if total_sources < 2:
+        raise HTTPException(status_code=400, detail="Upload at least 2 documents or select benchmarks to compare")
+
+    policies_text = ""
+    sources_info = []
+
+    for i, file in enumerate(files, 1):
+        if not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail=f"'{file.filename}' is not a PDF")
+        contents = await file.read()
+        try:
+            text = ""
+            with pdfplumber.open(io.BytesIO(contents)) as pdf:
+                for page in pdf.pages[:20]:
+                    pt = page.extract_text()
+                    if pt:
+                        text += pt + "\n"
+            policies_text += f"\n\n--- DOCUMENT {i}: {file.filename} ---\n{text[:4000]}"
+            sources_info.append({"type": "pdf", "name": file.filename})
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read '{file.filename}': {str(e)}")
+
+    for bid in bid_list:
+        b = await db.policy_benchmarks.find_one({"id": bid}, {"_id": 0})
+        if b:
+            policies_text += f"\n\n--- BENCHMARK: {b['insurer_name']} ({b['plan_name']}) [{b['policy_type']}] ---\nParameters: {str(b.get('parameters', {}))}"
+            sources_info.append({"type": "benchmark", "name": f"{b['insurer_name']} - {b['plan_name']}", "id": bid})
+
+    try:
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"structured-bench-{uuid.uuid4()}",
+            system_message="""You are InsureHub's insurance benchmarking expert. Return ONLY valid JSON, no markdown, no extra text. Analyze and score insurance policies."""
+        ).with_model("openai", "gpt-4o-mini")
+
+        prompt = f"""Analyze these {policy_type} insurance policies and return a JSON object with this exact structure:
+{policies_text}
+
+Return ONLY this JSON (no markdown fences, no extra text):
+{{
+  "report_title": "string - title of the report",
+  "policy_type": "{policy_type}",
+  "generated_at": "current date string",
+  "policies": [
+    {{
+      "name": "Insurer - Plan Name",
+      "source": "pdf or benchmark",
+      "overall_score": 8.5,
+      "scores": {{
+        "coverage": 8,
+        "value_for_money": 7,
+        "network_hospitals": 9,
+        "claims_experience": 8,
+        "employee_satisfaction": 7
+      }},
+      "strengths": ["strength 1", "strength 2", "strength 3"],
+      "weaknesses": ["weakness 1", "weakness 2"],
+      "key_features": {{
+        "sum_insured": "value",
+        "room_rent": "value",
+        "copay": "value",
+        "waiting_period": "value",
+        "maternity": "value",
+        "daycare": "value"
+      }}
+    }}
+  ],
+  "comparison_table": [
+    {{
+      "parameter": "Sum Insured",
+      "values": ["Policy1 value", "Policy2 value"]
+    }}
+  ],
+  "top_pick": {{
+    "name": "Best policy name",
+    "reason": "Why this is the best choice"
+  }},
+  "enhancement_advice": [
+    "Specific advice 1",
+    "Specific advice 2",
+    "Specific advice 3"
+  ],
+  "aarogya_assist_addons": [
+    "How Aarogya Assist AI Wellness Suite complements - point 1",
+    "Point 2"
+  ]
+}}"""
+
+        user_message = UserMessage(text=prompt)
+        raw_response = await chat.send_message(user_message)
+
+        # Parse JSON from response
+        import json as json_module
+        cleaned = raw_response.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+        report_data = json_module.loads(cleaned)
+
+        report_id = str(uuid.uuid4())
+        report_doc = {
+            "id": report_id,
+            "report_data": report_data,
+            "sources": sources_info,
+            "policy_type": policy_type,
+            "created_by": current_user.id,
+            "created_by_name": current_user.username,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.benchmark_reports.insert_one(report_doc)
+
+        return {
+            "report_id": report_id,
+            "report": report_data,
+            "sources": sources_info,
+        }
+    except json_module.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI returned invalid format. Please try again.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Structured benchmark error: {e}")
+        raise HTTPException(status_code=500, detail=f"Benchmark failed: {str(e)}")
+
+
+@api_router.post("/policy-explainer/download-report/{report_id}")
+async def download_benchmark_report(
+    report_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate PDF report and email to masteradmin"""
+    report_doc = await db.benchmark_reports.find_one({"id": report_id}, {"_id": 0})
+    if not report_doc:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report = report_doc.get("report_data", {})
+
+    # Generate PDF using reportlab
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table as RLTable, TableStyle, HRFlowable
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    pdf_buffer = io.BytesIO()
+    doc = SimpleDocTemplate(pdf_buffer, pagesize=A4, leftMargin=20*mm, rightMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    title_style = ParagraphStyle("ReportTitle", parent=styles["Title"], fontSize=20, textColor=colors.HexColor("#E05A47"), spaceAfter=4*mm)
+    subtitle_style = ParagraphStyle("Subtitle", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#6b7280"), spaceAfter=8*mm)
+    heading_style = ParagraphStyle("SectionHead", parent=styles["Heading2"], fontSize=14, textColor=colors.HexColor("#1f2937"), spaceBefore=6*mm, spaceAfter=3*mm)
+    body_style = ParagraphStyle("Body", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#374151"), leading=14)
+    bold_style = ParagraphStyle("Bold", parent=body_style, fontName="Helvetica-Bold")
+    green_style = ParagraphStyle("Green", parent=body_style, textColor=colors.HexColor("#059669"))
+    red_style = ParagraphStyle("Red", parent=body_style, textColor=colors.HexColor("#dc2626"))
+
+    # Title
+    elements.append(Paragraph(report.get("report_title", "Policy Benchmark Report"), title_style))
+    elements.append(Paragraph(f"{report.get('policy_type', '')} | Generated: {report.get('generated_at', datetime.now(timezone.utc).strftime('%Y-%m-%d'))} | By: {current_user.username}", subtitle_style))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E05A47")))
+    elements.append(Spacer(1, 4*mm))
+
+    # Policy Scores
+    policies = report.get("policies", [])
+    for p in policies:
+        elements.append(Paragraph(f"<b>{p.get('name', 'Policy')}</b> — Overall Score: <b>{p.get('overall_score', 'N/A')}/10</b>", heading_style))
+
+        scores = p.get("scores", {})
+        if scores:
+            score_data = [["Parameter", "Score"]]
+            for k, v in scores.items():
+                score_data.append([k.replace("_", " ").title(), f"{v}/10"])
+            t = RLTable(score_data, colWidths=[90*mm, 40*mm])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E05A47")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
+                ("ALIGN", (1, 0), (1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(t)
+            elements.append(Spacer(1, 3*mm))
+
+        strengths = p.get("strengths", [])
+        if strengths:
+            elements.append(Paragraph("<b>Strengths:</b>", bold_style))
+            for s in strengths:
+                elements.append(Paragraph(f"&nbsp;&nbsp;✓ {s}", green_style))
+
+        weaknesses = p.get("weaknesses", [])
+        if weaknesses:
+            elements.append(Paragraph("<b>Weaknesses:</b>", bold_style))
+            for w in weaknesses:
+                elements.append(Paragraph(f"&nbsp;&nbsp;✗ {w}", red_style))
+        elements.append(Spacer(1, 4*mm))
+
+    # Comparison Table
+    comp_table = report.get("comparison_table", [])
+    if comp_table:
+        elements.append(Paragraph("Side-by-Side Comparison", heading_style))
+        policy_names = [p.get("name", f"Policy {i+1}") for i, p in enumerate(policies)]
+        header_row = ["Parameter"] + [n[:25] for n in policy_names]
+        table_data = [header_row]
+        for row in comp_table:
+            table_data.append([row.get("parameter", "")] + row.get("values", []))
+        col_w = [55*mm] + [((170 - 55) / max(len(policy_names), 1))*mm] * len(policy_names)
+        t = RLTable(table_data, colWidths=col_w[:len(header_row)])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f2937")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f9fafb")]),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 4*mm))
+
+    # Top Pick
+    top_pick = report.get("top_pick", {})
+    if top_pick:
+        elements.append(Paragraph("Recommendation", heading_style))
+        elements.append(Paragraph(f"<b>Top Pick: {top_pick.get('name', '')}</b>", bold_style))
+        elements.append(Paragraph(top_pick.get("reason", ""), body_style))
+        elements.append(Spacer(1, 3*mm))
+
+    # Enhancement Advice
+    advice = report.get("enhancement_advice", [])
+    if advice:
+        elements.append(Paragraph("Enhancement Advice", heading_style))
+        for a in advice:
+            elements.append(Paragraph(f"• {a}", body_style))
+
+    # Aarogya Assist
+    addons = report.get("aarogya_assist_addons", [])
+    if addons:
+        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph("Aarogya Assist Wellness Add-ons", heading_style))
+        for a in addons:
+            elements.append(Paragraph(f"★ {a}", green_style))
+
+    # Footer
+    elements.append(Spacer(1, 10*mm))
+    elements.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e5e7eb")))
+    footer_style = ParagraphStyle("Footer", parent=styles["Normal"], fontSize=8, textColor=colors.HexColor("#9ca3af"), alignment=TA_CENTER)
+    elements.append(Paragraph("Generated by InsureHub | Aarogya Assist | www.aarogya-tech.com", footer_style))
+
+    doc.build(elements)
+    pdf_buffer.seek(0)
+    pdf_bytes = pdf_buffer.getvalue()
+
+    # Email to masteradmin
+    try:
+        master = await db.users.find_one({"is_master_admin": True}, {"_id": 0})
+        smtp_host = os.environ.get("SMTP_HOST")
+        smtp_user = os.environ.get("SMTP_USER")
+        smtp_pass = os.environ.get("SMTP_PASS")
+        if master and smtp_host and smtp_user and smtp_pass:
+            admin_email = master.get("email", smtp_user)
+            subject = f"Benchmark Report: {report.get('policy_type', 'Policy')} - {report.get('report_title', 'Report')}"
+            body_text = f"Hi,\n\nA new benchmark report has been generated by {current_user.username}.\n\nReport: {report.get('report_title', '')}\nType: {report.get('policy_type', '')}\nPolicies compared: {len(policies)}\n\nPlease find the report attached.\n\nRegards,\nInsureHub by Aarogya Assist"
+            msg = MIMEMultipart()
+            msg['From'] = smtp_user
+            msg['To'] = admin_email
+            msg['Subject'] = subject
+            msg.attach(MIMEText(body_text, 'plain'))
+            from email.mime.application import MIMEApplication
+            pdf_attachment = MIMEApplication(pdf_bytes, _subtype="pdf")
+            pdf_attachment.add_header('Content-Disposition', 'attachment', filename=f"benchmark_report_{report_id[:8]}.pdf")
+            msg.attach(pdf_attachment)
+            smtp_port = int(os.environ.get("SMTP_PORT", 465))
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+            logging.info(f"Benchmark report emailed to {admin_email}")
+    except Exception as e:
+        logging.error(f"Failed to email benchmark report: {e}")
+
+    pdf_buffer.seek(0)
+    return StreamingResponse(
+        pdf_buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=benchmark_report_{report_id[:8]}.pdf"}
+    )
+
+
 class RecommendRequest(BaseModel):
     company_size: str  # "1-50", "51-200", "201-500", "501-2000", "2000+"
     industry: str

@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import {
   Loader2, BookOpen, Scale, Upload, Sparkles, FileText, Shield, Heart,
-  Zap, Plus, Pencil, Trash2, CheckCircle2, Lightbulb, Download, X, File
+  Zap, Plus, Pencil, Trash2, CheckCircle2, Lightbulb, Download, X, File, ShieldX
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -151,6 +151,8 @@ export default function PolicyExplainer({ isAdmin = false }) {
   const [selectedBenchmarkIds, setSelectedBenchmarkIds] = useState([]);
   const [comparing, setComparing] = useState(false);
   const [comparison, setComparison] = useState(null);
+  const [compareType, setCompareType] = useState("Group Health");
+  const [downloading, setDownloading] = useState(false);
   const multiFileRef = useRef(null);
 
   // Recommend
@@ -215,35 +217,41 @@ export default function PolicyExplainer({ isAdmin = false }) {
 
   const handleCompareDocuments = async () => {
     const totalSources = uploadedFiles.length + selectedBenchmarkIds.length;
-    if (totalSources < 2) { toast.error("Select at least 2 sources (PDFs or benchmarks) to compare"); return; }
+    if (totalSources < 2) { toast.error("Select at least 2 sources to compare"); return; }
     setComparing(true); setComparison(null);
     try {
       const formData = new FormData();
       uploadedFiles.forEach(f => formData.append("files", f));
       const benchmarkParam = selectedBenchmarkIds.join(",");
       const res = await axios.post(
-        `${API}/policy-explainer/compare-documents?benchmark_ids=${encodeURIComponent(benchmarkParam)}`,
+        `${API}/policy-explainer/structured-benchmark?policy_type=${encodeURIComponent(compareType)}&benchmark_ids=${encodeURIComponent(benchmarkParam)}`,
         formData,
         { headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" } }
       );
       setComparison(res.data);
-      toast.success("Comparison complete!");
-    } catch (err) { toast.error(err.response?.data?.detail || "Comparison failed"); }
+      toast.success("Benchmark report generated!");
+    } catch (err) { toast.error(err.response?.data?.detail || "Benchmark failed"); }
     finally { setComparing(false); }
   };
 
-  const downloadComparison = () => {
-    if (!comparison) return;
-    const blob = new Blob([comparison.comparison], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `policy_comparison_${new Date().toISOString().slice(0, 10)}.md`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success("Comparison downloaded");
+  const handleDownloadReport = async () => {
+    if (!comparison?.report_id) return;
+    setDownloading(true);
+    try {
+      const res = await axios.post(`${API}/policy-explainer/download-report/${comparison.report_id}`, {}, {
+        headers: getAuthHeaders(), responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `benchmark_report_${comparison.report_id.slice(0, 8)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Report downloaded & emailed to Master Admin");
+    } catch (err) { toast.error("Download failed"); }
+    finally { setDownloading(false); }
   };
 
   // -- Recommend --
@@ -337,12 +345,15 @@ export default function PolicyExplainer({ isAdmin = false }) {
           selectedBenchmarkIds={selectedBenchmarkIds}
           comparing={comparing}
           comparison={comparison}
+          compareType={compareType}
+          setCompareType={setCompareType}
           multiFileRef={multiFileRef}
           onFilesSelected={handleFilesSelected}
           onRemoveFile={removeFile}
           onToggleBenchmark={toggleBenchmark}
           onCompare={handleCompareDocuments}
-          onDownload={downloadComparison}
+          onDownload={handleDownloadReport}
+          downloading={downloading}
         />
       )}
 
@@ -397,8 +408,10 @@ export default function PolicyExplainer({ isAdmin = false }) {
 
 // ========== Extracted Components ==========
 
-function CompareTab({ benchmarks, uploadedFiles, selectedBenchmarkIds, comparing, comparison, multiFileRef, onFilesSelected, onRemoveFile, onToggleBenchmark, onCompare, onDownload }) {
+function CompareTab({ benchmarks, uploadedFiles, selectedBenchmarkIds, comparing, comparison, compareType, setCompareType, multiFileRef, onFilesSelected, onRemoveFile, onToggleBenchmark, onCompare, onDownload, downloading }) {
   const totalSources = uploadedFiles.length + selectedBenchmarkIds.length;
+  const report = comparison?.report;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -407,16 +420,29 @@ function CompareTab({ benchmarks, uploadedFiles, selectedBenchmarkIds, comparing
             <Scale className="w-5 h-5 text-[#E05A47]" />
             <CardTitle className="text-base">Compare & Benchmark Policies</CardTitle>
           </div>
-          <p className="text-xs text-stone-500 mt-1">Upload policy PDFs and/or select pre-loaded benchmarks to compare side-by-side with AI enhancement advice</p>
+          <p className="text-xs text-stone-500 mt-1">Upload policy PDFs and/or select benchmarks to generate a visual comparison report</p>
         </CardHeader>
         <CardContent className="space-y-5">
+          {/* Policy Type Selector */}
+          <div className="max-w-xs">
+            <Label className="text-sm font-medium mb-1 block">Policy Type</Label>
+            <Select value={compareType} onValueChange={setCompareType}>
+              <SelectTrigger data-testid="compare-policy-type"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Group Health">Group Health Insurance</SelectItem>
+                <SelectItem value="Group Term">Group Term Insurance</SelectItem>
+                <SelectItem value="Group Accident">Group Accident Insurance</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Upload Area */}
           <div>
-            <Label className="text-sm font-medium mb-2 block">Step 1: Upload Policy Documents (PDF)</Label>
-            <div className="border-2 border-dashed border-stone-200 rounded-lg p-6 text-center hover:border-[#E05A47]/40 transition-colors">
+            <Label className="text-sm font-medium mb-2 block">Step 1: Upload Policy T&C Documents (PDF)</Label>
+            <div className="border-2 border-dashed border-stone-200 rounded-lg p-5 text-center hover:border-[#E05A47]/40 transition-colors">
               <input ref={multiFileRef} type="file" accept=".pdf" multiple onChange={onFilesSelected} className="hidden" data-testid="multi-pdf-input" />
-              <Upload className="w-8 h-8 text-stone-300 mx-auto mb-2" />
-              <p className="text-sm text-stone-600 mb-2">Drop PDFs here or click to upload</p>
+              <Upload className="w-7 h-7 text-stone-300 mx-auto mb-2" />
+              <p className="text-sm text-stone-600 mb-2">Upload your policy T&C documents</p>
               <Button variant="outline" size="sm" onClick={() => multiFileRef.current?.click()} data-testid="upload-pdfs-btn">
                 <Upload className="w-3.5 h-3.5 mr-1.5" /> Choose PDF Files
               </Button>
@@ -435,20 +461,175 @@ function CompareTab({ benchmarks, uploadedFiles, selectedBenchmarkIds, comparing
 
           {/* Compare Button */}
           <div className="flex items-center justify-between pt-2 border-t border-stone-100">
-            <p className="text-sm text-stone-500">{totalSources} source{totalSources !== 1 ? "s" : ""} selected ({uploadedFiles.length} PDF{uploadedFiles.length !== 1 ? "s" : ""} + {selectedBenchmarkIds.length} benchmark{selectedBenchmarkIds.length !== 1 ? "s" : ""})</p>
+            <p className="text-sm text-stone-500">{totalSources} source{totalSources !== 1 ? "s" : ""} selected</p>
             <Button onClick={onCompare} disabled={comparing || totalSources < 2} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="compare-documents-btn">
               {comparing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Scale className="w-4 h-4 mr-2" />}
-              {comparing ? "Comparing..." : "Compare & Get AI Advice"}
+              {comparing ? "Generating Report..." : "Generate Benchmark Report"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {comparison && (
-        <MarkdownResult icon={Scale} title="Comparison & AI Enhancement Advice"
-          badges={<Badge className="bg-emerald-100 text-emerald-700 text-xs">{comparison.total_sources} sources compared</Badge>}
-          content={comparison.comparison} testId="comparison-result" onDownload={onDownload} />
+      {/* Visual Report Preview */}
+      {report && <BenchmarkReportPreview report={report} reportId={comparison.report_id} onDownload={onDownload} downloading={downloading} />}
+    </div>
+  );
+}
+
+function ScoreBar({ score, max = 10 }) {
+  const pct = Math.min((score / max) * 100, 100);
+  const color = score >= 8 ? "bg-emerald-500" : score >= 6 ? "bg-amber-500" : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-2 bg-stone-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color} transition-all duration-700`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-xs font-semibold text-stone-700 w-8 text-right">{score}</span>
+    </div>
+  );
+}
+
+function BenchmarkReportPreview({ report, reportId, onDownload, downloading }) {
+  const policies = report.policies || [];
+  const compTable = report.comparison_table || [];
+  const topPick = report.top_pick || {};
+  const advice = report.enhancement_advice || [];
+  const addons = report.aarogya_assist_addons || [];
+
+  return (
+    <div className="space-y-6" data-testid="benchmark-report-preview">
+      {/* Report Header */}
+      <Card className="border-t-4 border-t-[#E05A47]">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h3 className="text-xl font-bold text-stone-800">{report.report_title || "Benchmark Report"}</h3>
+              <p className="text-sm text-stone-500 mt-1">{report.policy_type} | {report.generated_at || new Date().toLocaleDateString()}</p>
+            </div>
+            <Button onClick={onDownload} disabled={downloading} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="download-pdf-report-btn">
+              {downloading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+              {downloading ? "Generating PDF..." : "Download PDF & Email"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Policy Score Cards */}
+      <div className={`grid grid-cols-1 ${policies.length >= 3 ? 'lg:grid-cols-3' : 'lg:grid-cols-2'} gap-4`}>
+        {policies.map((p, i) => (
+          <PolicyScoreCard key={i} policy={p} isTopPick={topPick.name && p.name === topPick.name} />
+        ))}
+      </div>
+
+      {/* Comparison Table */}
+      {compTable.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-stone-700">Side-by-Side Comparison</CardTitle></CardHeader>
+          <CardContent>
+            <ComparisonTableView data={compTable} policyNames={policies.map(p => p.name)} />
+          </CardContent>
+        </Card>
       )}
+
+      {/* Top Pick + Advice */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {topPick.name && (
+          <Card className="border-l-4 border-l-emerald-500">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-emerald-700">Top Pick</CardTitle></CardHeader>
+            <CardContent>
+              <p className="font-bold text-stone-800 text-lg">{topPick.name}</p>
+              <p className="text-sm text-stone-600 mt-2">{topPick.reason}</p>
+            </CardContent>
+          </Card>
+        )}
+        {advice.length > 0 && (
+          <Card className="border-l-4 border-l-amber-500">
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-amber-700">Enhancement Advice</CardTitle></CardHeader>
+            <CardContent>
+              <AdviceList items={advice} />
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Aarogya Assist Add-ons */}
+      {addons.length > 0 && (
+        <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-[#E05A47]/20">
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-[#E05A47]">Aarogya Assist Wellness Add-ons</CardTitle></CardHeader>
+          <CardContent><AdviceList items={addons} color="text-[#E05A47]" /></CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function PolicyScoreCard({ policy, isTopPick }) {
+  const scores = policy.scores || {};
+  const scoreEntries = Object.entries(scores);
+  return (
+    <Card className={`hover:shadow-lg transition-all ${isTopPick ? 'ring-2 ring-emerald-300 border-emerald-200' : ''}`}>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="font-bold text-sm text-stone-800">{policy.name}</p>
+            <Badge variant="secondary" className="text-[10px] mt-1">{policy.source || "benchmark"}</Badge>
+          </div>
+          <div className="text-center">
+            <p className="text-2xl font-black text-[#E05A47]">{policy.overall_score}</p>
+            <p className="text-[9px] text-stone-400">/10</p>
+          </div>
+        </div>
+        {isTopPick && <Badge className="bg-emerald-100 text-emerald-700 text-[10px] mb-3">Top Pick</Badge>}
+        <div className="space-y-2">
+          {scoreEntries.map(([k, v]) => (
+            <div key={k}>
+              <div className="flex justify-between text-[10px] text-stone-500 mb-0.5">
+                <span>{k.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}</span>
+              </div>
+              <ScoreBar score={v} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          {(policy.strengths || []).slice(0, 2).map((s, i) => (
+            <p key={i} className="text-[10px] text-emerald-600 flex items-start gap-1"><CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0" />{s}</p>
+          ))}
+          {(policy.weaknesses || []).slice(0, 2).map((w, i) => (
+            <p key={i} className="text-[10px] text-red-500 flex items-start gap-1"><ShieldX className="w-3 h-3 mt-0.5 shrink-0" />{w}</p>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ComparisonTableView({ data, policyNames }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-stone-800 text-white">
+            <th className="text-left px-3 py-2 font-semibold">Parameter</th>
+            {policyNames.map((n, i) => <th key={i} className="text-left px-3 py-2 font-semibold">{n.length > 25 ? n.slice(0, 25) + "..." : n}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
+              <td className="px-3 py-2 font-medium text-stone-700">{row.parameter}</td>
+              {(row.values || []).map((v, j) => <td key={j} className="px-3 py-2 text-stone-600">{v}</td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AdviceList({ items, color = "text-stone-700" }) {
+  return (
+    <div className="space-y-2">
+      {items.map((a, i) => <p key={i} className={`text-xs ${color} flex items-start gap-2`}><span className="text-[#E05A47] font-bold shrink-0">•</span>{a}</p>)}
     </div>
   );
 }
