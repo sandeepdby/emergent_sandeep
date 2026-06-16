@@ -3488,6 +3488,32 @@ async def delete_cd_ledger_entry(entry_id: str, current_user: User = Depends(get
     return {"message": "Entry deleted"}
 
 
+@api_router.put("/cd-ledger/{entry_id}")
+async def update_cd_ledger_entry(
+    entry_id: str,
+    update: CDLedgerEntryCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Edit a CD Ledger entry (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can manage CD Ledger")
+    entry = await db.cd_ledger.find_one({"id": entry_id}, {"_id": 0})
+    if not entry:
+        raise HTTPException(status_code=404, detail="Entry not found")
+    update_data = {
+        "date": update.date,
+        "reference": update.reference,
+        "description": update.description or "",
+        "amount": update.amount,
+        "policy_number": update.policy_number,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.cd_ledger.update_one({"id": entry_id}, {"$set": update_data})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "cd_ledger", entry_id, f"Updated CD ledger entry: {update.reference}")
+    result = await db.cd_ledger.find_one({"id": entry_id}, {"_id": 0})
+    return result
+
+
 # ==================== Claims Management Endpoints ====================
 
 class ClaimStatus(str, Enum):
