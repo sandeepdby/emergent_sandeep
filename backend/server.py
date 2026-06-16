@@ -3835,12 +3835,13 @@ async def get_claims_analytics(
     if not latest_policy and policies:
         latest_policy = policies[-1]
 
-    # Total Premium, Lives, Run Days — from LATEST policy only
+    # Total Premium (net of 18% GST), Lives, Run Days — from LATEST policy only
     total_premium = 0
     total_lives = 0
     policy_run_days = 0
     if latest_policy:
-        total_premium = latest_policy.get("premium", 0) or (latest_policy.get("annual_premium_per_life", 0) * latest_policy.get("total_lives_covered", 0))
+        gross_premium = latest_policy.get("premium", 0) or (latest_policy.get("annual_premium_per_life", 0) * latest_policy.get("total_lives_covered", 0))
+        total_premium = round(gross_premium / 1.18, 2)
         total_lives = latest_policy.get("total_lives_count", 0) or latest_policy.get("total_lives_covered", 0)
         if latest_start_dt:
             policy_run_days = (today - latest_start_dt).days
