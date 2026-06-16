@@ -232,18 +232,14 @@ export default function CDLedger() {
                             <Button variant="ghost" size="sm" onClick={() => openView(entry)} title="View" data-testid={`cd-view-${entry.id}`}>
                               <Eye className="w-3.5 h-3.5 text-stone-500" />
                             </Button>
-                            {entry.entry_type === "Manual" ? (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={() => openEdit(entry)} title="Edit" data-testid={`cd-edit-${entry.id}`}>
-                                  <Pencil className="w-3.5 h-3.5 text-blue-500" />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => handleDelete(entry.id)} title="Delete" className="text-red-500 hover:text-red-700" data-testid={`cd-delete-${entry.id}`}>
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </>
-                            ) : (
-                              <span className="text-[10px] text-stone-400 px-2">Auto</span>
+                            {entry.entry_type === "Manual" && (
+                              <Button variant="ghost" size="sm" onClick={() => openEdit(entry)} title="Edit" data-testid={`cd-edit-${entry.id}`}>
+                                <Pencil className="w-3.5 h-3.5 text-blue-500" />
+                              </Button>
                             )}
+                            <Button variant="ghost" size="sm" onClick={() => handleDelete(entry.id)} title="Delete" className="text-red-500 hover:text-red-700" data-testid={`cd-delete-${entry.id}`}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </TableCell>
                       )}

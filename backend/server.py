@@ -3480,9 +3480,6 @@ async def delete_cd_ledger_entry(entry_id: str, current_user: User = Depends(get
     if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
     
-    if entry.get("entry_type") != "Manual":
-        raise HTTPException(status_code=400, detail="Only manual entries can be deleted")
-    
     await db.cd_ledger.delete_one({"id": entry_id})
     await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "cd_ledger", entry_id, "Deleted CD ledger entry")
     return {"message": "Entry deleted"}
