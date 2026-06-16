@@ -55,11 +55,11 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ### Phase 5 - Claims Excel Import (DONE - Feb 2026)
 - **Claims Excel Upload**: Admin/Master Admin can bulk import claims via Excel (POST /api/claims/import)
-- **Claims Template Download**: GET /api/claims/template/download provides pre-formatted template
-- **Column Alias Support**: Handles flexible column names (policy_no, amount_claimed, etc.)
-- **Validation**: Requires Policy Number column; defaults invalid claim types and statuses
+- **Claims Template**: Matches user format — Policy Number, Claim Number, Claim Type, Policy Type, Claims Report Date, Employee Name, Patient Name, Claimed Amount, Incurred Amount, Paid Amount, Status, Remarks
+- **Column Alias Support**: Handles flexible column names
 - **HR Visibility**: Imported claims auto-appear in HR portal filtered by assigned policies
-- **Import Result UI**: Success/error counts displayed after import with row-level error details
+- **Annual Claims Trend Formula**: `(Claims / No of Days) * 365 * 1.1` where No of Days = `Today() - Policy inception date`
+- **Fields Updated**: Replaced old Cashless/Reimb counts + Approved/Settled amounts with Employee Name, Patient Name, Incurred Amount, Paid Amount
 
 ### Phase 6 - Policy T&C Explainer & Benchmarking Tool (DONE - Feb 2026)
 - **AI T&C Explainer**: Select policy type (Group Health/Term/Accident) + focus area → AI generates comprehensive explanation
