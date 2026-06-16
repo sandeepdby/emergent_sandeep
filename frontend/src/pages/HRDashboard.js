@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck, Wallet, BookOpen, ChevronLeft, ChevronRight, Menu } from "lucide-react";
-import { AuthContext } from "../auth";
+import { AuthContext, API, getAuthHeaders } from "../auth";
+import axios from "axios";
 import UserProfileMenu from "./UserProfileMenu";
 import HRSummary from "./HRSummary";
 import SubmitEndorsement from "./SubmitEndorsement";
@@ -13,7 +14,7 @@ import HRClaimsDashboard from "./HRClaimsDashboard";
 import CDLedger from "./CDLedger";
 import PolicyExplainer from "./PolicyExplainer";
 
-const navGroups = [
+const getNavGroups = (hasPolicyTC) => [
   {
     label: "Overview",
     items: [
@@ -33,7 +34,7 @@ const navGroups = [
     items: [
       { path: "/hr/policies", label: "Policies", icon: Shield },
       { path: "/hr/claims", label: "Claims", icon: FileCheck },
-      { path: "/hr/policy-explainer", label: "Policy T&C", icon: BookOpen },
+      ...(hasPolicyTC ? [{ path: "/hr/policy-explainer", label: "Policy T&C", icon: BookOpen }] : []),
     ],
   },
   {
@@ -85,7 +86,7 @@ function NavItemList({ items, collapsed }) {
   );
 }
 
-const Sidebar = ({ collapsed, onToggle }) => {
+const Sidebar = ({ collapsed, onToggle, navGroups }) => {
   return (
     <aside className={`fixed top-0 left-0 h-screen ${collapsed ? 'w-[68px]' : 'w-60'} bg-[#FDFBF7] border-r border-stone-200 flex flex-col z-40 transition-all duration-300`} data-testid="hr-sidebar">
       {/* Logo */}
@@ -142,16 +143,23 @@ class HRDashboard extends React.Component {
 
   constructor(props) {
     super(props);
-    this.state = { collapsed: false };
+    this.state = { collapsed: false, hasPolicyTC: true };
+  }
+
+  componentDidMount() {
+    axios.get(`${API}/feature-access-check/policy_tc`, { headers: getAuthHeaders() })
+      .then(res => this.setState({ hasPolicyTC: res.data.has_access }))
+      .catch(() => {});
   }
 
   render() {
     const { logout, user } = this.context;
-    const { collapsed } = this.state;
+    const { collapsed, hasPolicyTC } = this.state;
+    const navGroups = getNavGroups(hasPolicyTC);
 
     return (
       <div className="min-h-screen bg-[#FDFBF7]">
-        <Sidebar collapsed={collapsed} onToggle={() => this.setState({ collapsed: !collapsed })} />
+        <Sidebar collapsed={collapsed} onToggle={() => this.setState({ collapsed: !collapsed })} navGroups={navGroups} />
         <Header user={user} onLogout={logout} collapsed={collapsed} onMobileToggle={() => this.setState({ collapsed: !collapsed })} />
         <main className={`${collapsed ? 'ml-[68px]' : 'ml-60'} transition-all duration-300 p-8`}>
           <div className="max-w-7xl mx-auto">

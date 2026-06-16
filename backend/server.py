@@ -3984,6 +3984,56 @@ class PolicyBenchmarkCreate(BaseModel):
     is_active: bool = True
 
 
+# ==================== Feature Access Control ====================
+
+class FeatureAccessUpdate(BaseModel):
+    feature: str  # "policy_tc"
+    enabled_for_hr: bool  # global toggle
+    allowed_hr_users: Optional[List[str]] = None  # specific HR user IDs (if empty + enabled = all HR)
+
+
+@api_router.get("/feature-access/{feature}")
+async def get_feature_access(feature: str, current_user: User = Depends(get_current_user)):
+    """Get feature access settings"""
+    doc = await db.feature_access.find_one({"feature": feature}, {"_id": 0})
+    if not doc:
+        return {"feature": feature, "enabled_for_hr": True, "allowed_hr_users": []}
+    return doc
+
+
+@api_router.put("/feature-access/{feature}")
+async def update_feature_access(feature: str, data: FeatureAccessUpdate, current_user: User = Depends(get_current_user)):
+    """Update feature access (Master Admin only)"""
+    user_doc = await db.users.find_one({"id": current_user.id}, {"_id": 0})
+    if not user_doc or not user_doc.get("is_master_admin"):
+        raise HTTPException(status_code=403, detail="Only Master Admin can manage feature access")
+    doc = {
+        "feature": feature,
+        "enabled_for_hr": data.enabled_for_hr,
+        "allowed_hr_users": data.allowed_hr_users or [],
+        "updated_by": current_user.id,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.feature_access.update_one({"feature": feature}, {"$set": doc}, upsert=True)
+    return doc
+
+
+@api_router.get("/feature-access-check/{feature}")
+async def check_feature_access(feature: str, current_user: User = Depends(get_current_user)):
+    """Check if current user has access to a feature"""
+    if current_user.role == UserRole.ADMIN:
+        return {"has_access": True}
+    doc = await db.feature_access.find_one({"feature": feature}, {"_id": 0})
+    if not doc:
+        return {"has_access": True}  # default: accessible
+    if not doc.get("enabled_for_hr", True):
+        return {"has_access": False}
+    allowed = doc.get("allowed_hr_users", [])
+    if len(allowed) == 0:
+        return {"has_access": True}  # enabled for all HR
+    return {"has_access": current_user.id in allowed}
+
+
 @api_router.get("/policy-benchmarks")
 async def get_policy_benchmarks(
     policy_type: Optional[str] = None,

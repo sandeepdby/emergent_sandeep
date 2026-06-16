@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { toast } from "sonner";
 import {
   Loader2, BookOpen, Scale, Upload, Sparkles, FileText, Shield, Heart,
-  Zap, Plus, Pencil, Trash2, CheckCircle2, Lightbulb, Download, X, File, ShieldX
+  Zap, Plus, Pencil, Trash2, CheckCircle2, Lightbulb, Download, X, File, ShieldX, Lock, Users
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -174,6 +174,12 @@ export default function PolicyExplainer({ isAdmin = false }) {
   const [paramVal, setParamVal] = useState("");
   const [savingBenchmark, setSavingBenchmark] = useState(false);
 
+  // Feature access control (admin)
+  const [featureAccess, setFeatureAccess] = useState({ enabled_for_hr: true, allowed_hr_users: [] });
+  const [hrUsers, setHrUsers] = useState([]);
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [hrHasAccess, setHrHasAccess] = useState(true);
+
   const fetchBenchmarks = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/policy-benchmarks`, { headers: getAuthHeaders() });
@@ -182,7 +188,33 @@ export default function PolicyExplainer({ isAdmin = false }) {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchBenchmarks(); }, [fetchBenchmarks]);
+  useEffect(() => {
+    fetchBenchmarks();
+    // Check access for HR
+    if (!isAdmin) {
+      axios.get(`${API}/feature-access-check/policy_tc`, { headers: getAuthHeaders() })
+        .then(res => setHrHasAccess(res.data.has_access))
+        .catch(() => setHrHasAccess(true));
+    }
+    // Fetch feature access settings for admin
+    if (isAdmin) {
+      axios.get(`${API}/feature-access/policy_tc`, { headers: getAuthHeaders() })
+        .then(res => setFeatureAccess(res.data))
+        .catch(() => {});
+      axios.get(`${API}/users`, { headers: getAuthHeaders() })
+        .then(res => setHrUsers(res.data.filter(u => u.role === "HR")))
+        .catch(() => {});
+    }
+  }, [fetchBenchmarks, isAdmin]);
+
+  const handleSaveAccess = async () => {
+    setSavingAccess(true);
+    try {
+      await axios.put(`${API}/feature-access/policy_tc`, featureAccess, { headers: getAuthHeaders() });
+      toast.success("Access settings saved");
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+    finally { setSavingAccess(false); }
+  };
 
   // -- Explainer --
   const handleExplain = async () => {
@@ -293,6 +325,17 @@ export default function PolicyExplainer({ isAdmin = false }) {
 
   if (loading) return <div className="flex items-center justify-center py-20" data-testid="explainer-loading"><Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" /></div>;
 
+  // HR access gate
+  if (!isAdmin && !hrHasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="policy-tc-no-access">
+        <Shield className="w-16 h-16 text-stone-300 mb-4" />
+        <h3 className="text-lg font-semibold text-stone-700">Access Restricted</h3>
+        <p className="text-sm text-stone-500 mt-2 max-w-md">Policy T&C Explainer & Benchmarking is currently not available for your account. Contact your administrator for access.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6" data-testid="policy-explainer">
       <div className="flex items-center gap-3">
@@ -365,6 +408,38 @@ export default function PolicyExplainer({ isAdmin = false }) {
       {/* ===== Manage Benchmarks (Admin) ===== */}
       {activeTab === "manage" && isAdmin && (
         <div className="space-y-6">
+          {/* HR Access Control */}
+          <Card className="border-l-4 border-l-amber-500" data-testid="hr-access-control">
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-600" />
+                <CardTitle className="text-sm font-semibold text-stone-700">HR Portal Access Control</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-stone-800">Enable Policy T&C for HR users</p>
+                  <p className="text-xs text-stone-500">Toggle visibility of Policy T&C tab in the HR portal</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={featureAccess.enabled_for_hr} onChange={e => setFeatureAccess(f => ({ ...f, enabled_for_hr: e.target.checked }))} data-testid="toggle-hr-access" />
+                  <div className="w-11 h-6 bg-stone-200 peer-focus:ring-2 peer-focus:ring-[#E05A47]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-[#E05A47] after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all" />
+                </label>
+              </div>
+              {featureAccess.enabled_for_hr && hrUsers.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-stone-800 mb-2">Grant access to specific HR users (leave empty for all)</p>
+                  <HrUserAccessList users={hrUsers} selected={featureAccess.allowed_hr_users || []} onChange={ids => setFeatureAccess(f => ({ ...f, allowed_hr_users: ids }))} />
+                </div>
+              )}
+              <Button size="sm" onClick={handleSaveAccess} disabled={savingAccess} className="bg-amber-500 hover:bg-amber-600" data-testid="save-access-btn">
+                {savingAccess && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />} Save Access Settings
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Benchmarks */}
           <div className="flex items-center justify-between">
             <div><h3 className="font-semibold text-stone-800">Policy Benchmarks</h3><p className="text-xs text-stone-500">{benchmarks.length} benchmarks configured</p></div>
             <Button onClick={openNewBenchmark} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="add-benchmark-btn"><Plus className="w-4 h-4 mr-2" /> Add Benchmark</Button>
@@ -740,5 +815,26 @@ function PolicyTypeChip({ label, icon: Icon, active, onClick }) {
       <Icon className="w-4 h-4" /> {label}
       {active && <CheckCircle2 className="w-3.5 h-3.5" />}
     </button>
+  );
+}
+
+
+function HrUserAccessList({ users, selected, onChange }) {
+  const toggle = (id) => {
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+  };
+  return (
+    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+      {users.map(u => (
+        <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-stone-50 cursor-pointer transition-colors" data-testid={`hr-user-access-${u.id}`}>
+          <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} className="rounded border-stone-300 text-[#E05A47] focus:ring-[#E05A47]/20" />
+          <div className="flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-stone-400" />
+            <span className="text-sm text-stone-700 font-medium">{u.username}</span>
+            {u.email && <span className="text-xs text-stone-400">{u.email}</span>}
+          </div>
+        </label>
+      ))}
+    </div>
   );
 }
