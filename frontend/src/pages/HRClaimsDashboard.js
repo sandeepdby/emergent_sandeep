@@ -3,11 +3,13 @@ import axios from "axios";
 import { API } from "../auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, FileCheck, TrendingUp, Activity, DollarSign, ShieldCheck, ShieldX, Clock, PieChartIcon } from "lucide-react";
+import { toast } from "sonner";
+import { Loader2, FileCheck, TrendingUp, DollarSign, ShieldCheck, ShieldX, Clock, PieChart as PieChartIcon, Download, Users } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend, AreaChart, Area
+  Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 
 const STATUS_COLORS = {
@@ -17,27 +19,25 @@ const STATUS_COLORS = {
   Rejected: "#ef4444",
   Closed: "#6b7280",
 };
-
 const TYPE_COLORS = { Cashless: "#10b981", Reimbursement: "#8b5cf6" };
+const BAR_COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#6366f1", "#ec4899", "#14b8a6"];
 
 const fmt = (v) => (v || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
-function AnimatedValue({ value, prefix = "", suffix = "" }) {
+function AnimatedValue({ value }) {
   const [display, setDisplay] = useState(0);
   useEffect(() => {
     const num = typeof value === "number" ? value : parseFloat(value) || 0;
     if (num === 0) { setDisplay(0); return; }
     let start = 0;
-    const duration = 800;
-    const step = num / (duration / 16);
+    const step = num / 50;
     const timer = setInterval(() => {
       start += step;
-      if (start >= num) { setDisplay(num); clearInterval(timer); }
-      else setDisplay(Math.round(start));
+      if (start >= num) { setDisplay(num); clearInterval(timer); } else setDisplay(Math.round(start));
     }, 16);
     return () => clearInterval(timer);
   }, [value]);
-  return <span>{prefix}{typeof value === "number" && value > 999 ? fmt(display) : display}{suffix}</span>;
+  return <span>{typeof value === "number" && value > 999 ? fmt(display) : display}</span>;
 }
 
 function MetricCard({ label, value, subtext, color, icon: Icon }) {
@@ -47,9 +47,7 @@ function MetricCard({ label, value, subtext, color, icon: Icon }) {
         <div className="flex items-start justify-between">
           <div>
             <p className="text-[10px] text-stone-500 uppercase tracking-wider font-medium">{label}</p>
-            <p className="text-2xl font-bold text-stone-900 mt-1 tabular-nums" data-testid={`metric-${label.replace(/\s/g, '-').toLowerCase()}`}>
-              <AnimatedValue value={value} />
-            </p>
+            <p className="text-2xl font-bold text-stone-900 mt-1 tabular-nums"><AnimatedValue value={value} /></p>
             {subtext && <p className="text-xs text-stone-400 mt-0.5">{subtext}</p>}
           </div>
           {Icon && (
@@ -63,20 +61,100 @@ function MetricCard({ label, value, subtext, color, icon: Icon }) {
   );
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+const ChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload || payload.length === 0) return null;
   return (
     <div className="bg-white/95 backdrop-blur-sm px-4 py-3 border border-stone-200 rounded-xl shadow-xl text-xs">
       <p className="font-semibold text-stone-800 mb-1.5">{label}</p>
       {payload.map((p, i) => (
         <p key={i} className="flex items-center gap-2" style={{ color: p.color }}>
-          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="w-2 h-2 rounded-full inline-block" style={{ background: p.color }} />
           {p.name}: {typeof p.value === "number" && p.value > 999 ? fmt(p.value) : p.value}
         </p>
       ))}
     </div>
   );
 };
+
+function StatusPieChart({ data }) {
+  if (!data || data.length === 0) return <p className="text-center text-stone-400 py-6 text-xs">No claims yet</p>;
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <PieChart>
+        <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={70} dataKey="value" strokeWidth={2} animationDuration={1000}>
+          {data.map((e, i) => <Cell key={i} fill={e.color} stroke="white" />)}
+        </Pie>
+        <Tooltip content={ChartTooltip} />
+        <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: "10px" }} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+function BreakdownBarChart({ data }) {
+  if (!data || data.length === 0) return <p className="text-center text-stone-400 py-6 text-xs">No data</p>;
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={data} barGap={4}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis dataKey="name" tick={{ fontSize: 9 }} axisLine={false} interval={0} />
+        <YAxis tick={{ fontSize: 9 }} tickFormatter={v => `${Math.round(v / 100000)}L`} axisLine={false} />
+        <Tooltip content={ChartTooltip} />
+        <Bar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={44} animationDuration={800}>
+          {data.map((e, i) => <Cell key={i} fill={e.fill} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function MonthlyBarChart({ data }) {
+  if (!data || data.length === 0) return <p className="text-center text-stone-400 py-6 text-xs">No trend data yet</p>;
+  return (
+    <ResponsiveContainer width="100%" height={250}>
+      <BarChart data={data} barGap={2}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis dataKey="month" tick={{ fontSize: 9 }} axisLine={false} />
+        <YAxis yAxisId="left" tick={{ fontSize: 9 }} axisLine={false} allowDecimals={false} />
+        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 9 }} tickFormatter={v => `${Math.round(v / 100000)}L`} axisLine={false} />
+        <Tooltip content={ChartTooltip} />
+        <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: "10px" }} />
+        <Bar yAxisId="left" dataKey="count" name="Claims Count" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={32} animationDuration={800} />
+        <Bar yAxisId="right" dataKey="amount" name="Claims Amount" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={32} animationDuration={800} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function EmployeeClaimsChart({ claims }) {
+  // Aggregate incurred by employee+patient
+  const empMap = {};
+  claims.forEach(c => {
+    const emp = c.employee_name || "Unknown";
+    const patient = c.patient_name || emp;
+    const key = `${emp} / ${patient}`;
+    empMap[key] = (empMap[key] || 0) + (c.incurred_amount || 0);
+  });
+  const chartData = Object.entries(empMap)
+    .map(([name, amount]) => ({ name, amount }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 8);
+
+  if (chartData.length === 0) return <p className="text-center text-stone-400 py-6 text-xs">No data</p>;
+  return (
+    <ResponsiveContainer width="100%" height={250}>
+      <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 10 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+        <XAxis type="number" tick={{ fontSize: 9 }} tickFormatter={v => `${Math.round(v / 100000)}L`} axisLine={false} />
+        <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={120} axisLine={false} />
+        <Tooltip content={ChartTooltip} />
+        <Bar dataKey="amount" name="Incurred Amount" radius={[0, 6, 6, 0]} maxBarSize={28} animationDuration={800}>
+          {chartData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
 
 export default function HRClaimsDashboard() {
   const [loading, setLoading] = useState(true);
@@ -103,37 +181,42 @@ export default function HRClaimsDashboard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20" data-testid="hr-claims-loading">
-        <Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" />
-      </div>
-    );
-  }
+  const downloadExcel = () => {
+    if (claims.length === 0) { toast.error("No data to download"); return; }
+    const headers = ["Claim #", "Policy", "Policy Type", "Claim Type", "Report Date", "Employee", "Patient", "Claimed", "Incurred", "Paid", "Status", "Remarks"];
+    const rows = claims.map(c => [
+      c.claim_number, c.policy_number, c.policy_type || "", c.claim_type,
+      c.claims_report_date || "", c.employee_name || "", c.patient_name || "",
+      c.claimed_amount || 0, c.incurred_amount || 0, c.paid_amount || 0,
+      c.status, c.remarks || ""
+    ]);
+    let csv = "\uFEFF" + headers.join(",") + "\n";
+    rows.forEach(r => { csv += r.map(v => `"${v}"`).join(",") + "\n"; });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `claims_synopsis_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success("Claims downloaded");
+  };
 
-  if (!analytics) {
-    return (
-      <div className="text-center py-12" data-testid="hr-claims-error">
-        <p className="text-stone-500">Failed to load claims data</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex items-center justify-center py-20" data-testid="hr-claims-loading"><Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" /></div>;
+  if (!analytics) return <div className="text-center py-12" data-testid="hr-claims-error"><p className="text-stone-500">Failed to load claims data</p></div>;
 
   const {
-    total_claims, total_claimed_amount,
-    total_incurred_amount, total_paid_amount,
-    reimbursement_claims, reimbursement_count,
-    cashless_claims, cashless_count,
-    rejected_claims, rejected_count,
-    under_process_claims, under_process_count,
-    total_premium, claims_ratio, annual_claims_trend,
-    total_policy_days, total_lives,
+    total_claims, total_claimed_amount, total_incurred_amount, total_paid_amount,
+    reimbursement_claims, reimbursement_count, cashless_claims, cashless_count,
+    rejected_claims, rejected_count, under_process_claims, under_process_count,
+    total_premium, claims_ratio, annual_claims_trend, total_policy_days, total_lives,
     status_distribution, type_distribution, monthly_trend
   } = analytics;
 
   const statusPieData = status_distribution.map(s => ({ ...s, color: STATUS_COLORS[s.name] || "#94a3b8" }));
   const typePieData = type_distribution.map(s => ({ ...s, color: TYPE_COLORS[s.name] || "#94a3b8" }));
-
   const summaryBarData = [
     { name: "Claimed", amount: total_claimed_amount, fill: "#3b82f6" },
     { name: "Incurred", amount: total_incurred_amount || 0, fill: "#8b5cf6" },
@@ -152,11 +235,6 @@ export default function HRClaimsDashboard() {
     return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${colors[status] || colors.Closed}`}>{status}</span>;
   };
 
-  const renderLabel = ({ name, value, percent }) => {
-    if (percent < 0.05) return null;
-    return `${name}: ${value}`;
-  };
-
   return (
     <div className="space-y-6" data-testid="hr-claims-dashboard">
       <div className="flex items-center gap-3 mb-2">
@@ -169,7 +247,7 @@ export default function HRClaimsDashboard() {
         </div>
       </div>
 
-      {/* Row 1 - Primary Metrics */}
+      {/* Row 1 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Total Claims" value={total_claims} subtext={fmt(total_claimed_amount)} color="border-l-blue-500" icon={FileCheck} />
         <MetricCard label="Cashless" value={cashless_count} subtext={fmt(cashless_claims)} color="border-l-emerald-500" icon={ShieldCheck} />
@@ -177,7 +255,7 @@ export default function HRClaimsDashboard() {
         <MetricCard label="Rejected" value={rejected_count} subtext={fmt(rejected_claims)} color="border-l-red-500" icon={ShieldX} />
       </div>
 
-      {/* Row 2 - Financial Metrics */}
+      {/* Row 2 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Under Process" value={under_process_count} subtext={fmt(under_process_claims)} color="border-l-amber-500" icon={Clock} />
         <MetricCard label="Total Premium" value={total_premium} color="border-l-indigo-500" icon={DollarSign} />
@@ -185,13 +263,13 @@ export default function HRClaimsDashboard() {
         <MetricCard label="Annual Claims Trend" value={annual_claims_trend} color="border-l-orange-500" icon={TrendingUp} />
       </div>
 
-      {/* Row 3 - Lives, Policy Run Days, Incurred, Paid */}
+      {/* Row 3 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100 hover:shadow-lg transition-all">
           <CardContent className="p-4 text-center">
             <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">Total Lives</p>
             <p className="text-3xl font-bold text-emerald-700 mt-2" data-testid="total-lives">{total_lives || 0}</p>
-            <p className="text-[10px] text-emerald-500 mt-1">Under assigned policies</p>
+            <p className="text-[10px] text-emerald-500 mt-1">Under latest policy</p>
           </CardContent>
         </Card>
         <Card className="bg-gradient-to-br from-sky-50 to-cyan-50 border-sky-100 hover:shadow-lg transition-all">
@@ -219,108 +297,43 @@ export default function HRClaimsDashboard() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Status Pie */}
         <Card className="hover:shadow-lg transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-stone-700">Claims by Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {statusPieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie data={statusPieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={renderLabel} labelLine={false} strokeWidth={2} animationBegin={0} animationDuration={1200}>
-                    {statusPieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="white" />)}
-                  </Pie>
-                  <Tooltip content={CustomTooltip} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : <p className="text-center text-stone-400 py-8">No claims yet</p>}
-          </CardContent>
+          <CardHeader className="pb-1"><CardTitle className="text-sm font-semibold text-stone-700">Claims by Status</CardTitle></CardHeader>
+          <CardContent><StatusPieChart data={statusPieData} /></CardContent>
         </Card>
-
-        {/* Claims Amount Breakdown Bar */}
         <Card className="hover:shadow-lg transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-stone-700">Claims Amount Breakdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {total_claims > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={summaryBarData} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} />
-                  <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${Math.round(v/100000)}L`} axisLine={false} />
-                  <Tooltip content={CustomTooltip} />
-                  <Bar dataKey="amount" name="Amount" radius={[8, 8, 0, 0]} maxBarSize={52} animationBegin={200} animationDuration={1000}>
-                    {summaryBarData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <p className="text-center text-stone-400 py-8">No data</p>}
-          </CardContent>
+          <CardHeader className="pb-1"><CardTitle className="text-sm font-semibold text-stone-700">Claims Amount Breakdown</CardTitle></CardHeader>
+          <CardContent><BreakdownBarChart data={summaryBarData} /></CardContent>
         </Card>
-
-        {/* Claim Type Pie */}
         <Card className="hover:shadow-lg transition-all">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-stone-700">Cashless vs Reimbursement</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {typePieData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie data={typePieData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" label={renderLabel} labelLine={false} strokeWidth={2} animationBegin={400} animationDuration={1200}>
-                    {typePieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="white" />)}
-                  </Pie>
-                  <Tooltip content={CustomTooltip} />
-                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px" }} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : <p className="text-center text-stone-400 py-8">No data</p>}
-          </CardContent>
+          <CardHeader className="pb-1"><CardTitle className="text-sm font-semibold text-stone-700">Cashless vs Reimbursement</CardTitle></CardHeader>
+          <CardContent><StatusPieChart data={typePieData} /></CardContent>
         </Card>
       </div>
 
-      {/* Monthly Trend */}
-      <Card className="hover:shadow-lg transition-all">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-stone-700">Monthly Claims Trend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {monthly_trend.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={monthly_trend}>
-                <defs>
-                  <linearGradient id="claimCountGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="claimAmountGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" tick={{ fontSize: 10 }} axisLine={false} />
-                <YAxis yAxisId="left" tick={{ fontSize: 10 }} axisLine={false} allowDecimals={false} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} tickFormatter={v => `${Math.round(v/100000)}L`} axisLine={false} />
-                <Tooltip content={CustomTooltip} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px" }} />
-                <Area yAxisId="left" type="monotone" dataKey="count" name="Claims Count" stroke="#3b82f6" fill="url(#claimCountGrad)" strokeWidth={2.5} dot={{ r: 4, fill: "#3b82f6" }} animationBegin={0} animationDuration={1500} />
-                <Area yAxisId="right" type="monotone" dataKey="amount" name="Claims Amount" stroke="#10b981" fill="url(#claimAmountGrad)" strokeWidth={2.5} dot={{ r: 4, fill: "#10b981" }} animationBegin={300} animationDuration={1500} />
-              </AreaChart>
-            </ResponsiveContainer>
-          ) : <p className="text-center text-stone-400 py-8">No trend data available yet</p>}
-        </CardContent>
-      </Card>
+      {/* Monthly Bar + Employee Claims */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="hover:shadow-lg transition-all">
+          <CardHeader className="pb-1"><CardTitle className="text-sm font-semibold text-stone-700">Monthly Claims</CardTitle></CardHeader>
+          <CardContent><MonthlyBarChart data={monthly_trend} /></CardContent>
+        </Card>
+        <Card className="hover:shadow-lg transition-all">
+          <CardHeader className="pb-1"><CardTitle className="text-sm font-semibold text-stone-700">Highest Employee Claims (by Patient)</CardTitle></CardHeader>
+          <CardContent><EmployeeClaimsChart claims={claims} /></CardContent>
+        </Card>
+      </div>
 
       {/* Claims Table */}
       <Card className="hover:shadow-lg transition-all">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-semibold text-stone-700">Claims Synopsis</CardTitle>
-            <Badge variant="secondary" className="text-xs">{claims.length} records</Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs">{claims.length} records</Badge>
+              <Button variant="outline" size="sm" onClick={downloadExcel} data-testid="download-claims-synopsis-btn">
+                <Download className="w-3.5 h-3.5 mr-1.5" /> Download
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -333,7 +346,7 @@ export default function HRClaimsDashboard() {
                   <TableRow className="bg-stone-50">
                     <TableHead className="text-xs font-semibold">Claim #</TableHead>
                     <TableHead className="text-xs font-semibold">Policy</TableHead>
-                    <TableHead className="text-xs font-semibold">Policy Type</TableHead>
+                    <TableHead className="text-xs font-semibold">Type</TableHead>
                     <TableHead className="text-xs font-semibold">Claim Type</TableHead>
                     <TableHead className="text-xs font-semibold">Report Date</TableHead>
                     <TableHead className="text-xs font-semibold text-right">Claimed</TableHead>
@@ -349,8 +362,8 @@ export default function HRClaimsDashboard() {
                       <TableCell className="text-xs text-stone-600">{c.policy_number}</TableCell>
                       <TableCell className="text-xs"><Badge variant="secondary" className="text-[10px]">{c.policy_type || "-"}</Badge></TableCell>
                       <TableCell className="text-xs">
-                        <span className={`inline-flex items-center gap-1 ${c.claim_type === 'Cashless' ? 'text-emerald-600' : 'text-purple-600'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${c.claim_type === 'Cashless' ? 'bg-emerald-400' : 'bg-purple-400'}`} />
+                        <span className={`inline-flex items-center gap-1 ${c.claim_type === "Cashless" ? "text-emerald-600" : "text-purple-600"}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${c.claim_type === "Cashless" ? "bg-emerald-400" : "bg-purple-400"}`} />
                           {c.claim_type}
                         </span>
                       </TableCell>
