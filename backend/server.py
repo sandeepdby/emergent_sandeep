@@ -3814,46 +3814,44 @@ async def get_claims_analytics(
         else:
             policy_query["policy_number"] = {"$in": []}
     policies = await db.policies.find(policy_query, {"_id": 0}).to_list(1000)
-    total_premium = sum(p.get("premium", 0) or (p.get("annual_premium_per_life", 0) * p.get("total_lives_covered", 0)) for p in policies)
 
-    claims_ratio = round((total_incurred / total_premium * 100) if total_premium > 0 else 0, 1)
-
-    # Per-policy calculations:
-    # Policy Run Days = Today - Policy Start/Inception Date (per policy)
-    # Annual Claims Trend = Sum of per-policy: (Incurred for policy / Run Days of policy) * 365 * 1.1
-    today = datetime.now(timezone.utc)
+    # Find the LATEST policy (most recent by start/inception date)
     from dateutil import parser as date_parser
-
-    # Build per-policy incurred amounts
-    policy_incurred = {}
-    for c in claims:
-        pn = c.get("policy_number", "")
-        policy_incurred[pn] = policy_incurred.get(pn, 0) + c.get("incurred_amount", 0)
-
-    annual_claims_trend = 0
-    policy_run_days_list = []
+    today = datetime.now(timezone.utc)
+    latest_policy = None
+    latest_start_dt = None
     for p in policies:
-        pn = p.get("policy_number", "")
         start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
         if start:
             try:
                 start_dt = date_parser.parse(start)
                 if start_dt.tzinfo is None:
                     start_dt = start_dt.replace(tzinfo=timezone.utc)
-                run_days = (today - start_dt).days
-                if run_days > 0:
-                    policy_run_days_list.append(run_days)
-                    incurred_for_policy = policy_incurred.get(pn, 0)
-                    if incurred_for_policy > 0:
-                        annual_claims_trend += (incurred_for_policy / run_days) * 365 * 1.1
+                if latest_start_dt is None or start_dt > latest_start_dt:
+                    latest_start_dt = start_dt
+                    latest_policy = p
             except Exception:
                 pass
+    if not latest_policy and policies:
+        latest_policy = policies[-1]
 
-    annual_claims_trend = round(annual_claims_trend, 2)
-    avg_policy_run_days = round(sum(policy_run_days_list) / len(policy_run_days_list)) if policy_run_days_list else 0
+    # Total Premium, Lives, Run Days — from LATEST policy only
+    total_premium = 0
+    total_lives = 0
+    policy_run_days = 0
+    if latest_policy:
+        total_premium = latest_policy.get("premium", 0) or (latest_policy.get("annual_premium_per_life", 0) * latest_policy.get("total_lives_covered", 0))
+        total_lives = latest_policy.get("total_lives_count", 0) or latest_policy.get("total_lives_covered", 0)
+        if latest_start_dt:
+            policy_run_days = (today - latest_start_dt).days
+            if policy_run_days < 0:
+                policy_run_days = 0
 
-    # Total lives under policies
-    total_lives = sum(p.get("total_lives_count", 0) or p.get("total_lives_covered", 0) for p in policies)
+    claims_ratio = round((total_incurred / total_premium * 100) if total_premium > 0 else 0, 1)
+
+    # Annual Claims Trend = (Total Incurred / Policy Run Days) * 365 * 1.1
+    # Uses latest policy's run days
+    annual_claims_trend = round((total_incurred / policy_run_days) * 365 * 1.1, 2) if policy_run_days > 0 else 0
 
     status_counts = {}
     type_counts = {}
@@ -3890,7 +3888,7 @@ async def get_claims_analytics(
         "total_premium": round(total_premium, 2),
         "claims_ratio": claims_ratio,
         "annual_claims_trend": annual_claims_trend,
-        "total_policy_days": avg_policy_run_days,
+        "total_policy_days": policy_run_days,
         "total_lives": total_lives,
         "status_distribution": [{"name": k, "value": v} for k, v in status_counts.items()],
         "type_distribution": [{"name": k, "value": v} for k, v in type_counts.items()],
