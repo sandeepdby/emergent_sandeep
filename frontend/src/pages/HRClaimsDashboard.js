@@ -178,7 +178,6 @@ export default function HRClaimsDashboard() {
               <p className="text-[10px] text-gray-500 uppercase tracking-wide">Annual Claims Trend</p>
             </div>
             <p className="text-xl font-bold text-orange-600 mt-0.5" data-testid="annual-claims-trend">{fmt(annual_claims_trend)}</p>
-            <p className="text-[10px] text-gray-400">(Claims / {total_policy_days || 0} days) x 365 x 1.1</p>
           </CardContent>
         </Card>
       </div>
