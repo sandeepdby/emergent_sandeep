@@ -1069,15 +1069,14 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
         """
         background_tasks.add_task(send_email_notification, [user_data.email], welcome_subject, welcome_body)
     
-    # Notify all existing HR and Admin users about the new registration
+    # Notify only Admin users (not HR) about new registration
     if SMTP_USERNAME:
-        # Get all HR and Admin users to notify
-        all_users = await db.users.find(
-            {"role": {"$in": ["HR", "Admin"]}, "id": {"$ne": user.id}},
-            {"_id": 0, "email": 1, "phone": 1, "role": 1, "full_name": 1}
+        admin_users = await db.users.find(
+            {"role": "Admin", "id": {"$ne": user.id}},
+            {"_id": 0, "email": 1}
         ).to_list(100)
         
-        notify_emails = [u['email'] for u in all_users if u.get('email')]
+        notify_emails = [u['email'] for u in admin_users if u.get('email')]
         
         if notify_emails:
             notify_subject = f"New {user_data.role.value} User Registered - InsureHub"
@@ -5264,6 +5263,98 @@ async def upload_document(
         "size": result.get("size", len(data)),
         "assigned_to_hr": assigned_to_hr,
         "created_at": doc_record["created_at"]
+    }
+
+
+@api_router.post("/documents/bulk-upload")
+async def bulk_upload_documents(
+    files: List[UploadFile] = File(...),
+    category: str = Query(...),
+    assigned_to_hr: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload multiple files or a ZIP file. ZIP files are extracted and each file uploaded individually."""
+    import zipfile
+
+    max_size = 50 * 1024 * 1024  # 50MB total
+    results = []
+    errors = []
+
+    hr_details = None
+    if assigned_to_hr and current_user.role == UserRole.ADMIN:
+        hr_user = await db.users.find_one({"id": assigned_to_hr, "role": "HR"}, {"_id": 0})
+        if hr_user:
+            hr_details = {
+                "assigned_to_hr_name": hr_user.get("full_name", ""),
+                "assigned_to_hr_email": hr_user.get("email", ""),
+                "assigned_to_hr_phone": hr_user.get("phone", ""),
+            }
+
+    async def save_single_file(filename, data, content_type):
+        ext = filename.split(".")[-1] if "." in filename else "bin"
+        storage_path = f"{APP_NAME}/documents/{current_user.id}/{uuid.uuid4()}.{ext}"
+        result = put_object(storage_path, data, content_type)
+        doc_id = str(uuid.uuid4())
+        doc_record = {
+            "id": doc_id,
+            "storage_path": result["path"],
+            "original_filename": filename,
+            "content_type": content_type,
+            "size": result.get("size", len(data)),
+            "category": category,
+            "uploaded_by": current_user.id,
+            "uploaded_by_name": current_user.full_name,
+            "uploaded_by_role": current_user.role,
+            "assigned_to_hr": assigned_to_hr if assigned_to_hr and current_user.role == UserRole.ADMIN else None,
+            "is_deleted": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if hr_details:
+            doc_record.update(hr_details)
+        await db.documents.insert_one(doc_record)
+        return {"id": doc_id, "filename": filename, "size": len(data)}
+
+    for file in files:
+        data = await file.read()
+        if len(data) > max_size:
+            errors.append({"filename": file.filename, "error": "File too large (max 50MB)"})
+            continue
+
+        # Check if it's a ZIP file
+        if file.filename.lower().endswith(".zip") or file.content_type == "application/zip":
+            try:
+                with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                    for name in zf.namelist():
+                        if name.endswith("/") or name.startswith("__MACOSX"):
+                            continue
+                        try:
+                            file_data = zf.read(name)
+                            if len(file_data) > 25 * 1024 * 1024:
+                                errors.append({"filename": name, "error": "Extracted file too large"})
+                                continue
+                            clean_name = name.split("/")[-1]
+                            ext = clean_name.split(".")[-1].lower() if "." in clean_name else "bin"
+                            ct_map = {"pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png", "webp": "image/webp", "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "csv": "text/csv", "doc": "application/msword", "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+                            ct = ct_map.get(ext, "application/octet-stream")
+                            r = await save_single_file(clean_name, file_data, ct)
+                            results.append(r)
+                        except Exception as e:
+                            errors.append({"filename": name, "error": str(e)})
+            except zipfile.BadZipFile:
+                errors.append({"filename": file.filename, "error": "Invalid ZIP file"})
+        else:
+            try:
+                ct = file.content_type or "application/octet-stream"
+                r = await save_single_file(file.filename, data, ct)
+                results.append(r)
+            except Exception as e:
+                errors.append({"filename": file.filename, "error": str(e)})
+
+    return {
+        "uploaded": len(results),
+        "errors": len(errors),
+        "files": results,
+        "error_details": errors,
     }
 
 

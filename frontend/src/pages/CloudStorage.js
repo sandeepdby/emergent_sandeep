@@ -85,21 +85,27 @@ export default function CloudStorage() {
     fetchHrUsers();
   }, [fetchDocuments, fetchHrUsers]);
 
-  const handleUpload = async (file, category) => {
+  const handleUpload = async (fileList, category) => {
+    const files = Array.from(fileList);
+    if (files.length === 0) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
 
-    let uploadUrl = `${API}/documents/upload?category=${encodeURIComponent(category)}`;
+    // Use bulk upload for multiple files or ZIP
+    const formData = new FormData();
+    files.forEach(f => formData.append("files", f));
+
+    let uploadUrl = `${API}/documents/bulk-upload?category=${encodeURIComponent(category)}`;
     if (isAdmin && selectedHr && selectedHr !== "none") {
       uploadUrl += `&assigned_to_hr=${encodeURIComponent(selectedHr)}`;
     }
 
     try {
-      await axios.post(uploadUrl, formData, {
+      const res = await axios.post(uploadUrl, formData, {
         headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
       });
-      toast.success(`"${file.name}" uploaded successfully`);
+      const data = res.data;
+      if (data.uploaded > 0) toast.success(`${data.uploaded} file${data.uploaded > 1 ? 's' : ''} uploaded successfully`);
+      if (data.errors > 0) toast.error(`${data.errors} file${data.errors > 1 ? 's' : ''} failed`);
       fetchDocuments();
     } catch (err) {
       const detail = err.response?.data?.detail || err.message;
@@ -374,21 +380,21 @@ export default function CloudStorage() {
 function UploadButton({ catKey, uploading, onUpload }) {
   const inputRef = React.useRef(null);
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onUpload(file, catKey);
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      onUpload(files, catKey);
       e.target.value = "";
     }
   };
   return (
     <div>
-      <input type="file" ref={inputRef} className="hidden" onChange={handleFileChange}
-        accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.csv,.txt,.doc,.docx"
+      <input type="file" ref={inputRef} className="hidden" onChange={handleFileChange} multiple
+        accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.csv,.txt,.doc,.docx,.zip"
         data-testid={`file-input-${catKey}`} />
       <Button onClick={() => inputRef.current?.click()} disabled={uploading} size="sm" className="gap-2"
         data-testid={`upload-btn-${catKey}`}>
         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-        {uploading ? "Uploading..." : "Upload File"}
+        {uploading ? "Uploading..." : "Upload Files / ZIP"}
       </Button>
     </div>
   );
