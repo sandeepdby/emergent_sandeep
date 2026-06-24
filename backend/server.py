@@ -5420,6 +5420,26 @@ async def delete_document(
     return {"message": "Document deleted successfully"}
 
 
+class BulkDeleteDocs(BaseModel):
+    doc_ids: List[str]
+
+
+@api_router.post("/documents/bulk-delete")
+async def bulk_delete_documents(
+    data: BulkDeleteDocs,
+    current_user: User = Depends(get_current_user)
+):
+    """Bulk soft-delete multiple documents."""
+    deleted = 0
+    for doc_id in data.doc_ids:
+        record = await db.documents.find_one({"id": doc_id, "is_deleted": False}, {"_id": 0})
+        if record and (record["uploaded_by"] == current_user.id or current_user.role == UserRole.ADMIN):
+            await db.documents.update_one({"id": doc_id}, {"$set": {"is_deleted": True}})
+            deleted += 1
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "BULK_DELETE", "documents", ",".join(data.doc_ids[:5]), f"Bulk deleted {deleted} documents")
+    return {"deleted": deleted, "total_requested": len(data.doc_ids)}
+
+
 @api_router.post("/documents/{doc_id}/send-ecard")
 async def send_ecard(
     doc_id: str,

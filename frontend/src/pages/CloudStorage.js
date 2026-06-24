@@ -8,8 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, FileText, CreditCard, Heart, FolderOpen, Trash2,
-  Download, File, Loader2, CloudUpload, AlertCircle, Mail, Eye, Phone,
+  Download, File, Loader2, CloudUpload, AlertCircle, Mail, Eye, Phone, Search, CheckSquare, Square, X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 const CATEGORIES = [
@@ -53,6 +54,9 @@ export default function CloudStorage() {
   const [hrUsers, setHrUsers] = useState([]);
   const [selectedHr, setSelectedHr] = useState("");
   const [sendingEcard, setSendingEcard] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDocs, setSelectedDocs] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const userData = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = userData.role === "Admin";
@@ -140,11 +144,39 @@ export default function CloudStorage() {
     try {
       await axios.delete(`${API}/documents/${doc.id}`, { headers: getAuthHeaders() });
       toast.success(`"${doc.original_filename}" deleted`);
+      setSelectedDocs(prev => prev.filter(id => id !== doc.id));
       fetchDocuments();
     } catch (err) {
       const detail = err.response?.data?.detail || err.message;
       toast.error(`Delete failed: ${detail}`);
     }
+  };
+
+  const toggleDocSelect = (docId) => {
+    setSelectedDocs(prev => prev.includes(docId) ? prev.filter(id => id !== docId) : [...prev, docId]);
+  };
+
+  const toggleSelectAll = (catDocs) => {
+    const catIds = catDocs.map(d => d.id);
+    const allSelected = catIds.length > 0 && catIds.every(id => selectedDocs.includes(id));
+    if (allSelected) {
+      setSelectedDocs(prev => prev.filter(id => !catIds.includes(id)));
+    } else {
+      setSelectedDocs(prev => [...new Set([...prev, ...catIds])]);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocs.length === 0) return;
+    if (!window.confirm(`Delete ${selectedDocs.length} selected file(s)?`)) return;
+    setBulkDeleting(true);
+    try {
+      const res = await axios.post(`${API}/documents/bulk-delete`, { doc_ids: selectedDocs }, { headers: getAuthHeaders() });
+      toast.success(`${res.data.deleted} file(s) deleted`);
+      setSelectedDocs([]);
+      fetchDocuments();
+    } catch (err) { toast.error("Bulk delete failed"); }
+    finally { setBulkDeleting(false); }
   };
 
   const handleSendEcardEmail = async (doc) => {
@@ -239,6 +271,40 @@ export default function CloudStorage() {
         </div>
       )}
 
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+        <Input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search files by name, uploader, or assigned HR..."
+          className="pl-10 pr-10"
+          data-testid="cloud-search-input"
+        />
+        {searchQuery && (
+          <button onClick={() => setSearchQuery("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Bulk Delete Bar */}
+      {selectedDocs.length > 0 && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg px-4 py-2.5" data-testid="bulk-delete-bar">
+          <div className="flex items-center gap-2 text-sm text-red-700">
+            <CheckSquare className="w-4 h-4" />
+            <span className="font-medium">{selectedDocs.length} file{selectedDocs.length > 1 ? "s" : ""} selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelectedDocs([])} className="text-stone-500 text-xs" data-testid="clear-selection-btn">Clear</Button>
+            <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting} data-testid="bulk-delete-btn">
+              {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
+              Delete Selected
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full flex flex-wrap h-auto gap-1 bg-gray-100 p-1 rounded-xl">
           {CATEGORIES.map((cat) => {
@@ -265,8 +331,17 @@ export default function CloudStorage() {
 
         {CATEGORIES.map((cat) => {
           const CatIcon = cat.icon;
-          const catDocs = documents.filter((d) => d.category === cat.key);
+          const allCatDocs = documents.filter((d) => d.category === cat.key);
+          const catDocs = allCatDocs.filter(d => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (d.original_filename || "").toLowerCase().includes(q)
+              || (d.uploaded_by_name || "").toLowerCase().includes(q)
+              || (d.assigned_to_hr_name || "").toLowerCase().includes(q);
+          });
           const isEcard = cat.key === "E-Cards";
+          const catIds = catDocs.map(d => d.id);
+          const allSelected = catIds.length > 0 && catIds.every(id => selectedDocs.includes(id));
 
           return (
             <TabsContent key={cat.key} value={cat.key}>
@@ -295,6 +370,11 @@ export default function CloudStorage() {
                         <table className="w-full text-sm" data-testid={`documents-table-${cat.key}`}>
                           <thead>
                             <tr className="bg-gray-50 border-b text-left">
+                              <th className="px-2 py-3 w-10">
+                                <button onClick={() => toggleSelectAll(catDocs)} className="p-0.5" data-testid={`select-all-${cat.key}`}>
+                                  {allSelected ? <CheckSquare className="w-4 h-4 text-[#E05A47]" /> : <Square className="w-4 h-4 text-stone-300" />}
+                                </button>
+                              </th>
                               <th className="px-4 py-3 font-medium text-gray-600">File Name</th>
                               <th className="px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Size</th>
                               <th className="px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Uploaded By</th>
@@ -305,7 +385,12 @@ export default function CloudStorage() {
                           </thead>
                           <tbody>
                             {catDocs.map((doc) => (
-                              <tr key={doc.id} className="border-b last:border-b-0 hover:bg-gray-50 transition-colors" data-testid={`doc-row-${doc.id}`}>
+                              <tr key={doc.id} className={`border-b last:border-b-0 hover:bg-gray-50 transition-colors ${selectedDocs.includes(doc.id) ? 'bg-red-50/40' : ''}`} data-testid={`doc-row-${doc.id}`}>
+                                <td className="px-2 py-3">
+                                  <button onClick={() => toggleDocSelect(doc.id)} className="p-0.5" data-testid={`select-doc-${doc.id}`}>
+                                    {selectedDocs.includes(doc.id) ? <CheckSquare className="w-4 h-4 text-[#E05A47]" /> : <Square className="w-4 h-4 text-stone-300" />}
+                                  </button>
+                                </td>
                                 <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
                                     <FileText className={`w-4 h-4 flex-shrink-0 ${getFileIcon(doc.original_filename)}`} />
