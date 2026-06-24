@@ -3415,9 +3415,28 @@ async def get_cd_ledger(
     policy_number: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
-    """Get CD Ledger entries and running balance"""
+    """Get CD Ledger entries and running balance (HR sees only assigned policies)"""
     query = {}
+
+    # HR isolation: only show CD entries for assigned policies
+    if current_user.role == UserRole.HR:
+        assignments = await db.policy_assignments.find(
+            {"hr_user_id": current_user.id}, {"_id": 0, "policy_number": 1}
+        ).to_list(1000)
+        assigned_policy_numbers = [a["policy_number"] for a in assignments]
+        if not assigned_policy_numbers:
+            return {"entries": [], "total_balance": 0}
+        query["policy_number"] = {"$in": assigned_policy_numbers}
+
     if policy_number:
+        # For HR, ensure they can only filter within their assigned policies
+        if current_user.role == UserRole.HR:
+            assignments = await db.policy_assignments.find(
+                {"hr_user_id": current_user.id}, {"_id": 0, "policy_number": 1}
+            ).to_list(1000)
+            allowed = [a["policy_number"] for a in assignments]
+            if policy_number not in allowed:
+                return {"entries": [], "total_balance": 0}
         query["policy_number"] = policy_number
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
