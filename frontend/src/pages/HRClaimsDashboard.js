@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { Loader2, FileCheck, TrendingUp, DollarSign, ShieldCheck, ShieldX, Clock, PieChart as PieChartIcon, Download, Users } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -160,15 +162,27 @@ export default function HRClaimsDashboard() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
   const [claims, setClaims] = useState([]);
+  const [policies, setPolicies] = useState([]);
+  const [selectedPolicy, setSelectedPolicy] = useState("all");
+
+  const fetchPolicies = useCallback(async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${API}/policies`, { headers: { Authorization: `Bearer ${token}` } });
+      setPolicies(res.data || []);
+    } catch (err) { console.error(err); }
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
+      const policyParam = selectedPolicy !== "all" ? `?policy_number=${encodeURIComponent(selectedPolicy)}` : "";
+      const claimsPolicyParam = selectedPolicy !== "all" ? `?policy_number=${encodeURIComponent(selectedPolicy)}` : "";
       const [analyticsRes, claimsRes] = await Promise.all([
-        axios.get(`${API}/claims-analytics`, { headers }),
-        axios.get(`${API}/claims`, { headers }),
+        axios.get(`${API}/claims-analytics${policyParam}`, { headers }),
+        axios.get(`${API}/claims${claimsPolicyParam}`, { headers }),
       ]);
       setAnalytics(analyticsRes.data);
       setClaims(claimsRes.data);
@@ -177,8 +191,9 @@ export default function HRClaimsDashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedPolicy]);
 
+  useEffect(() => { fetchPolicies(); }, [fetchPolicies]);
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const downloadExcel = () => {
@@ -237,13 +252,29 @@ export default function HRClaimsDashboard() {
 
   return (
     <div className="space-y-6" data-testid="hr-claims-dashboard">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="w-10 h-10 bg-gradient-to-br from-[#E05A47] to-orange-400 rounded-xl flex items-center justify-center">
-          <FileCheck className="w-5 h-5 text-white" />
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-[#E05A47] to-orange-400 rounded-xl flex items-center justify-center">
+            <FileCheck className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-stone-800 font-heading">Claims Dashboard</h2>
+            <p className="text-xs text-stone-500">Real-time claims analytics for your assigned policies</p>
+          </div>
         </div>
-        <div>
-          <h2 className="text-lg font-semibold text-stone-800 font-heading">Claims Dashboard</h2>
-          <p className="text-xs text-stone-500">Real-time claims analytics for your assigned policies</p>
+        <div className="flex items-center gap-2">
+          <Label className="text-xs font-medium text-stone-500 whitespace-nowrap">Policy:</Label>
+          <Select value={selectedPolicy} onValueChange={setSelectedPolicy}>
+            <SelectTrigger className="w-[260px]" data-testid="claims-policy-filter">
+              <SelectValue placeholder="All Policies" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Policies</SelectItem>
+              {policies.map(p => (
+                <SelectItem key={p.id} value={p.policy_number}>{p.policy_number}{p.insurer_name ? ` — ${p.insurer_name}` : p.insurer ? ` — ${p.insurer}` : ""}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

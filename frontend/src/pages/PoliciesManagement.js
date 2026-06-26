@@ -26,6 +26,8 @@ const PoliciesPage = () => {
     policy_number: "",
     policy_holder_name: "",
     policy_date: "",
+    expiry_date: "",
+    insurer_name: "",
     policy_type: "Group Health",
     family_definition: "ESKP",
     premium: "",
@@ -101,6 +103,9 @@ const PoliciesPage = () => {
         policy_number: formData.policy_number,
         policy_holder_name: formData.policy_holder_name,
         policy_date: formData.policy_date,
+        inception_date: formData.policy_date,
+        expiry_date: formData.expiry_date || null,
+        insurer_name: formData.insurer_name || null,
         policy_type: formData.policy_type,
         family_definition: formData.family_definition || null,
         premium: parseFloat(formData.premium) || 0,
@@ -140,6 +145,8 @@ const PoliciesPage = () => {
       policy_number: policy.policy_number || "",
       policy_holder_name: policy.policy_holder_name || "",
       policy_date: policy.policy_date || policy.inception_date || "",
+      expiry_date: policy.expiry_date || policy.end_date || "",
+      insurer_name: policy.insurer_name || policy.insurer || "",
       policy_type: policy.policy_type || "Group Health",
       family_definition: policy.family_definition || "ESKP",
       premium: (policy.premium || 0).toString(),
@@ -214,17 +221,12 @@ const PoliciesPage = () => {
                   <TableRow>
                     <TableHead className="text-xs">Policy #</TableHead>
                     <TableHead className="text-xs">Holder</TableHead>
-                    <TableHead className="text-xs">Date</TableHead>
+                    <TableHead className="text-xs">Insurer</TableHead>
+                    <TableHead className="text-xs">Inception</TableHead>
+                    <TableHead className="text-xs">Expiry</TableHead>
                     <TableHead className="text-xs">Type</TableHead>
-                    <TableHead className="text-xs">Family Def.</TableHead>
                     <TableHead className="text-xs text-right">Premium</TableHead>
-                    <TableHead className="text-xs text-right">Emp</TableHead>
-                    <TableHead className="text-xs text-right">Spouse</TableHead>
-                    <TableHead className="text-xs text-right">Kids</TableHead>
-                    <TableHead className="text-xs text-right">Parents</TableHead>
                     <TableHead className="text-xs text-right">Total Lives</TableHead>
-                    <TableHead className="text-xs text-right">Add</TableHead>
-                    <TableHead className="text-xs text-right">Del</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                     <TableHead className="text-xs text-right">Actions</TableHead>
                   </TableRow>
@@ -234,17 +236,12 @@ const PoliciesPage = () => {
                     <TableRow key={policy.id} data-testid={`policy-row-${policy.policy_number}`}>
                       <TableCell className="text-xs font-medium">{policy.policy_number}</TableCell>
                       <TableCell className="text-xs">{policy.policy_holder_name}</TableCell>
-                      <TableCell className="text-xs">{policy.policy_date || policy.inception_date || "-"}</TableCell>
-                      <TableCell className="text-xs"><Badge variant="outline">{policy.policy_type || "-"}</Badge></TableCell>
-                      <TableCell className="text-xs"><Badge variant="secondary">{policy.family_definition || "-"}</Badge></TableCell>
+                      <TableCell className="text-xs">{policy.insurer_name || policy.insurer || "—"}</TableCell>
+                      <TableCell className="text-xs">{policy.policy_date || policy.inception_date || "—"}</TableCell>
+                      <TableCell className="text-xs">{policy.expiry_date || policy.end_date || "—"}</TableCell>
+                      <TableCell className="text-xs"><Badge variant="outline">{policy.policy_type || "—"}</Badge></TableCell>
                       <TableCell className="text-xs text-right font-medium">{(policy.premium || 0).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell className="text-xs text-right">{policy.employees_count || 0}</TableCell>
-                      <TableCell className="text-xs text-right">{policy.spouse_count || 0}</TableCell>
-                      <TableCell className="text-xs text-right">{policy.kids_count || 0}</TableCell>
-                      <TableCell className="text-xs text-right">{policy.parents_count || 0}</TableCell>
                       <TableCell className="text-xs text-right font-bold">{getPolicyTotalLives(policy)}</TableCell>
-                      <TableCell className="text-xs text-right text-emerald-600">{policy.addition_lives || 0}</TableCell>
-                      <TableCell className="text-xs text-right text-red-600">{policy.deletion_lives || 0}</TableCell>
                       <TableCell className="text-xs">
                         <Badge variant={policy.status === "Active" ? "default" : "secondary"}>{policy.status}</Badge>
                       </TableCell>
@@ -286,9 +283,21 @@ const PoliciesPage = () => {
                     required disabled={!!editingPolicy} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Policy Date</Label>
+                  <Label>Insurer Name</Label>
+                  <Input data-testid="insurer-name-input" value={formData.insurer_name} placeholder="e.g. Star Health, ICICI Lombard"
+                    onChange={(e) => setFormData({ ...formData, insurer_name: e.target.value })} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Inception / Start Date</Label>
                   <Input type="date" data-testid="policy-date-input" value={formData.policy_date}
                     onChange={(e) => setFormData({ ...formData, policy_date: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Expiry Date</Label>
+                  <Input type="date" data-testid="policy-expiry-input" value={formData.expiry_date}
+                    onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })} />
                 </div>
               </div>
               <div className="space-y-2">

@@ -193,6 +193,7 @@ class PolicyCreate(BaseModel):
     policy_date: Optional[str] = None
     inception_date: Optional[str] = None
     expiry_date: Optional[str] = None
+    insurer_name: Optional[str] = None
     policy_type: str = "Group Health"
     family_definition: Optional[str] = None
     premium: float = 0
@@ -214,6 +215,7 @@ class Policy(BaseModel):
     policy_date: Optional[str] = None
     inception_date: Optional[str] = None
     expiry_date: Optional[str] = None
+    insurer_name: Optional[str] = None
     policy_type: str = "Group Health"
     family_definition: Optional[str] = None
     premium: float = 0
@@ -3828,6 +3830,7 @@ async def download_claims_template(current_user: User = Depends(get_current_user
 @api_router.get("/claims-analytics")
 async def get_claims_analytics(
     policy_type: Optional[str] = None,
+    policy_number: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """Get claims analytics (HR sees only assigned policies' claims)"""
@@ -3846,7 +3849,9 @@ async def get_claims_analytics(
                 "monthly_trend": []
             }
         query["policy_number"] = {"$in": assigned}
-    if policy_type:
+    if policy_number:
+        query["policy_number"] = policy_number
+    elif policy_type:
         query["policy_type"] = policy_type
 
     claims = await db.claims.find(query, {"_id": 0}).to_list(10000)
@@ -3866,7 +3871,7 @@ async def get_claims_analytics(
     rejected_count = sum(1 for c in claims if c.get("status") == "Rejected")
     under_process_count = sum(1 for c in claims if c.get("status") == "In Process")
 
-    # Get total premium from policies for claims ratio
+    # Get policies for premium calculation
     policy_query = {}
     if current_user.role == UserRole.HR:
         assigned_pn = await get_hr_assigned_policy_numbers(current_user.id)
@@ -3874,37 +3879,51 @@ async def get_claims_analytics(
             policy_query["policy_number"] = {"$in": assigned_pn}
         else:
             policy_query["policy_number"] = {"$in": []}
+    if policy_number:
+        policy_query["policy_number"] = policy_number
     policies = await db.policies.find(policy_query, {"_id": 0}).to_list(1000)
 
-    # Find the LATEST policy (most recent by start/inception date)
+    # Find the target policy: specific selected policy, or latest
     from dateutil import parser as date_parser
     today = datetime.now(timezone.utc)
-    latest_policy = None
-    latest_start_dt = None
-    for p in policies:
-        start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
+    target_policy = None
+    target_start_dt = None
+
+    if policy_number and policies:
+        target_policy = policies[0]
+        start = target_policy.get("policy_date") or target_policy.get("inception_date") or target_policy.get("start_date")
         if start:
             try:
-                start_dt = date_parser.parse(start)
-                if start_dt.tzinfo is None:
-                    start_dt = start_dt.replace(tzinfo=timezone.utc)
-                if latest_start_dt is None or start_dt > latest_start_dt:
-                    latest_start_dt = start_dt
-                    latest_policy = p
+                target_start_dt = date_parser.parse(start)
+                if target_start_dt.tzinfo is None:
+                    target_start_dt = target_start_dt.replace(tzinfo=timezone.utc)
             except Exception:
                 pass
-    if not latest_policy and policies:
-        latest_policy = policies[-1]
+    else:
+        for p in policies:
+            start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
+            if start:
+                try:
+                    start_dt = date_parser.parse(start)
+                    if start_dt.tzinfo is None:
+                        start_dt = start_dt.replace(tzinfo=timezone.utc)
+                    if target_start_dt is None or start_dt > target_start_dt:
+                        target_start_dt = start_dt
+                        target_policy = p
+                except Exception:
+                    pass
+        if not target_policy and policies:
+            target_policy = policies[-1]
 
-    # Total Premium, Lives, Run Days — from LATEST policy only
+    # Total Premium, Lives, Run Days
     total_premium = 0
     total_lives = 0
     policy_run_days = 0
-    if latest_policy:
-        total_premium = latest_policy.get("premium", 0) or (latest_policy.get("annual_premium_per_life", 0) * latest_policy.get("total_lives_covered", 0))
-        total_lives = latest_policy.get("total_lives_count", 0) or latest_policy.get("total_lives_covered", 0)
-        if latest_start_dt:
-            policy_run_days = (today - latest_start_dt).days
+    if target_policy:
+        total_premium = target_policy.get("premium", 0) or (target_policy.get("annual_premium_per_life", 0) * target_policy.get("total_lives_covered", 0))
+        total_lives = target_policy.get("total_lives_count", 0) or target_policy.get("total_lives_covered", 0)
+        if target_start_dt:
+            policy_run_days = (today - target_start_dt).days
             if policy_run_days < 0:
                 policy_run_days = 0
 
