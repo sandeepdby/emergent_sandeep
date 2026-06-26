@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Loader2, FileText, Clock, CheckCircle, XCircle, TrendingUp,
-  TrendingDown, DollarSign, BarChart3
+  TrendingDown, DollarSign, BarChart3, Shield, Activity, PieChart as PieChartIcon
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -16,22 +16,26 @@ import {
 
 const COLORS = ["#f59e0b", "#10b981", "#ef4444"];
 const TYPE_COLORS = { Addition: "#3b82f6", Deletion: "#ef4444", Correction: "#8b5cf6", "Midterm addition": "#10b981" };
+const fmt = (v) => `₹${(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 
 export default function HRSummary() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
+  const [claimsAnalytics, setClaimsAnalytics] = useState(null);
   const [recent, setRecent] = useState([]);
 
   const fetchData = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       const headers = { Authorization: `Bearer ${token}` };
-      const [analyticsRes, endorsementsRes] = await Promise.all([
+      const [analyticsRes, endorsementsRes, claimsRes] = await Promise.all([
         axios.get(`${API}/dashboard/analytics`, { headers }),
         axios.get(`${API}/endorsements`, { headers }),
+        axios.get(`${API}/claims-analytics`, { headers }).catch(() => ({ data: null })),
       ]);
       setAnalytics(analyticsRes.data);
       setRecent(endorsementsRes.data.slice(0, 8));
+      setClaimsAnalytics(claimsRes.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -161,6 +165,46 @@ export default function HRSummary() {
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Policy & Claims Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-gradient-to-br from-indigo-50 to-blue-50 border-indigo-100 hover:shadow-lg transition-all">
+          <CardContent className="p-5 text-center">
+            <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <Shield className="w-5 h-5 text-indigo-600" />
+            </div>
+            <p className="text-xs text-indigo-600 font-medium uppercase tracking-wider">Inception Policy Premium</p>
+            <p className="text-2xl font-bold text-indigo-700 mt-1" data-testid="inception-premium">
+              {fmt(claimsAnalytics?.total_premium || 0)}
+            </p>
+            <p className="text-[10px] text-indigo-400 mt-0.5">Latest policy premium (net of GST)</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-100 hover:shadow-lg transition-all">
+          <CardContent className="p-5 text-center">
+            <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <Activity className="w-5 h-5 text-emerald-600" />
+            </div>
+            <p className="text-xs text-emerald-600 font-medium uppercase tracking-wider">Total Endorsement Premium</p>
+            <p className="text-2xl font-bold text-emerald-700 mt-1" data-testid="endorsement-premium">
+              {netPremium >= 0 ? "+" : ""}{fmt(netPremium)}
+            </p>
+            <p className="text-[10px] text-emerald-400 mt-0.5">Net endorsement charges - refunds</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-100 hover:shadow-lg transition-all">
+          <CardContent className="p-5 text-center">
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+              <PieChartIcon className="w-5 h-5 text-orange-600" />
+            </div>
+            <p className="text-xs text-orange-600 font-medium uppercase tracking-wider">Claims Ratio</p>
+            <p className="text-2xl font-bold text-orange-700 mt-1" data-testid="dashboard-claims-ratio">
+              {claimsAnalytics?.claims_ratio || 0}%
+            </p>
+            <p className="text-[10px] text-orange-400 mt-0.5">Incurred claims / Policy premium</p>
           </CardContent>
         </Card>
       </div>
