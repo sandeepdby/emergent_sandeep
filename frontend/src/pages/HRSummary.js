@@ -115,8 +115,21 @@ export default function HRSummary() {
   const totalRefund = prem?.total_refund || 0;
   const netPremium = prem?.net_premium || 0;
 
-  // Sum premium across ALL assigned policies
-  const totalPoliciesPremium = policies.reduce((sum, p) => {
+  // Sum premium of policies from current financial year only
+  // FY in India: Apr 1 - Mar 31. If today is Jan-Mar, FY started previous year Apr 1
+  const now = new Date();
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; // Apr=3
+  const fyStart = new Date(fyStartYear, 3, 1); // Apr 1
+  const fyEnd = new Date(fyStartYear + 1, 2, 31); // Mar 31
+
+  const currentFYPolicies = policies.filter(p => {
+    const inception = p.policy_date || p.inception_date || p.start_date;
+    if (!inception) return false;
+    const d = new Date(inception);
+    return d >= fyStart && d <= fyEnd;
+  });
+
+  const totalPoliciesPremium = currentFYPolicies.reduce((sum, p) => {
     const pVal = p.premium || ((p.annual_premium_per_life || 0) * (p.total_lives_covered || 0));
     return sum + pVal;
   }, 0);
@@ -183,7 +196,7 @@ export default function HRSummary() {
 
       {/* Row 3: Key Policy & Claims Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GradCard label="Total Policies Premium" value={totalPoliciesPremium} subtext={`Sum of ${policies.length} assigned ${policies.length === 1 ? 'policy' : 'policies'}`}
+        <GradCard label="Total Policies Premium" value={totalPoliciesPremium} subtext={`FY ${fyStartYear}-${(fyStartYear+1).toString().slice(-2)} | ${currentFYPolicies.length} ${currentFYPolicies.length === 1 ? 'policy' : 'policies'}`}
           icon={Shield} from="from-indigo-50" to="to-blue-50" border="border-indigo-100" textColor="text-indigo-600" iconBg="bg-indigo-100" />
         <GradCard label="Total Endorsement Premium" value={`${netPremium >= 0 ? "+" : ""}${fmt(netPremium)}`} subtext="Endorsement charges - refunds"
           icon={Activity} from="from-emerald-50" to="to-teal-50" border="border-emerald-100" textColor="text-emerald-600" iconBg="bg-emerald-100" />
