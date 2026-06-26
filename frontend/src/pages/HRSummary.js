@@ -7,12 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Loader2, FileText, Clock, CheckCircle, XCircle, TrendingUp,
-  TrendingDown, DollarSign, BarChart3, Shield, Activity, PieChart as PieChartIcon
+  TrendingDown, DollarSign, BarChart3, Shield, Activity, PieChart as PieChartIcon, ChevronDown
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
 } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const TYPE_COLORS = { Addition: "#3b82f6", Deletion: "#ef4444", Correction: "#8b5cf6", "Midterm addition": "#10b981" };
 const fmt = (v) => `₹${(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -86,6 +87,7 @@ export default function HRSummary() {
   const [claimsAnalytics, setClaimsAnalytics] = useState(null);
   const [policies, setPolicies] = useState([]);
   const [recent, setRecent] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState("all");
 
   const fetchData = useCallback(async () => {
     try {
@@ -115,21 +117,45 @@ export default function HRSummary() {
   const totalRefund = prem?.total_refund || 0;
   const netPremium = prem?.net_premium || 0;
 
-  // Sum premium of policies from current financial year only
-  // FY in India: Apr 1 - Mar 31. If today is Jan-Mar, FY started previous year Apr 1
+  // FY in India: Apr 1 - Mar 31
   const now = new Date();
-  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; // Apr=3
-  const fyStart = new Date(fyStartYear, 3, 1); // Apr 1
-  const fyEnd = new Date(fyStartYear + 1, 2, 31); // Mar 31
+  const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+  const fyStart = new Date(fyStartYear, 3, 1);
+  const fyEnd = new Date(fyStartYear + 1, 2, 31);
 
+  // Filter policies where BOTH inception AND expiry fall within current FY
   const currentFYPolicies = policies.filter(p => {
-    const inception = p.policy_date || p.inception_date || p.start_date;
-    if (!inception) return false;
-    const d = new Date(inception);
-    return d >= fyStart && d <= fyEnd;
+    const startStr = p.policy_date || p.inception_date || p.start_date;
+    const endStr = p.expiry_date || p.end_date;
+    if (!startStr) return false;
+    const startDt = new Date(startStr);
+    const endDt = endStr ? new Date(endStr) : null;
+    const startInFY = startDt >= fyStart && startDt <= fyEnd;
+    const endInFY = endDt ? (endDt >= fyStart && endDt <= fyEnd) : true;
+    return startInFY && endInFY;
   });
 
-  const totalPoliciesPremium = currentFYPolicies.reduce((sum, p) => {
+  // Extract unique product types from policies
+  const productTypes = [...new Set(currentFYPolicies.map(p => {
+    const pn = (p.policy_number || "").toUpperCase();
+    if (pn.startsWith("GMC") || (p.policy_type || "").toLowerCase().includes("health")) return "GMC - Group Health";
+    if (pn.startsWith("GTL") || (p.policy_type || "").toLowerCase().includes("term")) return "GTL - Group Term";
+    if (pn.startsWith("GPA") || (p.policy_type || "").toLowerCase().includes("accident")) return "GPA - Group Accident";
+    return p.policy_type || "Other";
+  }))];
+
+  const filteredFYPolicies = selectedProduct === "all"
+    ? currentFYPolicies
+    : currentFYPolicies.filter(p => {
+        const pn = (p.policy_number || "").toUpperCase();
+        const pt = (p.policy_type || "").toLowerCase();
+        if (selectedProduct === "GMC - Group Health") return pn.startsWith("GMC") || pt.includes("health");
+        if (selectedProduct === "GTL - Group Term") return pn.startsWith("GTL") || pt.includes("term");
+        if (selectedProduct === "GPA - Group Accident") return pn.startsWith("GPA") || pt.includes("accident");
+        return (p.policy_type || "Other") === selectedProduct;
+      });
+
+  const totalPoliciesPremium = filteredFYPolicies.reduce((sum, p) => {
     const pVal = p.premium || ((p.annual_premium_per_life || 0) * (p.total_lives_covered || 0));
     return sum + pVal;
   }, 0);
@@ -194,15 +220,67 @@ export default function HRSummary() {
         </Card>
       </div>
 
-      {/* Row 3: Key Policy & Claims Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GradCard label="Total Policies Premium" value={totalPoliciesPremium} subtext={`FY ${fyStartYear}-${(fyStartYear+1).toString().slice(-2)} | ${currentFYPolicies.length} ${currentFYPolicies.length === 1 ? 'policy' : 'policies'}`}
-          icon={Shield} from="from-indigo-50" to="to-blue-50" border="border-indigo-100" textColor="text-indigo-600" iconBg="bg-indigo-100" />
-        <GradCard label="Total Endorsement Premium" value={`${netPremium >= 0 ? "+" : ""}${fmt(netPremium)}`} subtext="Endorsement charges - refunds"
-          icon={Activity} from="from-emerald-50" to="to-teal-50" border="border-emerald-100" textColor="text-emerald-600" iconBg="bg-emerald-100" />
-        <GradCard label="Claims Ratio" value={`${claimsRatio}%`} subtext="Incurred claims / Policy premium"
-          icon={PieChartIcon} from="from-orange-50" to="to-amber-50" border="border-orange-100" textColor="text-orange-600" iconBg="bg-orange-100" />
-      </div>
+      {/* Row 3: Product Filter + Policy & Claims Metrics */}
+      <Card className="hover:shadow-lg transition-all">
+        <CardContent className="p-5 space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <h3 className="text-sm font-semibold text-stone-700">Policy & Claims Summary — FY {fyStartYear}-{(fyStartYear+1).toString().slice(-2)}</h3>
+            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+              <SelectTrigger className="w-[220px]" data-testid="product-filter">
+                <SelectValue placeholder="All Products" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Products</SelectItem>
+                {productTypes.map(pt => <SelectItem key={pt} value={pt}>{pt}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Insurer-wise breakdown */}
+          {filteredFYPolicies.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-stone-50 text-left">
+                    <th className="px-3 py-2 font-semibold text-stone-600">Policy Number</th>
+                    <th className="px-3 py-2 font-semibold text-stone-600">Insurer</th>
+                    <th className="px-3 py-2 font-semibold text-stone-600">Inception</th>
+                    <th className="px-3 py-2 font-semibold text-stone-600">Expiry</th>
+                    <th className="px-3 py-2 font-semibold text-stone-600">Lives</th>
+                    <th className="px-3 py-2 font-semibold text-stone-600 text-right">Premium</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredFYPolicies.map((p, i) => (
+                    <tr key={p.id || i} className={`border-t ${i % 2 === 0 ? '' : 'bg-stone-50/50'}`}>
+                      <td className="px-3 py-2 font-medium text-stone-800">{p.policy_number}</td>
+                      <td className="px-3 py-2 text-stone-600">{p.insurer || p.insurance_company || "—"}</td>
+                      <td className="px-3 py-2 text-stone-500">{p.policy_date || p.inception_date || p.start_date || "—"}</td>
+                      <td className="px-3 py-2 text-stone-500">{p.expiry_date || p.end_date || "—"}</td>
+                      <td className="px-3 py-2 text-stone-600">{p.total_lives_count || p.total_lives_covered || "—"}</td>
+                      <td className="px-3 py-2 text-right font-bold text-stone-800">{fmt(p.premium || ((p.annual_premium_per_life || 0) * (p.total_lives_covered || 0)))}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-stone-300 bg-stone-100">
+                    <td colSpan={5} className="px-3 py-2 font-bold text-stone-700 text-right">Total</td>
+                    <td className="px-3 py-2 text-right font-bold text-indigo-700 text-sm">{fmt(totalPoliciesPremium)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+          {filteredFYPolicies.length === 0 && <p className="text-center text-stone-400 py-4 text-sm">No policies found for FY {fyStartYear}-{(fyStartYear+1).toString().slice(-2)}{selectedProduct !== "all" ? ` under ${selectedProduct}` : ""}</p>}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+            <GradCard label="Total Policies Premium" value={totalPoliciesPremium} subtext={`${filteredFYPolicies.length} ${filteredFYPolicies.length === 1 ? 'policy' : 'policies'}${selectedProduct !== "all" ? ` (${selectedProduct})` : ""}`}
+              icon={Shield} from="from-indigo-50" to="to-blue-50" border="border-indigo-100" textColor="text-indigo-600" iconBg="bg-indigo-100" />
+            <GradCard label="Total Endorsement Premium" value={`${netPremium >= 0 ? "+" : ""}${fmt(netPremium)}`} subtext="Endorsement charges - refunds"
+              icon={Activity} from="from-emerald-50" to="to-teal-50" border="border-emerald-100" textColor="text-emerald-600" iconBg="bg-emerald-100" />
+            <GradCard label="Claims Ratio" value={`${claimsRatio}%`} subtext="Incurred claims / Policy premium"
+              icon={PieChartIcon} from="from-orange-50" to="to-amber-50" border="border-orange-100" textColor="text-orange-600" iconBg="bg-orange-100" />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
