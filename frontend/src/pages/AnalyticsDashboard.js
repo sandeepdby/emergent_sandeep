@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { API } from "../auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, TrendingUp, TrendingDown, Users, FileText, DollarSign, RefreshCw } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Users, FileText, DollarSign, RefreshCw, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   LineChart, Line, ResponsiveContainer, Area, AreaChart
@@ -14,6 +15,7 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'
 export default function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -33,6 +35,31 @@ export default function AnalyticsDashboard() {
   useEffect(() => {
     fetchAnalytics();
   }, [fetchAnalytics]);
+
+  const handleExportPDF = async (sendEmail = false) => {
+    try {
+      setExporting(true);
+      const token = localStorage.getItem("token");
+      const res = await axios.post(`${API}/financial-summary/export?send_email_flag=${sendEmail}`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `InsureHub_Financial_Summary.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(sendEmail ? "PDF downloaded & emailed to you!" : "PDF downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export report");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -90,10 +117,16 @@ export default function AnalyticsDashboard() {
           <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
           <p className="text-gray-500 mt-1">Comprehensive insights into your endorsement data</p>
         </div>
-        <Button onClick={fetchAnalytics} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => handleExportPDF(true)} variant="outline" size="sm" disabled={exporting} data-testid="export-fy-report-btn">
+            {exporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {exporting ? "Generating…" : "Export FY Report"}
+          </Button>
+          <Button onClick={fetchAnalytics} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}

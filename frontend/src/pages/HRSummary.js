@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Loader2, FileText, Clock, CheckCircle, XCircle, TrendingUp,
-  TrendingDown, DollarSign, BarChart3, Shield, Activity, PieChart as PieChartIcon, ChevronDown
+  TrendingDown, DollarSign, BarChart3, Shield, Activity, PieChart as PieChartIcon, ChevronDown, Download
 } from "lucide-react";
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 
 const TYPE_COLORS = { Addition: "#3b82f6", Deletion: "#ef4444", Correction: "#8b5cf6", "Midterm addition": "#10b981" };
 const fmt = (v) => `₹${(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -88,6 +89,7 @@ export default function HRSummary() {
   const [policies, setPolicies] = useState([]);
   const [recent, setRecent] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState("all");
+  const [exporting, setExporting] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -108,6 +110,31 @@ export default function HRSummary() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleExportPDF = async (sendEmail = false) => {
+    try {
+      setExporting(true);
+      const token = localStorage.getItem("token");
+      const res = await axios.post(`${API}/financial-summary/export?send_email_flag=${sendEmail}`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `InsureHub_Financial_Summary.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success(sendEmail ? "PDF downloaded & emailed to you!" : "PDF downloaded successfully!");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to export report");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) return <div className="flex items-center justify-center py-20" data-testid="hr-summary-loading"><Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" /></div>;
   if (!analytics) return <div className="text-center py-12"><p className="text-stone-500">Failed to load dashboard</p><Button onClick={fetchData} className="mt-3">Retry</Button></div>;
@@ -176,6 +203,20 @@ export default function HRSummary() {
   return (
     <div className="space-y-6" data-testid="hr-summary-page">
       {/* Row 1: Endorsement Stats */}
+      <div className="flex items-center justify-between">
+        <div />
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={exporting}
+          onClick={() => handleExportPDF(true)}
+          data-testid="export-fy-report-btn"
+          className="text-xs gap-1.5"
+        >
+          {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          {exporting ? "Generating…" : "Export FY Report"}
+        </Button>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Submitted" value={dist.total} color="border-l-blue-500" icon={FileText} large />
         <StatCard label="Pending" value={dist.pending} color="border-l-amber-500" icon={Clock} large />

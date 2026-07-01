@@ -3431,6 +3431,383 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
 
 
 
+# ==================== FINANCIAL SUMMARY PDF EXPORT ====================
+def generate_financial_summary_pdf(
+    fy_label: str,
+    user_name: str,
+    user_role: str,
+    policies: list,
+    premium_summary: dict,
+    claims_data: dict,
+    endorsement_types: list,
+    status_dist: dict,
+    monthly_trend: list,
+) -> bytes:
+    """Generate a comprehensive Financial Summary PDF report"""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40, bottomMargin=40, leftMargin=40, rightMargin=40)
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # Custom styles
+    title_style = ParagraphStyle('FSTitleStyle', parent=styles['Heading1'], fontSize=20, spaceAfter=4, alignment=1, textColor=colors.HexColor('#1e293b'))
+    subtitle_style = ParagraphStyle('FSSubtitleStyle', parent=styles['Normal'], fontSize=10, alignment=1, textColor=colors.HexColor('#64748b'), spaceAfter=20)
+    section_style = ParagraphStyle('FSSectionStyle', parent=styles['Heading2'], fontSize=13, spaceBefore=18, spaceAfter=8, textColor=colors.HexColor('#E05A47'))
+    note_style = ParagraphStyle('FSNoteStyle', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#94a3b8'), alignment=1)
+
+    # Header
+    elements.append(Paragraph("InsureHub — Financial Summary Report", title_style))
+    elements.append(Paragraph(f"Financial Year: {fy_label} &nbsp;|&nbsp; {user_role}: {user_name} &nbsp;|&nbsp; Generated: {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')}", subtitle_style))
+
+    fmt = lambda v: f"₹{v:,.2f}"
+
+    # --- Section 1: Policy Breakdown ---
+    elements.append(Paragraph("Policy Breakdown", section_style))
+    pol_data = [['Policy Number', 'Insurer', 'Inception', 'Expiry', 'Lives', 'Premium']]
+    total_prem = 0
+    for p in policies:
+        prem = p.get('premium') or ((p.get('annual_premium_per_life', 0) or 0) * (p.get('total_lives_covered', 0) or 0))
+        total_prem += prem
+        pol_data.append([
+            p.get('policy_number', '—'),
+            p.get('insurer') or p.get('insurance_company') or '—',
+            p.get('inception_date') or p.get('policy_date') or '—',
+            p.get('expiry_date') or '—',
+            str(p.get('total_lives_count') or p.get('total_lives_covered') or '—'),
+            fmt(prem),
+        ])
+    pol_data.append(['', '', '', '', 'Total', fmt(total_prem)])
+
+    col_widths = [1.3*inch, 1.2*inch, 0.9*inch, 0.9*inch, 0.6*inch, 1.1*inch]
+    pol_table = Table(pol_data, colWidths=col_widths)
+    pol_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ('ALIGN', (-2, 0), (-2, -1), 'CENTER'),
+        ('GRID', (0, 0), (-1, -2), 0.5, colors.HexColor('#cbd5e1')),
+        ('LINEABOVE', (0, -1), (-1, -1), 1.2, colors.HexColor('#1e40af')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#eff6ff')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(pol_table)
+    elements.append(Spacer(1, 10))
+
+    # --- Section 2: Premium Impact (Endorsements) ---
+    elements.append(Paragraph("Endorsement Premium Impact", section_style))
+    charge = premium_summary.get('total_charge', 0)
+    refund = premium_summary.get('total_refund', 0)
+    net = premium_summary.get('net_premium', 0)
+    prem_data = [
+        ['Metric', 'Amount'],
+        ['Premium Charges (Additions)', fmt(charge)],
+        ['Premium Refunds (Deletions)', fmt(refund)],
+        ['Net Premium Impact', fmt(net)],
+    ]
+    prem_table = Table(prem_data, colWidths=[3.5*inch, 2.5*inch])
+    prem_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#059669')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ecfdf5')),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(prem_table)
+    elements.append(Spacer(1, 10))
+
+    # --- Section 3: Claims Summary ---
+    elements.append(Paragraph("Claims Summary", section_style))
+    claims_ratio = claims_data.get('claims_ratio', 0)
+    annual_trend = claims_data.get('annual_claims_trend', 0)
+    claims_sum_data = [
+        ['Metric', 'Value'],
+        ['Total Claims', str(claims_data.get('total_claims', 0))],
+        ['Total Claimed Amount', fmt(claims_data.get('total_claimed_amount', 0))],
+        ['Total Incurred Amount', fmt(claims_data.get('total_incurred_amount', 0))],
+        ['Total Paid Amount', fmt(claims_data.get('total_paid_amount', 0))],
+        ['Reimbursement Claims', f"{claims_data.get('reimbursement_count', 0)} ({fmt(claims_data.get('reimbursement_claims', 0))})"],
+        ['Cashless Claims', f"{claims_data.get('cashless_count', 0)} ({fmt(claims_data.get('cashless_claims', 0))})"],
+        ['Claims Ratio', f"{claims_ratio}%"],
+        ['Annual Claims Trend', fmt(annual_trend)],
+    ]
+    claims_table = Table(claims_sum_data, colWidths=[3.5*inch, 2.5*inch])
+    claims_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7c3aed')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f3ff')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(claims_table)
+    elements.append(Spacer(1, 10))
+
+    # --- Section 4: Endorsement Status Distribution ---
+    elements.append(Paragraph("Endorsement Status Distribution", section_style))
+    status_data = [
+        ['Status', 'Count'],
+        ['Total', str(status_dist.get('total', 0))],
+        ['Pending', str(status_dist.get('pending', 0))],
+        ['Approved', str(status_dist.get('approved', 0))],
+        ['Rejected', str(status_dist.get('rejected', 0))],
+    ]
+    status_table = Table(status_data, colWidths=[3.5*inch, 2.5*inch])
+    status_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#d97706')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(status_table)
+    elements.append(Spacer(1, 10))
+
+    # --- Section 5: Endorsement Type Breakdown ---
+    elements.append(Paragraph("Endorsement Type Breakdown", section_style))
+    type_data = [['Type', 'Count', 'Premium']]
+    for et in endorsement_types:
+        type_data.append([et.get('_id', 'Unknown'), str(et.get('count', 0)), fmt(et.get('total_premium', 0))])
+    type_table = Table(type_data, colWidths=[2.5*inch, 1.5*inch, 2*inch])
+    type_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#0284c7')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f9ff')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]))
+    elements.append(type_table)
+    elements.append(Spacer(1, 10))
+
+    # --- Section 6: Monthly Trend ---
+    if monthly_trend:
+        elements.append(Paragraph("Monthly Endorsement Trend", section_style))
+        trend_data = [['Month', 'Count', 'Premium']]
+        for m in monthly_trend:
+            trend_data.append([m.get('_id', ''), str(m.get('count', 0)), fmt(m.get('total_premium', 0))])
+        trend_table = Table(trend_data, colWidths=[2.5*inch, 1.5*inch, 2*inch])
+        trend_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4f46e5')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#eef2ff')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(trend_table)
+
+    elements.append(Spacer(1, 20))
+    elements.append(Paragraph("This report is auto-generated by InsureHub — Aarogya Assist. For queries, contact your insurance administrator.", note_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+@api_router.post("/financial-summary/export")
+async def export_financial_summary(
+    send_email_flag: bool = False,
+    background_tasks: BackgroundTasks = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate FY Financial Summary PDF and optionally email it to the logged-in user"""
+    from dateutil import parser as date_parser
+
+    # Determine current Indian FY
+    now = datetime.now(timezone.utc)
+    fy_start_year = now.year if now.month >= 4 else now.year - 1
+    fy_label = f"{fy_start_year}-{str(fy_start_year + 1)[-2:]}"
+    fy_start = datetime(fy_start_year, 4, 1, tzinfo=timezone.utc)
+    fy_end = datetime(fy_start_year + 1, 3, 31, 23, 59, 59, tzinfo=timezone.utc)
+
+    # Determine policy scope
+    policy_query = {}
+    endorsement_query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            raise HTTPException(status_code=404, detail="No policies assigned to you")
+        policy_query["policy_number"] = {"$in": assigned}
+        endorsement_query["policy_number"] = {"$in": assigned}
+
+    # Fetch policies
+    all_policies = await db.policies.find(policy_query, {"_id": 0}).to_list(1000)
+
+    # Filter policies to current FY (where inception date falls in FY)
+    fy_policies = []
+    for p in all_policies:
+        start_str = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
+        if not start_str:
+            continue
+        try:
+            start_dt = date_parser.parse(start_str)
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            end_str = p.get("expiry_date") or p.get("end_date")
+            end_dt = None
+            if end_str:
+                end_dt = date_parser.parse(end_str)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+            start_in_fy = fy_start <= start_dt <= fy_end
+            end_in_fy = (fy_start <= end_dt <= fy_end) if end_dt else True
+            if start_in_fy and end_in_fy:
+                fy_policies.append(p)
+        except Exception:
+            continue
+
+    # Use all policies if FY filter yields nothing
+    report_policies = fy_policies if fy_policies else all_policies
+
+    # Fetch dashboard analytics data
+    total = await db.endorsements.count_documents(endorsement_query)
+    pending = await db.endorsements.count_documents({**endorsement_query, "status": EndorsementStatus.PENDING.value})
+    approved = await db.endorsements.count_documents({**endorsement_query, "status": EndorsementStatus.APPROVED.value})
+    rejected = await db.endorsements.count_documents({**endorsement_query, "status": EndorsementStatus.REJECTED.value})
+
+    by_type = await db.endorsements.aggregate([
+        {"$match": endorsement_query},
+        {"$group": {"_id": "$endorsement_type", "count": {"$sum": 1}, "total_premium": {"$sum": "$prorata_premium"}}}
+    ]).to_list(100)
+
+    premium_pipeline = [
+        {"$match": {**endorsement_query, "status": EndorsementStatus.APPROVED.value}},
+        {"$group": {
+            "_id": None,
+            "total_charge": {"$sum": {"$cond": [{"$gt": ["$prorata_premium", 0]}, "$prorata_premium", 0]}},
+            "total_refund": {"$sum": {"$cond": [{"$lt": ["$prorata_premium", 0]}, {"$abs": "$prorata_premium"}, 0]}},
+            "net_premium": {"$sum": "$prorata_premium"}
+        }}
+    ]
+    prem_result = await db.endorsements.aggregate(premium_pipeline).to_list(1)
+    premium_summary = prem_result[0] if prem_result else {"total_charge": 0, "total_refund": 0, "net_premium": 0}
+
+    monthly_pipeline = [
+        {"$match": endorsement_query},
+        {"$addFields": {"month": {"$substr": ["$created_at", 0, 7]}}},
+        {"$group": {"_id": "$month", "count": {"$sum": 1}, "total_premium": {"$sum": "$prorata_premium"}}},
+        {"$sort": {"_id": 1}}
+    ]
+    monthly_trend = await db.endorsements.aggregate(monthly_pipeline).to_list(12)
+
+    # Fetch claims analytics (reuse logic)
+    claims_query = {}
+    if current_user.role == UserRole.HR:
+        assigned_pn = await get_hr_assigned_policy_numbers(current_user.id)
+        if assigned_pn:
+            claims_query["policy_number"] = {"$in": assigned_pn}
+    claims = await db.claims.find(claims_query, {"_id": 0}).to_list(10000)
+    total_incurred = sum(c.get("incurred_amount", 0) for c in claims)
+    total_paid = sum(c.get("paid_amount", 0) for c in claims)
+    total_claimed = sum(c.get("claimed_amount", 0) for c in claims)
+
+    # Total premium from latest policy for claims ratio
+    target_policy = None
+    target_start_dt = None
+    for p in all_policies:
+        start = p.get("policy_date") or p.get("inception_date") or p.get("start_date")
+        if start:
+            try:
+                start_dt = date_parser.parse(start)
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                if target_start_dt is None or start_dt > target_start_dt:
+                    target_start_dt = start_dt
+                    target_policy = p
+            except Exception:
+                pass
+    if not target_policy and all_policies:
+        target_policy = all_policies[-1]
+
+    tp = 0
+    policy_run_days = 0
+    if target_policy:
+        tp = target_policy.get("premium", 0) or ((target_policy.get("annual_premium_per_life", 0) or 0) * (target_policy.get("total_lives_covered", 0) or 0))
+        if target_start_dt:
+            policy_run_days = max((now - target_start_dt).days, 0)
+    claims_ratio = round((total_incurred / tp * 100) if tp > 0 else 0, 1)
+    annual_trend = round((total_incurred / policy_run_days) * 365 * 1.1, 2) if policy_run_days > 0 else 0
+
+    claims_data = {
+        "total_claims": len(claims),
+        "total_claimed_amount": round(total_claimed, 2),
+        "total_incurred_amount": round(total_incurred, 2),
+        "total_paid_amount": round(total_paid, 2),
+        "reimbursement_count": sum(1 for c in claims if c.get("claim_type") == "Reimbursement"),
+        "reimbursement_claims": round(sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Reimbursement"), 2),
+        "cashless_count": sum(1 for c in claims if c.get("claim_type") == "Cashless"),
+        "cashless_claims": round(sum(c.get("claimed_amount", 0) for c in claims if c.get("claim_type") == "Cashless"), 2),
+        "claims_ratio": claims_ratio,
+        "annual_claims_trend": annual_trend,
+    }
+
+    # Generate PDF
+    pdf_bytes = generate_financial_summary_pdf(
+        fy_label=fy_label,
+        user_name=current_user.full_name,
+        user_role=current_user.role.value,
+        policies=report_policies,
+        premium_summary=premium_summary,
+        claims_data=claims_data,
+        endorsement_types=by_type,
+        status_dist={"total": total, "pending": pending, "approved": approved, "rejected": rejected},
+        monthly_trend=monthly_trend,
+    )
+
+    # Optionally email to logged-in user
+    if send_email_flag and current_user.email:
+        filename = f"InsureHub_Financial_Summary_FY{fy_label}.pdf"
+        email_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #E05A47;">InsureHub — Financial Summary Report</h2>
+            <p>Hi {current_user.full_name},</p>
+            <p>Please find attached your <strong>Financial Summary Report for FY {fy_label}</strong>.</p>
+            <p>This report includes policy breakdown, endorsement premium impact, claims summary, endorsement status distribution, type breakdown, and monthly trend data.</p>
+            <br>
+            <p style="color: #64748b; font-size: 12px;">This is an auto-generated report from InsureHub — Aarogya Assist.</p>
+        </div>
+        """
+        background_tasks.add_task(
+            send_email_notification,
+            [current_user.email],
+            f"InsureHub Financial Summary — FY {fy_label}",
+            email_body,
+            attachments=[(filename, pdf_bytes)]
+        )
+
+    # Return PDF as download
+    from fastapi.responses import StreamingResponse
+    pdf_io = io.BytesIO(pdf_bytes)
+    filename = f"InsureHub_Financial_Summary_FY{fy_label}.pdf"
+    return StreamingResponse(
+        pdf_io,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
 # ==================== CD LEDGER ENDPOINTS ====================
 @api_router.get("/cd-ledger")
 async def get_cd_ledger(
