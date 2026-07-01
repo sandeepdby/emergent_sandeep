@@ -1857,7 +1857,8 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
     # Use per_life_premium from form if provided, otherwise fall back to policy's annual_premium_per_life
-    premium_per_life = endorsement_data.per_life_premium if endorsement_data.per_life_premium is not None else policy['annual_premium_per_life']
+    policy_annual_ppl = policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2))
+    premium_per_life = endorsement_data.per_life_premium if endorsement_data.per_life_premium is not None else policy_annual_ppl
     
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
@@ -1882,7 +1883,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
         coverage_type=endorsement_data.coverage_type.value if endorsement_data.coverage_type else None,
         sum_insured=endorsement_data.sum_insured,
         per_life_premium=premium_per_life,
-        annual_premium_per_life=policy['annual_premium_per_life'],
+        annual_premium_per_life=policy_annual_ppl,
         endorsement_date=endorsement_data.endorsement_date,
         effective_date=effective_date,
         days_from_inception=days_from_inception,
@@ -2320,7 +2321,7 @@ async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate
             policy['inception_date'],
             policy['expiry_date'],
             endorsement_date,
-            policy['annual_premium_per_life'],
+            policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)),
             endorsement_type
         )
         
@@ -2701,7 +2702,7 @@ async def import_endorsements_from_excel(
                 per_life = None
                 if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')):
                     per_life = float(row['per_life_premium'])
-                premium_for_calc = per_life if per_life is not None else policy['annual_premium_per_life']
+                premium_for_calc = per_life if per_life is not None else (policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)))
                 
                 # Calculate pro-rata premium based on endorsement type
                 days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(

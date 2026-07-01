@@ -19,7 +19,7 @@ const generateWhatsAppLink = (phone, message) => {
 
 const ProRataPreview = ({ policy, endorsementType, endorsementDate, perLifePremium }) => {
   const calc = useMemo(() => {
-    if (!policy || !endorsementDate || !endorsementType || endorsementType === "Correction") return null;
+    if (!policy || !endorsementDate || !endorsementType || endorsementType === "Correction" || !perLifePremium) return null;
     try {
       const inception = new Date(policy.inception_date);
       const expiry = new Date(policy.expiry_date);
@@ -504,7 +504,7 @@ export default function SubmitEndorsement() {
             {selectedPolicy && (
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-2" data-testid="premium-info">
                 <div className="flex flex-wrap gap-4 text-sm">
-                  <span><strong>Policy Premium/Life:</strong> ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</span>
+                  {selectedPolicy.annual_premium_per_life != null && <span><strong>Policy Premium/Life:</strong> ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</span>}
                   {formData.per_life_premium && (
                     <span className="text-indigo-700 font-medium"><strong>Custom Per Life:</strong> ₹{parseFloat(formData.per_life_premium).toLocaleString()}</span>
                   )}

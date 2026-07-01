@@ -132,6 +132,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Sidebar Placement**: Under "Finance" section for Admin, under "Finance & Storage" for HR
 - **Endpoints**: POST/GET/PUT/DELETE /api/raters, GET /api/raters/{id}/download?format=xlsx|pdf
 
+### Submit Endorsement Enhancements (DONE - Jul 2026)
+- **Policy Type (Family Definition)**: New dropdown with E (Employee Only), ESK (Employee+Spouse+Kids), ESKP (Employee+Spouse+Kids+Parents). Controls which relationship types are available. Auto-populated from policy's family_definition field.
+- **Extended Relationship Types**: Added Kids1 and Kids2 to split children. Full list: Employee, Spouse, Kids1, Kids2, Mother, Father. Backend RelationshipType enum updated.
+- **Rate Card Auto-Fill**: When a policy with an assigned rater is selected and DOB/age is entered, Per Life Premium auto-populates from the matching age band. Shows green "From Rate Card" badge. Value remains fully editable. Blue hint shown when DOB not yet entered.
+- **Bug Fix**: Fixed `annual_premium_per_life` KeyError for policies without this field (e.g., GMC0001393000100). Now uses safe `.get()` with fallback calculation from premium/total_lives.
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
