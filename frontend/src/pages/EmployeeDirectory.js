@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Search, Eye, UserMinus, Users, RefreshCw, History, CheckCircle, Clock, XCircle, Plus, Minus, Pencil, ArrowUpRight } from "lucide-react";
+import { Loader2, Search, Eye, UserMinus, Users, RefreshCw, History, CheckCircle, Clock, XCircle, Plus, Minus, Pencil, ArrowUpRight, UsersRound } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const fmt = (v) => `₹${(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -134,8 +134,83 @@ function HistoryDialog({ open, onClose, member, events, loading }) {
   );
 }
 
+/* Sub-component: Family member card inside group dialog */
+function FamilyMemberCard({ member }) {
+  const relColor = REL_COLORS[member.relationship_type] || "bg-stone-100 text-stone-700";
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-stone-200 bg-white hover:shadow-sm transition-all" data-testid={`family-card-${member.id}`}>
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${relColor}`}>
+        <span className="text-xs font-bold">{(member.member_name || "?")[0]}</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-stone-800 truncate">{member.member_name}</span>
+          <Badge className={`text-[9px] ${relColor}`}>{member.relationship_type}</Badge>
+        </div>
+        <div className="flex items-center gap-3 mt-0.5 text-[10px] text-stone-500">
+          {member.age && <span>Age {member.age}</span>}
+          {member.gender && <span>{member.gender}</span>}
+          {member.dob && <span>DOB: {member.dob}</span>}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        {member.per_life_premium ? <span className="text-sm font-bold text-stone-800">{fmt(member.per_life_premium)}</span> : <span className="text-xs text-stone-400">—</span>}
+        <div className="text-[9px] text-stone-400">per life</div>
+      </div>
+    </div>
+  );
+}
+
+/* Sub-component: Family Group dialog */
+function FamilyGroupDialog({ open, onClose, employee, familyMembers }) {
+  if (!employee) return null;
+  const totalPremium = familyMembers.reduce((s, m) => s + (m.per_life_premium || 0), 0);
+  const empMember = familyMembers.find(m => m.relationship_type === "Employee");
+  const dependents = familyMembers.filter(m => m.relationship_type !== "Employee");
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" data-testid="family-group-dialog">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><UsersRound className="w-5 h-5 text-pink-600" /> Family Group</DialogTitle>
+          <DialogDescription>{employee.employee_id ? `Employee ID: ${employee.employee_id}` : employee.member_name} — {employee.policy_number}</DialogDescription>
+        </DialogHeader>
+
+        {/* Summary card */}
+        <div className="bg-gradient-to-r from-indigo-50 to-pink-50 border border-indigo-200 rounded-lg p-4 flex items-center justify-between" data-testid="family-group-summary">
+          <div>
+            <div className="text-xs text-stone-500 font-medium">Family Members</div>
+            <div className="text-2xl font-bold text-stone-800">{familyMembers.length}</div>
+            <div className="text-[10px] text-stone-400 mt-0.5">
+              {empMember ? "1 Employee" : ""}
+              {dependents.length > 0 ? `${empMember ? " + " : ""}${dependents.length} Dependent${dependents.length !== 1 ? "s" : ""}` : ""}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] text-stone-500 font-medium">Total Family Premium</div>
+            <div className="text-xl font-bold text-indigo-700">{fmt(totalPremium)}</div>
+            <div className="text-[10px] text-stone-400">per annum</div>
+          </div>
+        </div>
+
+        {/* Member cards */}
+        <div className="space-y-2">
+          {empMember && <FamilyMemberCard member={empMember} />}
+          {dependents.map(m => <FamilyMemberCard key={m.id} member={m} />)}
+        </div>
+
+        {familyMembers.length === 1 && (
+          <p className="text-center text-xs text-stone-400 py-2">No other family members found with this Employee ID.</p>
+        )}
+
+        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /* Sub-component: table row */
-function MemberTableRow({ member, onView, onDelete, onHistory }) {
+function MemberTableRow({ member, onView, onDelete, onHistory, onFamily }) {
   return (
     <TableRow className="hover:bg-stone-50/50 transition-colors" data-testid={`dir-row-${member.id}`}>
       <TableCell className="text-xs font-medium text-stone-800">{member.employee_id || "—"}</TableCell>
@@ -148,6 +223,7 @@ function MemberTableRow({ member, onView, onDelete, onHistory }) {
       <TableCell className="text-right">
         <div className="flex items-center justify-end gap-1">
           <Button variant="ghost" size="icon" className="h-7 w-7" title="View Details" onClick={() => onView(member)} data-testid={`view-member-${member.id}`}><Eye className="w-3.5 h-3.5 text-stone-500" /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Family Group" onClick={() => onFamily(member)} data-testid={`family-member-${member.id}`}><UsersRound className="w-3.5 h-3.5 text-pink-500" /></Button>
           <Button variant="ghost" size="icon" className="h-7 w-7" title="Coverage History" onClick={() => onHistory(member)} data-testid={`history-member-${member.id}`}><History className="w-3.5 h-3.5 text-indigo-500" /></Button>
           <Button variant="ghost" size="icon" className="h-7 w-7" title="Initiate Deletion" onClick={() => onDelete(member)} data-testid={`delete-member-${member.id}`}><UserMinus className="w-3.5 h-3.5 text-red-500" /></Button>
         </div>
@@ -173,6 +249,9 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyEvents, setHistoryEvents] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [familyEmployee, setFamilyEmployee] = useState(null);
+  const [familyOpen, setFamilyOpen] = useState(false);
+  const [familyGroup, setFamilyGroup] = useState([]);
   const navigate = useNavigate();
 
   const fetchMembers = useCallback(async () => {
@@ -230,6 +309,20 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
       console.error(err);
       toast.error("Failed to load history");
     } finally { setHistoryLoading(false); }
+  };
+
+  const handleViewFamily = (member) => {
+    // Group by employee_id from the loaded members list
+    let group;
+    if (member.employee_id) {
+      group = members.filter(m => m.employee_id === member.employee_id && m.policy_number === member.policy_number);
+    } else {
+      // No employee_id — show just this member
+      group = [member];
+    }
+    setFamilyEmployee(member);
+    setFamilyGroup(group);
+    setFamilyOpen(true);
   };
 
   const totalMembers = members.length;
@@ -293,6 +386,7 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
                     <MemberTableRow key={m.id} member={m}
                       onView={mem => { setViewMember(mem); setViewOpen(true); }}
                       onHistory={handleViewHistory}
+                      onFamily={handleViewFamily}
                       onDelete={handleInitiateDeletion}
                     />
                   ))}
@@ -305,6 +399,7 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
 
       <MemberViewDialog open={viewOpen} onClose={() => { setViewOpen(false); setViewMember(null); }} member={viewMember} />
       <HistoryDialog open={historyOpen} onClose={() => { setHistoryOpen(false); setHistoryMember(null); setHistoryEvents([]); }} member={historyMember} events={historyEvents} loading={historyLoading} />
+      <FamilyGroupDialog open={familyOpen} onClose={() => { setFamilyOpen(false); setFamilyEmployee(null); setFamilyGroup([]); }} employee={familyEmployee} familyMembers={familyGroup} />
     </div>
   );
 }
