@@ -305,6 +305,8 @@ class EndorsementUpdate(BaseModel):
     coverage_type: Optional[CoverageType] = None
     sum_insured: Optional[float] = None
     per_life_premium: Optional[float] = None
+    annual_premium_per_life: Optional[float] = None
+    prorata_premium: Optional[float] = None
     endorsement_date: Optional[str] = None
     effective_date: Optional[str] = None
     employee_email: Optional[str] = None
@@ -2304,7 +2306,7 @@ async def get_endorsement(endorsement_id: str, current_user: User = Depends(get_
 
 @api_router.put("/endorsements/{endorsement_id}", response_model=Endorsement)
 async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate, current_user: User = Depends(get_current_user)):
-    """Update an endorsement (only if Pending status)"""
+    """Update an endorsement — Admin can edit any (including approved), HR can only edit own pending"""
     existing = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Endorsement not found")

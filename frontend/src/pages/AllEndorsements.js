@@ -113,6 +113,9 @@ const EndorsementsPage = () => {
       endorsement_type: endorsement.endorsement_type,
       endorsement_date: endorsement.endorsement_date,
       effective_date: endorsement.effective_date,
+      annual_premium_per_life: endorsement.annual_premium_per_life || "",
+      prorata_premium: endorsement.prorata_premium || "",
+      per_life_premium: endorsement.per_life_premium || "",
     });
     setIsDialogOpen(true);
   };
@@ -128,6 +131,16 @@ const EndorsementsPage = () => {
           endorsement_date: formData.endorsement_date,
           effective_date: formData.effective_date || formData.endorsement_date,
         };
+        // Include premium fields if provided
+        if (formData.annual_premium_per_life !== "" && formData.annual_premium_per_life != null) {
+          updateData.annual_premium_per_life = parseFloat(formData.annual_premium_per_life);
+        }
+        if (formData.prorata_premium !== "" && formData.prorata_premium != null) {
+          updateData.prorata_premium = parseFloat(formData.prorata_premium);
+        }
+        if (formData.per_life_premium !== "" && formData.per_life_premium != null) {
+          updateData.per_life_premium = parseFloat(formData.per_life_premium);
+        }
         const token = localStorage.getItem('token');
         await axios.put(`${API}/endorsements/${editingEndorsement.id}`, updateData, {
           headers: { Authorization: `Bearer ${token}` }
@@ -170,6 +183,9 @@ const EndorsementsPage = () => {
       endorsement_type: "",
       endorsement_date: "",
       effective_date: "",
+      annual_premium_per_life: "",
+      prorata_premium: "",
+      per_life_premium: "",
     });
     setEditingEndorsement(null);
   };
@@ -458,6 +474,43 @@ const EndorsementsPage = () => {
                   value={formData.effective_date}
                   onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="per_life_premium">Per Life Premium (₹)</Label>
+                <Input
+                  id="per_life_premium"
+                  type="number"
+                  step="0.01"
+                  data-testid="edit-per-life-premium-input"
+                  value={formData.per_life_premium}
+                  onChange={(e) => setFormData({ ...formData, per_life_premium: e.target.value })}
+                  placeholder="Per life premium"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="annual_premium_per_life">Annual Premium / Life (₹)</Label>
+                <Input
+                  id="annual_premium_per_life"
+                  type="number"
+                  step="0.01"
+                  data-testid="edit-annual-premium-input"
+                  value={formData.annual_premium_per_life}
+                  onChange={(e) => setFormData({ ...formData, annual_premium_per_life: e.target.value })}
+                  placeholder="Annual premium per life"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="prorata_premium">Prorated Premium (₹)</Label>
+                <Input
+                  id="prorata_premium"
+                  type="number"
+                  step="0.01"
+                  data-testid="edit-prorata-premium-input"
+                  value={formData.prorata_premium}
+                  onChange={(e) => setFormData({ ...formData, prorata_premium: e.target.value })}
+                  placeholder="Prorated premium amount"
+                />
+                <p className="text-xs text-stone-500">Negative for refunds, positive for charges</p>
               </div>
             </div>
             <DialogFooter className="mt-6">
