@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 import pandas as pd
 import io
 from enum import Enum
@@ -434,6 +434,8 @@ def get_password_hash(password):
 
 def create_access_token(data: dict):
     to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(hours=24)
+    to_encode["exp"] = expire
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -441,7 +443,9 @@ def decode_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except:
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.InvalidTokenError:
         return None
 
 
@@ -1207,10 +1211,12 @@ async def forgot_password(req: ForgotPasswordRequest, background_tasks: Backgrou
         return {"message": "If an account exists with that email, a reset link has been sent."}
 
     reset_token = str(uuid.uuid4())
+    token_prefix = reset_token[:8].upper()  # This is what user enters
     expires = datetime.now(timezone.utc).isoformat()
 
     await db.password_resets.insert_one({
         "token": reset_token,
+        "token_prefix": token_prefix,
         "user_id": user["id"],
         "email": req.email,
         "created_at": expires,
@@ -1242,8 +1248,10 @@ async def forgot_password(req: ForgotPasswordRequest, background_tasks: Backgrou
 @api_router.post("/auth/reset-password")
 async def reset_password(req: ResetPasswordRequest):
     """Reset password using token from email"""
+    # SEC-001 FIX: Exact match on full token, no regex
+    clean_token = req.token.strip().upper()
     reset_record = await db.password_resets.find_one(
-        {"token": {"$regex": f"^{req.token[:8]}", "$options": "i"}, "used": False}, {"_id": 0}
+        {"token_prefix": clean_token, "used": False}, {"_id": 0}
     )
     if not reset_record:
         raise HTTPException(status_code=400, detail="Invalid or expired reset code")
@@ -4068,6 +4076,10 @@ async def get_employee_directory(
         match_del["policy_number"] = {"$in": assigned}
 
     if policy_number:
+        if current_user.role == UserRole.HR:
+            # SEC-002 FIX: Intersect with assigned policies
+            if policy_number not in (assigned if current_user.role == UserRole.HR else [policy_number]):
+                return []
         match_add["policy_number"] = policy_number
         match_del["policy_number"] = policy_number
 
@@ -4140,6 +4152,10 @@ async def get_employee_history(
     if member_name:
         query["member_name"] = member_name
     if policy_number:
+        # SEC-002 FIX: Intersect with assigned policies for HR
+        if current_user.role == UserRole.HR:
+            if policy_number not in (assigned if current_user.role == UserRole.HR else []):
+                return []
         query["policy_number"] = policy_number
 
     events = await db.endorsements.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
@@ -5822,19 +5838,21 @@ async def seed_master_admin():
     """Seed the Master Admin account on startup (idempotent)"""
     master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0})
     if not master:
+        admin_password = os.environ.get("ADMIN_DEFAULT_PASSWORD", "Admin@123")
+        admin_email = os.environ.get("ADMIN_EMAIL", "sandeepdby@gmail.com")
         user = User(
             username="masteradmin",
             full_name="Master Admin",
-            email="sandeepdby@gmail.com",
+            email=admin_email,
             phone="9886260579",
             role=UserRole.ADMIN,
         )
         doc = user.model_dump()
-        doc['password_hash'] = get_password_hash("Admin@123")
+        doc['password_hash'] = get_password_hash(admin_password)
         doc['is_master_admin'] = True
         doc['created_at'] = datetime.now(timezone.utc).isoformat()
         await db.users.insert_one(doc)
-        logging.getLogger(__name__).info("Master Admin seeded: masteradmin / Admin@123")
+        logging.getLogger(__name__).info("Master Admin seeded successfully")
     else:
         # Ensure flag is set on existing record
         await db.users.update_one({"username": "masteradmin"}, {"$set": {"is_master_admin": True}})
@@ -6260,11 +6278,17 @@ async def download_document(
     record = await db.documents.find_one({"id": doc_id, "is_deleted": False}, {"_id": 0})
     if not record:
         raise HTTPException(status_code=404, detail="Document not found")
+
+    # SEC-005 FIX: Enforce ownership/assignment check
+    if current_user.role == UserRole.HR:
+        if record.get("uploaded_by") != current_user.id and record.get("assigned_to_hr") != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this document")
     
     try:
         data, ct = get_object(record["storage_path"])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {str(e)}")
+        logging.getLogger(__name__).error(f"Document download failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve file")
     
     return Response(
         content=data,
@@ -6326,6 +6350,11 @@ async def send_ecard(
     if not record:
         raise HTTPException(status_code=404, detail="Document not found")
 
+    # SEC-005 FIX: Enforce ownership/assignment check
+    if current_user.role == UserRole.HR:
+        if record.get("uploaded_by") != current_user.id and record.get("assigned_to_hr") != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this document")
+
     target_email = email or record.get("assigned_to_hr_email")
     if not target_email:
         raise HTTPException(status_code=400, detail="No email address found for this document's HR user")
@@ -6334,7 +6363,8 @@ async def send_ecard(
     try:
         file_data, ct = get_object(record["storage_path"])
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {str(e)}")
+        logging.getLogger(__name__).error(f"E-Card retrieval failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve file")
 
     hr_name = record.get("assigned_to_hr_name", "HR User")
     filename = record.get("original_filename", "e-card")
