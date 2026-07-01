@@ -113,9 +113,9 @@ const EndorsementsPage = () => {
       endorsement_type: endorsement.endorsement_type,
       endorsement_date: endorsement.endorsement_date,
       effective_date: endorsement.effective_date,
-      annual_premium_per_life: endorsement.annual_premium_per_life || "",
-      prorata_premium: endorsement.prorata_premium || "",
-      per_life_premium: endorsement.per_life_premium || "",
+      annual_premium_per_life: endorsement.annual_premium_per_life ?? "",
+      prorata_premium: endorsement.prorata_premium ?? "",
+      per_life_premium: endorsement.per_life_premium ?? "",
     });
     setIsDialogOpen(true);
   };

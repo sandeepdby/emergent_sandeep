@@ -2325,20 +2325,24 @@ async def update_endorsement(endorsement_id: str, update_data: EndorsementUpdate
     endorsement_date = update_dict.get('endorsement_date', existing['endorsement_date'])
     endorsement_type = update_dict.get('endorsement_type', existing['endorsement_type'])
     
-    # Recalculate premium if date or type changed
-    if 'endorsement_date' in update_dict or 'endorsement_type' in update_dict:
-        days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
-            policy['inception_date'],
-            policy['expiry_date'],
-            endorsement_date,
-            policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)),
-            endorsement_type
-        )
-        
-        update_dict['days_from_inception'] = days_from_inception
-        update_dict['days_in_policy_year'] = days_in_policy_year
-        update_dict['remaining_days'] = remaining_days
-        update_dict['prorata_premium'] = prorata_premium
+    # Recalculate premium if date or type changed AND user didn't explicitly set prorata
+    if 'prorata_premium' not in update_dict and ('endorsement_date' in update_dict or 'endorsement_type' in update_dict):
+        # Only recalc if date or type actually changed from existing values
+        date_changed = update_dict.get('endorsement_date') != existing.get('endorsement_date')
+        type_changed = update_dict.get('endorsement_type') != existing.get('endorsement_type')
+        if date_changed or type_changed:
+            days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
+                policy['inception_date'],
+                policy['expiry_date'],
+                endorsement_date,
+                policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)),
+                endorsement_type
+            )
+            
+            update_dict['days_from_inception'] = days_from_inception
+            update_dict['days_in_policy_year'] = days_in_policy_year
+            update_dict['remaining_days'] = remaining_days
+            update_dict['prorata_premium'] = prorata_premium
     
     await db.endorsements.update_one({"id": endorsement_id}, {"$set": update_dict})
     
