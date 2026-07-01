@@ -123,6 +123,15 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Email**: When send_email_flag=true, PDF is emailed to the logged-in user as attachment via SMTP
 - **Frontend**: "Export FY Report" button on both HR Dashboard (HRSummary.js) and Admin Analytics Dashboard (AnalyticsDashboard.js)
 
+### Rate Cards / Raters Feature (DONE - Jul 2026)
+- **Data Model**: Each rater has name, policy_number, custom age_bands (min_age, max_age, per_life_rate), assigned_hr_users list
+- **Multiple raters per policy**: Different rate cards can exist for the same policy
+- **Admin CRUD**: Create/Edit/Delete raters with custom age ranges, assign to policy + specific HR users. Policy metadata (type, insurer) auto-populated from policy collection.
+- **HR Read-Only**: HR users see only raters assigned to them. No create/edit/delete controls. View the rate table inline (expandable card) or in a dialog.
+- **Download**: Both Excel (.xlsx) and PDF formats available for both Admin and HR users. Excel includes header with rater name/policy/insurer info.
+- **Sidebar Placement**: Under "Finance" section for Admin, under "Finance & Storage" for HR
+- **Endpoints**: POST/GET/PUT/DELETE /api/raters, GET /api/raters/{id}/download?format=xlsx|pdf
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt

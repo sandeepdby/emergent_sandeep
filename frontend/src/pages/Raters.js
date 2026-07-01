@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   Loader2, Plus, Pencil, Trash2, Download, FileText, FileSpreadsheet,
@@ -132,7 +132,7 @@ function RaterFormDialog({ open, onClose, policies, hrUsers, editData, onSave })
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto" data-testid="rater-form-dialog">
-        <DialogHeader><DialogTitle className="text-lg">{editData ? "Edit Rater" : "Create New Rater"}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="text-lg">{editData ? "Edit Rater" : "Create New Rater"}</DialogTitle><DialogDescription>Define age bands and per-life premium rates</DialogDescription></DialogHeader>
         <div className="space-y-4 py-2">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -187,7 +187,7 @@ function RaterViewDialog({ open, onClose, rater }) {
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-lg" data-testid="rater-view-dialog">
-        <DialogHeader><DialogTitle>{rater.name}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{rater.name}</DialogTitle><DialogDescription>Rate card details</DialogDescription></DialogHeader>
         <div className="space-y-3 text-sm">
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{rater.policy_number}</Badge>
