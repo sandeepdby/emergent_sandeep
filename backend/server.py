@@ -2698,10 +2698,25 @@ async def import_endorsements_from_excel(
                 employee_email = str(row['employee_email']).strip() if 'employee_email' in df.columns and pd.notna(row.get('employee_email')) else None
                 employee_mobile = str(row['employee_mobile']).strip() if 'employee_mobile' in df.columns and pd.notna(row.get('employee_mobile')) else None
                 
-                # Use per_life_premium from Excel if provided, otherwise use policy's annual premium
+                # Use per_life_premium from Excel if provided, otherwise try Rate Card, then policy's annual premium
                 per_life = None
                 if 'per_life_premium' in df.columns and pd.notna(row.get('per_life_premium')):
-                    per_life = float(row['per_life_premium'])
+                    try:
+                        val = float(row['per_life_premium'])
+                        if val > 0:
+                            per_life = val
+                    except (ValueError, TypeError):
+                        pass
+
+                # Auto-fill from Rate Card if per_life is still None and age is available
+                if per_life is None and age is not None:
+                    rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1})
+                    if rater:
+                        for band in rater.get("age_bands", []):
+                            if band["min_age"] <= age <= band["max_age"]:
+                                per_life = band["per_life_rate"]
+                                break
+
                 premium_for_calc = per_life if per_life is not None else (policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)))
                 
                 # Calculate pro-rata premium based on endorsement type
@@ -2958,6 +2973,89 @@ async def download_import_template(current_user: User = Depends(get_current_user
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=endorsement_import_template.xlsx"}
+    )
+
+
+@api_router.get("/endorsements/template/family")
+async def download_family_import_template(current_user: User = Depends(get_current_user)):
+    """Download Excel template specifically for bulk family import with ESKP examples"""
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    template_data = [
+        {"Employee ID": "FAM_001", "Member Name": "Rajesh Sharma", "Relationship Type": "Employee", "DOB": "1985-06-15", "Age": 41, "Gender": "Male",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "rajesh@company.com", "Employee Mobile": "+919876543210", "Remarks": "New joiner — Family addition"},
+        {"Employee ID": "FAM_001", "Member Name": "Sunita Sharma", "Relationship Type": "Spouse", "DOB": "1988-03-22", "Age": 38, "Gender": "Female",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "", "Employee Mobile": "", "Remarks": ""},
+        {"Employee ID": "FAM_001", "Member Name": "Arjun Sharma", "Relationship Type": "Kids1", "DOB": "2015-09-10", "Age": 10, "Gender": "Male",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "", "Employee Mobile": "", "Remarks": ""},
+        {"Employee ID": "FAM_001", "Member Name": "Ananya Sharma", "Relationship Type": "Kids2", "DOB": "2018-12-05", "Age": 7, "Gender": "Female",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "", "Employee Mobile": "", "Remarks": ""},
+        {"Employee ID": "FAM_001", "Member Name": "Kamla Devi", "Relationship Type": "Mother", "DOB": "1958-01-20", "Age": 68, "Gender": "Female",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "", "Employee Mobile": "", "Remarks": ""},
+        {"Employee ID": "FAM_001", "Member Name": "Ram Prakash", "Relationship Type": "Father", "DOB": "1955-07-08", "Age": 70, "Gender": "Male",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Floater", "Suminsured": 500000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "", "Employee Mobile": "", "Remarks": ""},
+        {"Employee ID": "FAM_002", "Member Name": "Priya Patel", "Relationship Type": "Employee", "DOB": "1990-11-30", "Age": 35, "Gender": "Female",
+         "Policy Number": "GMC001", "Endorsement Type": "Addition", "Per Life Premium": "", "Coverage Type": "Non-Floater", "Suminsured": 300000,
+         "Endorsement Date": today, "Date of Joining": today, "Employee Email": "priya@company.com", "Employee Mobile": "+919876543211", "Remarks": "New joiner — Employee only"},
+    ]
+
+    df = pd.DataFrame(template_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Family Import')
+
+        instructions = pd.DataFrame({
+            'Field': ['Employee ID', 'Member Name', 'Relationship Type', 'DOB', 'Age', 'Gender', 'Policy Number',
+                      'Endorsement Type', 'Per Life Premium', 'Coverage Type', 'Suminsured', 'Endorsement Date',
+                      'Date of Joining', 'Employee Email', 'Employee Mobile', 'Remarks'],
+            'Required': ['Optional', 'YES', 'YES', 'Optional', 'Optional', 'Optional', 'YES',
+                         'YES', 'Auto (Rate Card)', 'Optional', 'Optional', 'YES',
+                         'Optional', 'Optional', 'Optional', 'Optional'],
+            'Description': [
+                'Same ID links family members. Group Employee+Spouse+Kids+Parents under one ID.',
+                'Full name of the member',
+                'Employee, Spouse, Kids1, Kids2, Mother, or Father',
+                'Date of birth (YYYY-MM-DD). Used for rate card lookup.',
+                'Member age. Auto-calculated from DOB if blank.',
+                'Male, Female, or Other',
+                'Must match an existing policy number in InsureHub',
+                'Addition, Deletion, Correction, or Midterm addition',
+                'Leave BLANK to auto-fill from Rate Card based on age. Enter value to override.',
+                'Floater or Non-Floater',
+                'Sum insured / Coverage amount',
+                'Date endorsement was received (YYYY-MM-DD)',
+                'Date employee/member joined (YYYY-MM-DD)',
+                'Email for notifications (usually for Employee row only)',
+                'Mobile with country code (e.g., +919876543210)',
+                'Additional notes'
+            ]
+        })
+        instructions.to_excel(writer, index=False, sheet_name='Instructions')
+
+        tips = pd.DataFrame({
+            'Tip': [
+                '1. Group family members by using the SAME Employee ID (e.g., FAM_001 for all members of one family)',
+                '2. Leave "Per Life Premium" BLANK — the system auto-fills from the Rate Card based on member age',
+                '3. Supported Relationship Types for ESKP: Employee, Spouse, Kids1, Kids2, Mother, Father',
+                '4. For ESK policies: Employee, Spouse, Kids1, Kids2 only. For E policies: Employee only.',
+                '5. Each row becomes a separate endorsement. They are linked by Employee ID.',
+                '6. You can add multiple families in one file — just use different Employee IDs.',
+                '7. After import, all endorsements will be in "Pending" status awaiting Admin approval.',
+            ]
+        })
+        tips.to_excel(writer, index=False, sheet_name='Tips')
+
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=family_import_template.xlsx"}
     )
 
 

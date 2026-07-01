@@ -147,6 +147,27 @@ class ImportEndorsements extends React.Component {
     }
   };
 
+  handleDownloadFamilyTemplate = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API}/endorsements/template/family`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "family_import_template.xlsx");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Family template downloaded");
+    } catch (error) {
+      toast.error("Failed to download family template");
+    }
+  };
+
   renderPreview() {
     const { previewData } = this.state;
     if (!previewData) return null;
@@ -283,21 +304,30 @@ class ImportEndorsements extends React.Component {
                 <ul className="list-disc list-inside space-y-1 text-sm">
                   <li><strong>Policy Number</strong> - Unique policy identifier (Required)</li>
                   <li><strong>Member Name</strong> - Name of the member (Required)</li>
-                  <li><strong>Relationship Type</strong> - Employee, Spouse, Kids, Mother, or Father (Required)</li>
+                  <li><strong>Relationship Type</strong> - Employee, Spouse, Kids1, Kids2, Mother, or Father (Required)</li>
                   <li><strong>Endorsement Type</strong> - Addition, Deletion, Correction, or Midterm addition (Required)</li>
                   <li><strong>Endorsement Date</strong> - When endorsement received (Required)</li>
-                  <li><strong>Annual Premium Per Life</strong> - Yearly premium (auto-filled from policy)</li>
+                  <li><strong>Per Life Premium</strong> - Leave blank to auto-fill from Rate Card based on age</li>
+                  <li><strong>Employee ID</strong> - Same ID links family members together</li>
                   <li><strong>DOB, Age, Gender, Date of Joining, Date of Leaving</strong> - Optional</li>
                   <li><strong>Coverage Type, Suminsured, Effective Date, Remarks</strong> - Optional</li>
                 </ul>
               </div>
             </Alert>
 
-            <div className="flex gap-2">
-              <Button onClick={this.handleDownloadTemplate} variant="outline">
-                <FileSpreadsheet className="w-4 h-4 mr-2" /> Download Template
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={this.handleDownloadTemplate} variant="outline" data-testid="download-template-btn">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Standard Template
+              </Button>
+              <Button onClick={this.handleDownloadFamilyTemplate} variant="outline" className="border-pink-200 text-pink-700 hover:bg-pink-50" data-testid="download-family-template-btn">
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Family Import Template
               </Button>
               {policies.length === 0 && <Badge variant="destructive">Contact admin to create policies first</Badge>}
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs text-emerald-700 space-y-1">
+              <p className="font-semibold">Rate Card Auto-Fill</p>
+              <p>Leave "Per Life Premium" blank in your Excel — the system will automatically fill rates from the assigned Rate Card based on each member's age. Enter a value to override.</p>
             </div>
           </CardContent>
         </Card>
