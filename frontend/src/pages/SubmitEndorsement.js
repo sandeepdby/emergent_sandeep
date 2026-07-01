@@ -7,8 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Loader2, MessageCircle, Sparkles, AlertCircle, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, Loader2, MessageCircle, Sparkles, AlertCircle, TrendingUp, TrendingDown, Zap } from "lucide-react";
 
 const generateWhatsAppLink = (phone, message) => {
   if (!phone) return null;
@@ -33,7 +34,6 @@ const ProRataPreview = ({ policy, endorsementType, endorsementDate, perLifePremi
   }, [policy, endorsementType, endorsementDate, perLifePremium]);
 
   if (!calc) return null;
-
   return (
     <div className="flex items-center gap-4 mt-1 text-sm" data-testid="prorata-preview">
       <span className="text-gray-600">Remaining Days: <strong>{calc.remaining}</strong> / {calc.totalDays}</span>
@@ -63,16 +63,55 @@ const getMinDate45 = () => {
   return d.toISOString().split("T")[0];
 };
 
+/* Determine allowed relationship options based on family definition */
+const FAMILY_RELATIONSHIPS = {
+  E: ["Employee"],
+  ESK: ["Employee", "Spouse", "Kids1", "Kids2"],
+  ESKP: ["Employee", "Spouse", "Kids1", "Kids2", "Mother", "Father"],
+};
+
+/* Sub-component: Policy select option */
+function PolicySelectOption({ policy }) {
+  const typeLabel = policy.family_definition || policy.policy_type || "";
+  return (
+    <SelectItem value={policy.policy_number}>
+      {policy.policy_number} - {policy.policy_holder_name}
+      {typeLabel ? ` (${typeLabel})` : ""}
+    </SelectItem>
+  );
+}
+
+/* Sub-component: Relationship select option */
+function RelationshipOption({ value }) {
+  return <SelectItem value={value}>{value}</SelectItem>;
+}
+
+/* Sub-component: WhatsApp admin button */
+function WhatsAppButton({ admin, message }) {
+  const link = generateWhatsAppLink(admin.phone, message);
+  if (!link) return null;
+  return (
+    <a href={link} target="_blank" rel="noopener noreferrer"
+      className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+      data-testid={`whatsapp-admin-${admin.id}`}>
+      <MessageCircle className="w-4 h-4" />{admin.full_name.split(' ')[0]}
+    </a>
+  );
+}
+
 export default function SubmitEndorsement() {
   const [policies, setPolicies] = useState([]);
+  const [raters, setRaters] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adminUsers, setAdminUsers] = useState([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [submittedData, setSubmittedData] = useState(null);
   const [aiWhatsappMessage, setAiWhatsappMessage] = useState("");
   const [generatingAI, setGeneratingAI] = useState(false);
+  const [rateAutoFilled, setRateAutoFilled] = useState(false);
   const [formData, setFormData] = useState({
     policy_number: "",
+    family_definition: "",
     employee_id: "",
     member_name: "",
     dob: "",
@@ -94,43 +133,64 @@ export default function SubmitEndorsement() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    axios.get(`${API}/policies`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => setPolicies(r.data)).catch(() => toast.error("Failed to load policies"));
-    axios.get(`${API}/users/admins`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => setAdminUsers(r.data)).catch(() => {});
+    const h = { Authorization: `Bearer ${token}` };
+    axios.get(`${API}/policies`, { headers: h }).then(r => setPolicies(r.data)).catch(() => toast.error("Failed to load policies"));
+    axios.get(`${API}/users/admins`, { headers: h }).then(r => setAdminUsers(r.data)).catch(() => {});
+    axios.get(`${API}/raters`, { headers: h }).then(r => setRaters(r.data)).catch(() => {});
   }, []);
 
-  // Selected policy details for premium display
-  const selectedPolicy = useMemo(() => {
-    return policies.find(p => p.policy_number === formData.policy_number);
-  }, [policies, formData.policy_number]);
+  const selectedPolicy = useMemo(() => policies.find(p => p.policy_number === formData.policy_number), [policies, formData.policy_number]);
 
-  // Dynamic relationship options based on endorsement type AND policy type
+  // Determine family definition: from form selection, policy data, or default ESKP
+  const activeFamilyDef = useMemo(() => {
+    if (formData.family_definition) return formData.family_definition;
+    if (selectedPolicy?.family_definition) return selectedPolicy.family_definition;
+    // GPA/GTL → E only
+    if (selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL")) return "E";
+    return "ESKP";
+  }, [formData.family_definition, selectedPolicy]);
+
+  // Get raters for selected policy
+  const policyRaters = useMemo(() => raters.filter(r => r.policy_number === formData.policy_number), [raters, formData.policy_number]);
+
+  // Auto-populate per-life rate from rater when age changes
+  useEffect(() => {
+    const age = parseInt(formData.age);
+    if (isNaN(age) || policyRaters.length === 0) return;
+    // Find matching age band from first available rater
+    const rater = policyRaters[0];
+    const band = (rater.age_bands || []).find(ab => age >= ab.min_age && age <= ab.max_age);
+    if (band) {
+      setFormData(prev => ({ ...prev, per_life_premium: String(band.per_life_rate) }));
+      setRateAutoFilled(true);
+    }
+  }, [formData.age, policyRaters]);
+
+  // Dynamic relationship options based on family definition + endorsement type
   const relationshipOptions = useMemo(() => {
-    const all = ["Employee", "Spouse", "Kids", "Mother", "Father"];
-    // GPA & GTL policies: only Employee allowed
-    if (selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL")) {
-      return ["Employee"];
-    }
+    let opts = FAMILY_RELATIONSHIPS[activeFamilyDef] || FAMILY_RELATIONSHIPS.ESKP;
     if (formData.endorsement_type === "Midterm addition") {
-      return all.filter(r => r !== "Employee" && r !== "Mother" && r !== "Father");
+      opts = opts.filter(r => r !== "Employee" && r !== "Mother" && r !== "Father");
     }
-    return all;
-  }, [formData.endorsement_type, selectedPolicy]);
+    return opts;
+  }, [activeFamilyDef, formData.endorsement_type]);
 
   // Reset relationship if it becomes invalid
   useEffect(() => {
-    if (formData.endorsement_type === "Midterm addition" && 
-        (formData.relationship_type === "Employee" || formData.relationship_type === "Father" || formData.relationship_type === "Mother")) {
+    if (formData.relationship_type && !relationshipOptions.includes(formData.relationship_type)) {
       setFormData(prev => ({ ...prev, relationship_type: "" }));
     }
-    // GPA/GTL: auto-set to Employee
-    if (selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL")) {
-      if (formData.relationship_type !== "Employee") {
-        setFormData(prev => ({ ...prev, relationship_type: "Employee" }));
+  }, [relationshipOptions, formData.relationship_type]);
+
+  // When policy changes, update family_definition from policy data
+  useEffect(() => {
+    if (selectedPolicy) {
+      const fd = selectedPolicy.family_definition || "";
+      if (fd && fd !== formData.family_definition) {
+        setFormData(prev => ({ ...prev, family_definition: fd }));
       }
     }
-  }, [formData.endorsement_type, formData.relationship_type, selectedPolicy]);
+  }, [selectedPolicy, formData.family_definition]);
 
   const showDOJ = formData.endorsement_type === "Addition" || formData.endorsement_type === "Midterm addition";
   const showDOL = formData.endorsement_type === "Deletion";
@@ -139,15 +199,21 @@ export default function SubmitEndorsement() {
   const updateFormData = (field, value) => {
     setFormData(prev => {
       const next = { ...prev, [field]: value };
-      // Auto-calculate age from DOB
       if (field === "dob" && value) {
         const age = calcAge(value);
         if (age !== "") next.age = String(age);
       }
-      // Clear DOJ/DOL when type changes
       if (field === "endorsement_type") {
         next.date_of_joining = "";
         next.date_of_leaving = "";
+      }
+      if (field === "per_life_premium") {
+        setRateAutoFilled(false);
+      }
+      if (field === "policy_number") {
+        next.per_life_premium = "";
+        next.relationship_type = "";
+        setRateAutoFilled(false);
       }
       return next;
     });
@@ -167,7 +233,7 @@ export default function SubmitEndorsement() {
           relationship_type: endorsementData.relationship_type,
           prorata_premium: endorsementData.prorata_premium || 0
         }
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
       if (response.data.content?.whatsapp_message) setAiWhatsappMessage(response.data.content.whatsapp_message);
     } catch {
       setAiWhatsappMessage(`*InsureHub - New Endorsement*\n\n*Policy:* ${endorsementData.policy_number}\n*Member:* ${endorsementData.member_name}\n*Type:* ${endorsementData.endorsement_type}\n\nPlease review in Admin portal.`);
@@ -178,17 +244,12 @@ export default function SubmitEndorsement() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Frontend 45-day validation
     if (showDOJ && formData.date_of_joining && formData.date_of_joining < minDate45) {
-      toast.error("Date of Joining cannot be more than 45 days backdated");
-      return;
+      toast.error("Date of Joining cannot be more than 45 days backdated"); return;
     }
     if (showDOL && formData.date_of_leaving && formData.date_of_leaving < minDate45) {
-      toast.error("Date of Leaving cannot be more than 45 days backdated");
-      return;
+      toast.error("Date of Leaving cannot be more than 45 days backdated"); return;
     }
-
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
@@ -208,6 +269,8 @@ export default function SubmitEndorsement() {
         employee_mobile: formData.employee_mobile || null,
         remarks: formData.remarks || null
       };
+      // Remove family_definition from submit payload (not a backend field on endorsement)
+      delete submitData.family_definition;
       const response = await axios.post(`${API}/endorsements`, submitData, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -216,12 +279,13 @@ export default function SubmitEndorsement() {
       setShowSuccess(true);
       generateAIWhatsappMessage(response.data);
       setFormData({
-        policy_number: "", employee_id: "", member_name: "", dob: "", age: "", gender: "",
+        policy_number: "", family_definition: "", employee_id: "", member_name: "", dob: "", age: "", gender: "",
         relationship_type: "", endorsement_type: "", date_of_joining: "", date_of_leaving: "",
         coverage_type: "", sum_insured: "", per_life_premium: "",
         endorsement_date: new Date().toISOString().split('T')[0], effective_date: "",
         employee_email: "", employee_mobile: "", remarks: ""
       });
+      setRateAutoFilled(false);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to submit endorsement");
     } finally {
@@ -240,34 +304,13 @@ export default function SubmitEndorsement() {
   return (
     <div className="space-y-6" data-testid="submit-endorsement-page">
       {showSuccess && (
-        <Card className="bg-green-50 border-green-200">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2 text-green-700">
-                <span className="text-lg">✓</span>
-                <span className="font-medium">Endorsement submitted!</span>
-                <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                  <Sparkles className="w-3 h-3" /> AI Email Sent
-                </span>
-                {submittedData && (
-                  <span className={`text-sm font-medium ml-2 ${submittedData.prorata_premium >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                    Pro-rata: ₹{Math.abs(submittedData.prorata_premium).toLocaleString()}{submittedData.prorata_premium < 0 ? ' (Refund)' : ''}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {adminsWithPhone.length > 0 && !generatingAI && adminsWithPhone.map((admin) => (
-                  <a key={admin.id} href={generateWhatsAppLink(admin.phone, getWhatsAppMessage())} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1 bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
-                    data-testid={`whatsapp-admin-${admin.id}`}>
-                    <MessageCircle className="w-4 h-4" />{admin.full_name.split(' ')[0]}
-                  </a>
-                ))}
-                <Button variant="ghost" size="sm" onClick={() => setShowSuccess(false)} className="text-green-600">✕</Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <SuccessBanner
+          submittedData={submittedData}
+          adminsWithPhone={adminsWithPhone}
+          generatingAI={generatingAI}
+          getWhatsAppMessage={getWhatsAppMessage}
+          onClose={() => setShowSuccess(false)}
+        />
       )}
 
       <Card>
@@ -284,9 +327,20 @@ export default function SubmitEndorsement() {
                 <Select value={formData.policy_number} onValueChange={(v) => updateFormData('policy_number', v)} required>
                   <SelectTrigger data-testid="policy-select"><SelectValue placeholder="Select Policy" /></SelectTrigger>
                   <SelectContent>
-                    {policies.map((p) => (
-                      <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} - {p.policy_holder_name}</SelectItem>
-                    ))}
+                    {policies.map((p) => <PolicySelectOption key={p.id} policy={p} />)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Policy Type / Family Definition */}
+              <div className="space-y-2">
+                <Label>Policy Type (Family) *</Label>
+                <Select value={activeFamilyDef} onValueChange={(v) => updateFormData('family_definition', v)}>
+                  <SelectTrigger data-testid="family-definition-select"><SelectValue placeholder="Select Type" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="E">E — Employee Only</SelectItem>
+                    <SelectItem value="ESK">ESK — Employee + Spouse + Kids</SelectItem>
+                    <SelectItem value="ESKP">ESKP — Employee + Spouse + Kids + Parents</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -311,16 +365,14 @@ export default function SubmitEndorsement() {
                 <Select value={formData.relationship_type} onValueChange={(v) => updateFormData('relationship_type', v)} required>
                   <SelectTrigger data-testid="relationship-select"><SelectValue placeholder="Select Relationship" /></SelectTrigger>
                   <SelectContent>
-                    {relationshipOptions.map(r => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
+                    {relationshipOptions.map(r => <RelationshipOption key={r} value={r} />)}
                   </SelectContent>
                 </Select>
                 {formData.endorsement_type === "Midterm addition" && (
-                  <p className="text-xs text-amber-600 flex items-center gap-1" data-testid="parent-restriction-warning"><AlertCircle className="w-3 h-3" /> Employee &amp; Parents (Father/Mother) not allowed for Midterm Addition</p>
+                  <p className="text-xs text-amber-600 flex items-center gap-1" data-testid="parent-restriction-warning"><AlertCircle className="w-3 h-3" /> Employee &amp; Parents not allowed for Midterm Addition</p>
                 )}
-                {selectedPolicy && (selectedPolicy.policy_type === "GPA" || selectedPolicy.policy_type === "GTL") && (
-                  <p className="text-xs text-blue-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> {selectedPolicy.policy_type} product: Employee only</p>
+                {activeFamilyDef === "E" && (
+                  <p className="text-xs text-blue-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> E-type: Employee only</p>
                 )}
               </div>
 
@@ -349,7 +401,7 @@ export default function SubmitEndorsement() {
                 </Select>
               </div>
 
-              {/* DOB → Auto age */}
+              {/* DOB */}
               <div className="space-y-2">
                 <Label>Date of Birth</Label>
                 <Input type="date" value={formData.dob} onChange={(e) => updateFormData('dob', e.target.value)} data-testid="dob-input" />
@@ -397,12 +449,29 @@ export default function SubmitEndorsement() {
                 <Input type="number" value={formData.sum_insured} onChange={(e) => updateFormData('sum_insured', e.target.value)} placeholder="Enter sum insured" data-testid="sum-insured-input" />
               </div>
 
-              {/* Per Life Premium */}
+              {/* Per Life Premium (auto-populated from rater, editable) */}
               <div className="space-y-2">
-                <Label>Per Life Premium</Label>
-                <Input type="number" value={formData.per_life_premium} onChange={(e) => updateFormData('per_life_premium', e.target.value)} placeholder={selectedPolicy ? `Default: ₹${selectedPolicy.annual_premium_per_life?.toLocaleString()}` : "Enter per life premium"} data-testid="per-life-premium-input" />
-                {selectedPolicy && !formData.per_life_premium && (
+                <Label className="flex items-center gap-1.5">
+                  Per Life Premium
+                  {rateAutoFilled && <Badge variant="secondary" className="text-[9px] py-0 px-1.5 bg-emerald-50 text-emerald-700 border-emerald-200"><Zap className="w-2.5 h-2.5 inline mr-0.5" />From Rate Card</Badge>}
+                </Label>
+                <Input
+                  type="number"
+                  value={formData.per_life_premium}
+                  onChange={(e) => updateFormData('per_life_premium', e.target.value)}
+                  placeholder={selectedPolicy ? `Default: ₹${selectedPolicy.annual_premium_per_life?.toLocaleString()}` : "Enter per life premium"}
+                  data-testid="per-life-premium-input"
+                />
+                {rateAutoFilled && policyRaters.length > 0 && (
+                  <p className="text-xs text-emerald-600 flex items-center gap-1">
+                    <Zap className="w-3 h-3" /> Auto-filled from "{policyRaters[0].name}" rate card (age {formData.age}). You can edit this value.
+                  </p>
+                )}
+                {!rateAutoFilled && selectedPolicy && !formData.per_life_premium && (
                   <p className="text-xs text-gray-500">Will use policy premium: ₹{selectedPolicy.annual_premium_per_life?.toLocaleString()}</p>
+                )}
+                {!rateAutoFilled && policyRaters.length > 0 && !formData.age && (
+                  <p className="text-xs text-blue-500 flex items-center gap-1"><Zap className="w-3 h-3" /> Enter DOB/age to auto-fill from rate card</p>
                 )}
               </div>
 
@@ -441,6 +510,7 @@ export default function SubmitEndorsement() {
                   )}
                   <span><strong>Inception:</strong> {selectedPolicy.inception_date}</span>
                   <span><strong>Expiry:</strong> {selectedPolicy.expiry_date}</span>
+                  {policyRaters.length > 0 && <Badge variant="outline" className="text-[10px]">Rate Card: {policyRaters[0].name}</Badge>}
                 </div>
                 {formData.endorsement_type && formData.endorsement_date && (
                   <ProRataPreview
@@ -465,5 +535,35 @@ export default function SubmitEndorsement() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/* Sub-component: Success banner after submission */
+function SuccessBanner({ submittedData, adminsWithPhone, generatingAI, getWhatsAppMessage, onClose }) {
+  return (
+    <Card className="bg-green-50 border-green-200">
+      <CardContent className="py-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 text-green-700">
+            <span className="text-lg">✓</span>
+            <span className="font-medium">Endorsement submitted!</span>
+            <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+              <Sparkles className="w-3 h-3" /> AI Email Sent
+            </span>
+            {submittedData && (
+              <span className={`text-sm font-medium ml-2 ${submittedData.prorata_premium >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                Pro-rata: ₹{Math.abs(submittedData.prorata_premium).toLocaleString()}{submittedData.prorata_premium < 0 ? ' (Refund)' : ''}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {adminsWithPhone.length > 0 && !generatingAI && adminsWithPhone.map((admin) => (
+              <WhatsAppButton key={admin.id} admin={admin} message={getWhatsAppMessage()} />
+            ))}
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-green-600">✕</Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

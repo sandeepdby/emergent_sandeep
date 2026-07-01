@@ -111,6 +111,8 @@ class RelationshipType(str, Enum):
     EMPLOYEE = "Employee"
     SPOUSE = "Spouse"
     KIDS = "Kids"
+    KIDS1 = "Kids1"
+    KIDS2 = "Kids2"
     MOTHER = "Mother"
     FATHER = "Father"
 
