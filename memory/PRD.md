@@ -161,6 +161,13 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **HR Isolation**: History only shows events from HR's assigned policies
 - **Endpoint**: GET /api/employee-directory/history with employee_id, member_name, policy_number query params
 
+### Family Group View (DONE - Jul 2026)
+- **Feature**: Click Family icon (pink people icon) on any member in Employee Directory to see all family members linked by the same Employee ID + Policy
+- **Summary Card**: Shows count (e.g. "4 — 1 Employee + 3 Dependents") and Total Family Premium (sum of all per-life rates)
+- **Member Cards**: Each family member displayed in a card with avatar initial, name, relationship badge (color-coded), age, gender, DOB, and per-life rate
+- **Edge Cases**: Members without employee_id show just themselves. Solo employees show "No other family members found" message
+- **Client-side grouping**: No extra API needed — groups from already-loaded directory data by employee_id + policy_number
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
