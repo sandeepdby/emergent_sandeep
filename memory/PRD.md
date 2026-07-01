@@ -133,10 +133,17 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Endpoints**: POST/GET/PUT/DELETE /api/raters, GET /api/raters/{id}/download?format=xlsx|pdf
 
 ### Submit Endorsement Enhancements (DONE - Jul 2026)
-- **Policy Type (Family Definition)**: New dropdown with E (Employee Only), ESK (Employee+Spouse+Kids), ESKP (Employee+Spouse+Kids+Parents). Controls which relationship types are available. Auto-populated from policy's family_definition field.
-- **Extended Relationship Types**: Added Kids1 and Kids2 to split children. Full list: Employee, Spouse, Kids1, Kids2, Mother, Father. Backend RelationshipType enum updated.
-- **Rate Card Auto-Fill**: When a policy with an assigned rater is selected and DOB/age is entered, Per Life Premium auto-populates from the matching age band. Shows green "From Rate Card" badge. Value remains fully editable. Blue hint shown when DOB not yet entered.
-- **Bug Fix**: Fixed `annual_premium_per_life` KeyError for policies without this field (e.g., GMC0001393000100). Now uses safe `.get()` with fallback calculation from premium/total_lives.
+- **Policy Type (Family Definition)**: New dropdown with E (Employee Only), ESK (Employee+Spouse+Kids), ESKP (Employee+Spouse+Kids+Parents). Controls which relationship types are available.
+- **Extended Relationship Types**: Added Kids1 and Kids2. Full list: Employee, Spouse, Kids1, Kids2, Mother, Father.
+- **Rate Card Auto-Fill**: Per Life Premium auto-populates from rate card based on member's age. Shows green "From Rate Card" badge. Editable.
+- **Bug Fix**: Fixed `annual_premium_per_life` KeyError for policies missing this field.
+
+### Add Family — Batch Submission (DONE - Jul 2026)
+- **Mode Toggle**: "Single Member" (default) and "Add Family" modes on the Submit Endorsement page
+- **Family Mode**: Common fields at top (Policy, Employee ID, Endorsement Type, dates). Employee row pre-added. HR clicks "+ Add Dependent" buttons (Spouse, Kids1, Kids2, Mother, Father) to add more rows.
+- **Per-member fields**: Each member has Relationship, Name, DOB, Age (auto-calc), Gender, Per Life Rate (auto-filled from rate card per member's age)
+- **Batch submit**: All members submitted as individual endorsements under the same Employee ID. Success shows count of submitted members.
+- **Family Premium Summary**: Shows total premium across all members with pro-rata calculation preview
 
 ## Remaining Backlog
 
