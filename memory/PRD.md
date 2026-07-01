@@ -182,8 +182,16 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Remaining Backlog
 
+### Security Audit & Fixes (DONE - Jul 2026)
+- **SEC-001 (CRITICAL)**: Password reset regex injection → account takeover. FIX: Exact match on stored token_prefix.
+- **SEC-002 (HIGH)**: HR policy filter override → cross-policy PII. FIX: Intersect with assigned policies.
+- **SEC-003 (HIGH)**: Hardcoded admin credential. FIX: Reads from env vars.
+- **SEC-004 (MEDIUM)**: Non-expiring JWT. FIX: 24h exp claim added.
+- **SEC-005 (MEDIUM)**: Document download missing authz. FIX: HR ownership check.
+- **Hardening**: Rotated SECRET_KEY, sanitized error messages.
+
 ### P0 - Critical Tech Debt
-- Backend modularization: server.py (~5500+ lines) needs splitting into /routes, /models, /services
+- Backend modularization: server.py (~6450 lines) needs splitting into /routes, /models, /services
 
 ### P1 - Upcoming
 - Twilio SMS notifications for user workflows

@@ -4078,7 +4078,7 @@ async def get_employee_directory(
     if policy_number:
         if current_user.role == UserRole.HR:
             # SEC-002 FIX: Intersect with assigned policies
-            if policy_number not in (assigned if current_user.role == UserRole.HR else [policy_number]):
+            if policy_number not in assigned:
                 return []
         match_add["policy_number"] = policy_number
         match_del["policy_number"] = policy_number
@@ -4154,7 +4154,7 @@ async def get_employee_history(
     if policy_number:
         # SEC-002 FIX: Intersect with assigned policies for HR
         if current_user.role == UserRole.HR:
-            if policy_number not in (assigned if current_user.role == UserRole.HR else []):
+            if policy_number not in assigned:
                 return []
         query["policy_number"] = policy_number
 
