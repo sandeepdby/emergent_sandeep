@@ -92,7 +92,8 @@ function TimelineEvent({ event, isLast }) {
           <span className="text-[10px] text-stone-400">{dateStr}</span>
         </div>
         <div className="mt-1 text-xs text-stone-600 space-y-0.5">
-          <p><span className="text-stone-400">Member:</span> {event.member_name} <Badge className={`text-[9px] ml-1 ${REL_COLORS[event.relationship_type] || ""}`}>{event.relationship_type}</Badge></p>
+          <p><span className="text-stone-400">Member:</span> {event.member_name} </p>
+          <div><Badge className={`text-[9px] ${REL_COLORS[event.relationship_type] || ""}`}>{event.relationship_type}</Badge></div>
           {event.per_life_premium != null && <p><span className="text-stone-400">Rate:</span> {fmt(event.per_life_premium)}</p>}
           {event.prorata_premium != null && (
             <p><span className="text-stone-400">Pro-rata:</span> <span className={event.prorata_premium >= 0 ? "text-emerald-600 font-medium" : "text-red-600 font-medium"}>{event.prorata_premium >= 0 ? "+" : ""}{fmt(event.prorata_premium)}</span></p>

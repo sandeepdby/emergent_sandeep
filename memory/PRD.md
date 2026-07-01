@@ -154,6 +154,13 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Sidebar**: Under "Endorsements" for HR, under "Operations" for Admin
 - **Endpoint**: GET /api/employee-directory with optional search and policy_number filters
 
+### Employee Coverage History (DONE - Jul 2026)
+- **Timeline View**: Click History icon on any member in Employee Directory to see their complete endorsement journey — all additions, deletions, corrections in chronological order
+- **Visual Timeline**: Colored icons per endorsement type (green for Addition, red for Deletion, blue for Correction, violet for Midterm addition) with status badges (Approved/Pending/Rejected)
+- **Event Details**: Each event shows member name, relationship badge, per-life premium, pro-rata amount, endorsement date, DOJ/DOL, remarks, submitted by, approved by
+- **HR Isolation**: History only shows events from HR's assigned policies
+- **Endpoint**: GET /api/employee-directory/history with employee_id, member_name, policy_number query params
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
