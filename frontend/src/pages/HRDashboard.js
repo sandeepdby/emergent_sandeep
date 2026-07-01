@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck, Wallet, BookOpen, ChevronLeft, ChevronRight, Menu, BarChart3 } from "lucide-react";
+import { FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck, Wallet, BookOpen, ChevronLeft, ChevronRight, Menu, BarChart3, Users } from "lucide-react";
 import { AuthContext, API, getAuthHeaders } from "../auth";
 import axios from "axios";
 import UserProfileMenu from "./UserProfileMenu";
@@ -14,6 +14,7 @@ import HRClaimsDashboard from "./HRClaimsDashboard";
 import CDLedger from "./CDLedger";
 import PolicyExplainer from "./PolicyExplainer";
 import Raters from "./Raters";
+import EmployeeDirectory from "./EmployeeDirectory";
 
 const getNavGroups = (hasPolicyTC) => [
   {
@@ -27,6 +28,7 @@ const getNavGroups = (hasPolicyTC) => [
     items: [
       { path: "/hr/submit", label: "Submit Endorsement", icon: Plus },
       { path: "/hr/my-endorsements", label: "My Endorsements", icon: ClipboardList },
+      { path: "/hr/employee-directory", label: "Employee Directory", icon: Users },
       { path: "/hr/import", label: "Import Excel", icon: FileSpreadsheet },
     ],
   },
@@ -171,6 +173,7 @@ class HRDashboard extends React.Component {
               <Route path="/claims" element={<HRClaimsDashboard />} />
               <Route path="/submit" element={<SubmitEndorsement />} />
               <Route path="/my-endorsements" element={<MyEndorsements />} />
+              <Route path="/employee-directory" element={<EmployeeDirectory isAdmin={false} basePath="/hr" />} />
               <Route path="/import" element={<ImportEndorsements />} />
               <Route path="/cd-ledger" element={<CDLedger />} />
               <Route path="/raters" element={<Raters isAdmin={false} />} />

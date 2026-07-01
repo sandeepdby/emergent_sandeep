@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu, Table2 } from "lucide-react";
+import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu, Table2, Contact } from "lucide-react";
 import { AuthContext } from "../auth";
 import UserProfileMenu from "./UserProfileMenu";
 import ApproveEndorsements from "./ApproveEndorsements";
@@ -19,6 +19,7 @@ import PolicyAssignment from "./PolicyAssignment";
 import TestimonialsManagement from "./TestimonialsManagement";
 import PolicyExplainer from "./PolicyExplainer";
 import Raters from "./Raters";
+import EmployeeDirectory from "./EmployeeDirectory";
 
 const navGroups = [
   {
@@ -32,6 +33,7 @@ const navGroups = [
     items: [
       { path: "/admin/approve", label: "Approvals", icon: CheckSquare },
       { path: "/admin/all-endorsements", label: "Endorsements", icon: ClipboardList },
+      { path: "/admin/employee-directory", label: "Employee Directory", icon: Contact },
       { path: "/admin/import-batches", label: "Imports", icon: FileSpreadsheet },
       { path: "/admin/download", label: "Download", icon: Download },
     ],
@@ -178,6 +180,7 @@ class AdminDashboard extends React.Component {
               <Route path="/analytics" element={<AnalyticsDashboard />} />
               <Route path="/approve" element={<ApproveEndorsements />} />
               <Route path="/all-endorsements" element={<AllEndorsements />} />
+              <Route path="/employee-directory" element={<EmployeeDirectory isAdmin={true} basePath="/admin" />} />
               <Route path="/import-batches" element={<ImportBatches />} />
               <Route path="/policies" element={<PoliciesManagement />} />
               <Route path="/policy-assign" element={<PolicyAssignment />} />

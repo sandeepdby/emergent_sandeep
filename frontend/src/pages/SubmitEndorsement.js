@@ -228,6 +228,33 @@ export default function SubmitEndorsement() {
     axios.get(`${API}/policies`, { headers: h }).then(r => setPolicies(r.data)).catch(() => toast.error("Failed to load policies"));
     axios.get(`${API}/users/admins`, { headers: h }).then(r => setAdminUsers(r.data)).catch(() => {});
     axios.get(`${API}/raters`, { headers: h }).then(r => setRaters(r.data)).catch(() => {});
+
+    // Check for deletion pre-fill from Employee Directory
+    const prefill = sessionStorage.getItem("deletion_prefill");
+    if (prefill) {
+      try {
+        const data = JSON.parse(prefill);
+        setMode("single");
+        setFormData(prev => ({
+          ...prev,
+          policy_number: data.policy_number || "",
+          endorsement_type: data.endorsement_type || "Deletion",
+          employee_id: data.employee_id || "",
+          member_name: data.member_name || "",
+          relationship_type: data.relationship_type || "",
+          dob: data.dob || "",
+          age: data.age || "",
+          gender: data.gender || "",
+          per_life_premium: data.per_life_premium || "",
+          sum_insured: data.sum_insured || "",
+          coverage_type: data.coverage_type || "",
+          employee_email: data.employee_email || "",
+          employee_mobile: data.employee_mobile || "",
+        }));
+        sessionStorage.removeItem("deletion_prefill");
+        toast.info(`Deletion form pre-filled for ${data.member_name}`);
+      } catch { sessionStorage.removeItem("deletion_prefill"); }
+    }
   }, []);
 
   // --- Shared derived state ---

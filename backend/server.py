@@ -3950,6 +3950,75 @@ async def update_cd_ledger_entry(
     return result
 
 
+# ==================== EMPLOYEE DIRECTORY ENDPOINTS ====================
+
+@api_router.get("/employee-directory")
+async def get_employee_directory(
+    policy_number: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Get active employees/members — approved Additions minus approved Deletions. HR sees only assigned policies."""
+    match_add = {"endorsement_type": {"$in": ["Addition", "Midterm addition"]}, "status": "Approved"}
+    match_del = {"endorsement_type": "Deletion", "status": "Approved"}
+
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        match_add["policy_number"] = {"$in": assigned}
+        match_del["policy_number"] = {"$in": assigned}
+
+    if policy_number:
+        match_add["policy_number"] = policy_number
+        match_del["policy_number"] = policy_number
+
+    additions = await db.endorsements.find(match_add, {"_id": 0}).sort("created_at", -1).to_list(10000)
+    deletions = await db.endorsements.find(match_del, {"_id": 0}).to_list(10000)
+
+    # Build a set of deleted member keys (policy_number + member_name + relationship_type)
+    deleted_keys = set()
+    for d in deletions:
+        key = f"{d.get('policy_number')}|{d.get('member_name','')}|{d.get('relationship_type','')}"
+        deleted_keys.add(key)
+
+    # Filter out deleted members and deduplicate (keep latest addition per member)
+    seen = {}
+    active = []
+    for a in additions:
+        key = f"{a.get('policy_number')}|{a.get('member_name','')}|{a.get('relationship_type','')}"
+        if key in deleted_keys:
+            continue
+        # Deduplicate: keep the first (latest due to sort)
+        if key not in seen:
+            seen[key] = True
+            active.append({
+                "id": a.get("id"),
+                "employee_id": a.get("employee_id"),
+                "member_name": a.get("member_name"),
+                "relationship_type": a.get("relationship_type"),
+                "policy_number": a.get("policy_number"),
+                "dob": a.get("dob"),
+                "age": a.get("age"),
+                "gender": a.get("gender"),
+                "per_life_premium": a.get("per_life_premium"),
+                "sum_insured": a.get("sum_insured"),
+                "coverage_type": a.get("coverage_type"),
+                "endorsement_date": a.get("endorsement_date"),
+                "date_of_joining": a.get("date_of_joining"),
+                "employee_email": a.get("employee_email"),
+                "employee_mobile": a.get("employee_mobile"),
+                "endorsement_id": a.get("id"),
+            })
+
+    # Search filter
+    if search:
+        s = search.lower()
+        active = [m for m in active if s in (m.get("member_name") or "").lower() or s in (m.get("employee_id") or "").lower() or s in (m.get("policy_number") or "").lower()]
+
+    return active
+
+
 # ==================== RATER ENDPOINTS ====================
 
 @api_router.post("/raters")
