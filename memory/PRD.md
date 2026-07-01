@@ -145,6 +145,15 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Batch submit**: All members submitted as individual endorsements under the same Employee ID. Success shows count of submitted members.
 - **Family Premium Summary**: Shows total premium across all members with pro-rata calculation preview
 
+### Employee Directory (DONE - Jul 2026)
+- **Active Members View**: Shows all active employees/dependents derived from approved Addition endorsements minus approved Deletions. Searchable by name or employee ID, filterable by policy.
+- **HR Isolation**: HR users see only members from their assigned policies. Admin sees all.
+- **Stats Badges**: Total active members, employees, dependents counts. Shows "X of Y" when filtered.
+- **View Details**: Eye icon opens dialog with full member details (Employee ID, DOB, Age, Gender, Rate, Sum Insured, Coverage, DOJ, Email, Mobile)
+- **Initiate Deletion**: Delete icon navigates to Submit Endorsement with ALL fields auto-populated (Policy, Endorsement Type=Deletion, Member Name, Relationship, DOB, Age, Gender, Rate, etc.) using synchronous sessionStorage pre-fill for reliable Select component rendering.
+- **Sidebar**: Under "Endorsements" for HR, under "Operations" for Admin
+- **Endpoint**: GET /api/employee-directory with optional search and policy_number filters
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
