@@ -180,6 +180,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **UI Info Box**: Green "Rate Card Auto-Fill" info box on Import page explaining the auto-fill behavior
 - **Updated Format Guide**: Now lists Kids1, Kids2 as valid relationship types, notes Employee ID links family members
 
+### Admin Edit Premium on Approved Endorsements (DONE - Jul 2026)
+- **Feature**: Admin can now edit annual premium, per-life premium, and prorated premium on approved endorsements (previously edit was restricted to pending only)
+- **Fields Added**: Per Life Premium (₹), Annual Premium / Life (₹), Prorated Premium (₹) in the Edit Endorsement dialog
+- **Smart Recalculation**: Prorata auto-recalcs only when endorsement date/type actually changes AND user didn't explicitly provide prorata value. User-supplied prorata is always preserved.
+- **HR Restriction**: HR users still cannot edit approved endorsements (403)
+
 ## Remaining Backlog
 
 ### Security Audit & Fixes (DONE - Jul 2026)
