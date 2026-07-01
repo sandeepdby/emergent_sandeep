@@ -4019,6 +4019,71 @@ async def get_employee_directory(
     return active
 
 
+@api_router.get("/employee-directory/history")
+async def get_employee_history(
+    employee_id: Optional[str] = None,
+    member_name: Optional[str] = None,
+    policy_number: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """Get full endorsement history for an employee/member. Supports lookup by employee_id or member_name+policy."""
+    if not employee_id and not member_name:
+        raise HTTPException(status_code=400, detail="Provide employee_id or member_name")
+
+    query = {}
+    if current_user.role == UserRole.HR:
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        query["policy_number"] = {"$in": assigned}
+
+    if employee_id:
+        query["employee_id"] = employee_id
+    if member_name:
+        query["member_name"] = member_name
+    if policy_number:
+        query["policy_number"] = policy_number
+
+    events = await db.endorsements.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
+
+    # Enrich with approver names
+    approver_ids = list(set(e.get("approved_by") for e in events if e.get("approved_by")))
+    submitter_ids = list(set(e.get("submitted_by") for e in events if e.get("submitted_by")))
+    all_ids = list(set(approver_ids + submitter_ids))
+    user_map = {}
+    if all_ids:
+        users = await db.users.find({"id": {"$in": all_ids}}, {"_id": 0, "id": 1, "full_name": 1}).to_list(500)
+        user_map = {u["id"]: u["full_name"] for u in users}
+
+    result = []
+    for e in events:
+        result.append({
+            "id": e.get("id"),
+            "endorsement_type": e.get("endorsement_type"),
+            "status": e.get("status"),
+            "member_name": e.get("member_name"),
+            "relationship_type": e.get("relationship_type"),
+            "policy_number": e.get("policy_number"),
+            "employee_id": e.get("employee_id"),
+            "dob": e.get("dob"),
+            "age": e.get("age"),
+            "gender": e.get("gender"),
+            "per_life_premium": e.get("per_life_premium"),
+            "prorata_premium": e.get("prorata_premium"),
+            "sum_insured": e.get("sum_insured"),
+            "endorsement_date": e.get("endorsement_date"),
+            "date_of_joining": e.get("date_of_joining"),
+            "date_of_leaving": e.get("date_of_leaving"),
+            "remarks": e.get("remarks"),
+            "created_at": e.get("created_at").isoformat() if hasattr(e.get("created_at", ""), "isoformat") else str(e.get("created_at", "")),
+            "submitted_by_name": user_map.get(e.get("submitted_by"), "Unknown"),
+            "approved_by_name": user_map.get(e.get("approved_by"), "—") if e.get("approved_by") else None,
+            "approval_date": e.get("approval_date"),
+        })
+
+    return result
+
+
 # ==================== RATER ENDPOINTS ====================
 
 @api_router.post("/raters")
