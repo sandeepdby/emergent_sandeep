@@ -151,9 +151,10 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
   };
 
   // Stats
-  const totalMembers = filtered.length;
-  const employeeCount = filtered.filter(m => m.relationship_type === "Employee").length;
-  const dependentCount = totalMembers - employeeCount;
+  const totalMembers = members.length;
+  const totalEmployees = members.filter(m => m.relationship_type === "Employee").length;
+  const totalDependents = totalMembers - totalEmployees;
+  const filteredCount = filtered.length;
 
   if (loading) return <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" /></div>;
 
@@ -171,9 +172,9 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
 
       {/* Stats bar */}
       <div className="flex items-center gap-4 flex-wrap">
-        <Badge variant="outline" className="text-xs py-1 px-3"><Users className="w-3.5 h-3.5 mr-1" />{totalMembers} Active Members</Badge>
-        <Badge className="bg-blue-50 text-blue-700 text-xs py-1 px-3">{employeeCount} Employees</Badge>
-        <Badge className="bg-pink-50 text-pink-700 text-xs py-1 px-3">{dependentCount} Dependents</Badge>
+        <Badge variant="outline" className="text-xs py-1 px-3"><Users className="w-3.5 h-3.5 mr-1" />{filteredCount === totalMembers ? `${totalMembers} Active Members` : `${filteredCount} of ${totalMembers} Active Members`}</Badge>
+        <Badge className="bg-blue-50 text-blue-700 text-xs py-1 px-3">{totalEmployees} Employees</Badge>
+        <Badge className="bg-pink-50 text-pink-700 text-xs py-1 px-3">{totalDependents} Dependents</Badge>
       </div>
 
       {/* Search & Filter */}

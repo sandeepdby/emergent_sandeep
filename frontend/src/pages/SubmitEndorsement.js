@@ -202,14 +202,42 @@ export default function SubmitEndorsement() {
   const [aiWhatsappMessage, setAiWhatsappMessage] = useState("");
   const [generatingAI, setGeneratingAI] = useState(false);
   const [rateAutoFilled, setRateAutoFilled] = useState(false);
+  const [prefillApplied, setPrefillApplied] = useState(false);
 
-  // --- Single mode state ---
-  const [formData, setFormData] = useState({
-    policy_number: "", family_definition: "", employee_id: "", member_name: "",
-    dob: "", age: "", gender: "", relationship_type: "", endorsement_type: "",
-    date_of_joining: "", date_of_leaving: "", coverage_type: "", sum_insured: "",
-    per_life_premium: "", endorsement_date: new Date().toISOString().split('T')[0],
-    effective_date: "", employee_email: "", employee_mobile: "", remarks: ""
+  // --- Single mode state (initialize synchronously from sessionStorage for Select pre-fill) ---
+  const [formData, setFormData] = useState(() => {
+    const base = {
+      policy_number: "", family_definition: "", employee_id: "", member_name: "",
+      dob: "", age: "", gender: "", relationship_type: "", endorsement_type: "",
+      date_of_joining: "", date_of_leaving: "", coverage_type: "", sum_insured: "",
+      per_life_premium: "", endorsement_date: new Date().toISOString().split('T')[0],
+      effective_date: "", employee_email: "", employee_mobile: "", remarks: ""
+    };
+    const prefill = sessionStorage.getItem("deletion_prefill");
+    if (prefill) {
+      try {
+        const d = JSON.parse(prefill);
+        sessionStorage.removeItem("deletion_prefill");
+        return {
+          ...base,
+          policy_number: d.policy_number || "",
+          endorsement_type: d.endorsement_type || "Deletion",
+          employee_id: d.employee_id || "",
+          member_name: d.member_name || "",
+          relationship_type: d.relationship_type || "",
+          dob: d.dob || "",
+          age: d.age || "",
+          gender: d.gender || "",
+          per_life_premium: d.per_life_premium || "",
+          sum_insured: d.sum_insured || "",
+          coverage_type: d.coverage_type || "",
+          employee_email: d.employee_email || "",
+          employee_mobile: d.employee_mobile || "",
+          _prefilled: true,
+        };
+      } catch { sessionStorage.removeItem("deletion_prefill"); }
+    }
+    return base;
   });
 
   // --- Family mode state ---
@@ -229,33 +257,14 @@ export default function SubmitEndorsement() {
     axios.get(`${API}/users/admins`, { headers: h }).then(r => setAdminUsers(r.data)).catch(() => {});
     axios.get(`${API}/raters`, { headers: h }).then(r => setRaters(r.data)).catch(() => {});
 
-    // Check for deletion pre-fill from Employee Directory
-    const prefill = sessionStorage.getItem("deletion_prefill");
-    if (prefill) {
-      try {
-        const data = JSON.parse(prefill);
-        setMode("single");
-        setFormData(prev => ({
-          ...prev,
-          policy_number: data.policy_number || "",
-          endorsement_type: data.endorsement_type || "Deletion",
-          employee_id: data.employee_id || "",
-          member_name: data.member_name || "",
-          relationship_type: data.relationship_type || "",
-          dob: data.dob || "",
-          age: data.age || "",
-          gender: data.gender || "",
-          per_life_premium: data.per_life_premium || "",
-          sum_insured: data.sum_insured || "",
-          coverage_type: data.coverage_type || "",
-          employee_email: data.employee_email || "",
-          employee_mobile: data.employee_mobile || "",
-        }));
-        sessionStorage.removeItem("deletion_prefill");
-        toast.info(`Deletion form pre-filled for ${data.member_name}`);
-      } catch { sessionStorage.removeItem("deletion_prefill"); }
+    // Show toast if deletion pre-fill was applied
+    if (formData._prefilled && !prefillApplied) {
+      setPrefillApplied(true);
+      toast.info(`Deletion form pre-filled for ${formData.member_name}`);
+      // Clean up the _prefilled flag
+      setFormData(prev => { const { _prefilled, ...rest } = prev; return rest; });
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Shared derived state ---
   const singlePolicy = useMemo(() => policies.find(p => p.policy_number === formData.policy_number), [policies, formData.policy_number]);
