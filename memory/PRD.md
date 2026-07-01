@@ -115,7 +115,13 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Root Cause**: 6 backend endpoints used `submitted_by` filter for HR users instead of `policy_number` based on policy assignments. This meant HR users only saw endorsements they personally submitted (often 0), not endorsements for their assigned policies.
 - **Endpoints Fixed**: `GET /api/dashboard/analytics`, `GET /api/endorsements`, `GET /api/endorsements/import-batches`, `GET /api/endorsements/batch/{batch_id}`, `GET /api/endorsements/batch/{batch_id}/download`, `GET /api/endorsements/stats/summary`
 - **Result**: HR users now correctly see all endorsement data (premium charges, refunds, net premium impact, counts) for policies assigned to them. Admin view unaffected.
-- **Verified metrics**: Premium Charges, Refunds, Net Premium Impact, Total Policies Premium (FY-filtered), Total Endorsement Premium, Claims Ratio all displaying correctly on both HR and Admin dashboards.
+
+### Financial Summary PDF Export (DONE - Jul 2026)
+- **Endpoint**: `POST /api/financial-summary/export?send_email_flag=<bool>` — accessible by both HR and Admin
+- **PDF Contents**: Policy breakdown table (FY-filtered), endorsement premium impact (charges, refunds, net), claims summary (total, incurred, paid, ratio, trend), endorsement status distribution, endorsement type breakdown, monthly endorsement trend
+- **HR Isolation**: PDF only includes data for HR user's assigned policies
+- **Email**: When send_email_flag=true, PDF is emailed to the logged-in user as attachment via SMTP
+- **Frontend**: "Export FY Report" button on both HR Dashboard (HRSummary.js) and Admin Analytics Dashboard (AnalyticsDashboard.js)
 
 ## Remaining Backlog
 
