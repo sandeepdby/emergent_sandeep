@@ -162,11 +162,53 @@ function FamilyMemberCard({ member }) {
 }
 
 /* Sub-component: Family Group dialog */
-function FamilyGroupDialog({ open, onClose, employee, familyMembers }) {
+function FamilyGroupDialog({ open, onClose, employee, familyMembers, onFamilyDeleted }) {
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteResults, setDeleteResults] = useState(null);
+
+  // Reset state when dialog opens/closes
+  useEffect(() => {
+    if (!open) { setConfirmDelete(false); setDeleteResults(null); }
+  }, [open]);
+
   if (!employee) return null;
   const totalPremium = familyMembers.reduce((s, m) => s + (m.per_life_premium || 0), 0);
   const empMember = familyMembers.find(m => m.relationship_type === "Employee");
   const dependents = familyMembers.filter(m => m.relationship_type !== "Employee");
+
+  const handleFamilyDelete = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    let ok = 0, fail = 0;
+    const token = localStorage.getItem("token");
+    const endDate = new Date().toISOString().split("T")[0];
+    for (const m of familyMembers) {
+      try {
+        await axios.post(`${API}/endorsements`, {
+          policy_number: m.policy_number, endorsement_type: "Deletion",
+          employee_id: m.employee_id || null, member_name: m.member_name,
+          relationship_type: m.relationship_type, dob: m.dob || null,
+          age: m.age || null, gender: m.gender || null,
+          per_life_premium: m.per_life_premium || null,
+          sum_insured: m.sum_insured ? parseFloat(m.sum_insured) : null,
+          coverage_type: m.coverage_type || null,
+          endorsement_date: endDate, employee_email: m.employee_email || null,
+          employee_mobile: m.employee_mobile || null,
+          remarks: `Family exit — bulk deletion for ${employee.employee_id || employee.member_name}`,
+        }, { headers: { Authorization: `Bearer ${token}` } });
+        ok++;
+      } catch { fail++; }
+    }
+    setDeleting(false);
+    setDeleteResults({ ok, fail });
+    if (ok > 0) {
+      toast.success(`Family deletion: ${ok} member${ok > 1 ? "s" : ""} submitted for deletion${fail > 0 ? `, ${fail} failed` : ""}`);
+      if (onFamilyDeleted) onFamilyDeleted();
+    } else {
+      toast.error("All deletion submissions failed");
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -203,7 +245,35 @@ function FamilyGroupDialog({ open, onClose, employee, familyMembers }) {
           <p className="text-center text-xs text-stone-400 py-2">No other family members found with this Employee ID.</p>
         )}
 
-        <DialogFooter><Button variant="outline" onClick={onClose}>Close</Button></DialogFooter>
+        {/* Delete results banner */}
+        {deleteResults && (
+          <div className={`rounded-lg p-3 text-sm font-medium ${deleteResults.ok > 0 ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`} data-testid="family-delete-result">
+            {deleteResults.ok > 0
+              ? `${deleteResults.ok} deletion endorsement${deleteResults.ok > 1 ? "s" : ""} submitted for admin approval${deleteResults.fail > 0 ? ` (${deleteResults.fail} failed)` : ""}.`
+              : "All submissions failed. Please try again."}
+          </div>
+        )}
+
+        {/* Confirm delete warning */}
+        {confirmDelete && !deleteResults && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 space-y-1" data-testid="family-delete-confirm">
+            <p className="text-sm font-semibold text-red-700">Are you sure?</p>
+            <p className="text-xs text-red-600">This will submit <strong>{familyMembers.length} deletion endorsement{familyMembers.length > 1 ? "s" : ""}</strong> for the entire family. Each will need admin approval before taking effect.</p>
+          </div>
+        )}
+
+        <DialogFooter className="flex-col sm:flex-row gap-2">
+          {!deleteResults && familyMembers.length > 0 && (
+            <Button
+              variant="destructive" onClick={handleFamilyDelete} disabled={deleting}
+              className="gap-1.5 mr-auto" data-testid="family-delete-btn"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+              {deleting ? "Submitting..." : confirmDelete ? `Confirm Delete ${familyMembers.length} Members` : `Delete Entire Family (${familyMembers.length})`}
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose}>{deleteResults ? "Done" : "Close"}</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -399,7 +469,7 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
 
       <MemberViewDialog open={viewOpen} onClose={() => { setViewOpen(false); setViewMember(null); }} member={viewMember} />
       <HistoryDialog open={historyOpen} onClose={() => { setHistoryOpen(false); setHistoryMember(null); setHistoryEvents([]); }} member={historyMember} events={historyEvents} loading={historyLoading} />
-      <FamilyGroupDialog open={familyOpen} onClose={() => { setFamilyOpen(false); setFamilyEmployee(null); setFamilyGroup([]); }} employee={familyEmployee} familyMembers={familyGroup} />
+      <FamilyGroupDialog open={familyOpen} onClose={() => { setFamilyOpen(false); setFamilyEmployee(null); setFamilyGroup([]); }} employee={familyEmployee} familyMembers={familyGroup} onFamilyDeleted={fetchMembers} />
     </div>
   );
 }

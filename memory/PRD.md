@@ -168,6 +168,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Edge Cases**: Members without employee_id show just themselves. Solo employees show "No other family members found" message
 - **Client-side grouping**: No extra API needed — groups from already-loaded directory data by employee_id + policy_number
 
+### Family Deletion (DONE - Jul 2026)
+- **Feature**: Red "Delete Entire Family (N)" button inside the Family Group dialog. Two-click safety: first click shows confirmation warning ("This will submit N deletion endorsements for the entire family. Each will need admin approval."), second click submits all.
+- **Batch Deletion**: Submits individual Deletion endorsements for each family member via POST /api/endorsements, with remarks "Family exit — bulk deletion for {employee_id}". All need admin approval.
+- **Success/Error Feedback**: Green result banner shows count of submitted deletions. Refreshes directory data after completion.
+- **State Reset**: Confirmation state resets when dialog closes/reopens.
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
