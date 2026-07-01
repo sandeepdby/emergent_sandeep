@@ -169,10 +169,16 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Client-side grouping**: No extra API needed — groups from already-loaded directory data by employee_id + policy_number
 
 ### Family Deletion (DONE - Jul 2026)
-- **Feature**: Red "Delete Entire Family (N)" button inside the Family Group dialog. Two-click safety: first click shows confirmation warning ("This will submit N deletion endorsements for the entire family. Each will need admin approval."), second click submits all.
-- **Batch Deletion**: Submits individual Deletion endorsements for each family member via POST /api/endorsements, with remarks "Family exit — bulk deletion for {employee_id}". All need admin approval.
-- **Success/Error Feedback**: Green result banner shows count of submitted deletions. Refreshes directory data after completion.
-- **State Reset**: Confirmation state resets when dialog closes/reopens.
+- **Feature**: Red "Delete Entire Family (N)" button inside the Family Group dialog. Two-click safety: first click shows confirmation warning, second click submits all.
+- **Batch Deletion**: Submits individual Deletion endorsements for each family member, with remarks "Family exit — bulk deletion". All need admin approval.
+- **Success/Error Feedback**: Green result banner shows count. Refreshes directory after completion.
+
+### Bulk Family Import Enhancement (DONE - Jul 2026)
+- **Family Import Template**: New dedicated template (GET /api/endorsements/template/family) with 3 sheets: Family Import (7 sample rows with full ESKP family), Instructions, and Tips. Pink "Family Import Template" button on Import page.
+- **Rate Card Auto-Fill**: During Excel import, if Per Life Premium column is blank, system auto-looks up the rate from the assigned Rate Card based on member's age. Explicit values in Excel override the rate card.
+- **Priority Chain**: Excel per_life_premium → Rate Card band lookup by age → policy.annual_premium_per_life fallback
+- **UI Info Box**: Green "Rate Card Auto-Fill" info box on Import page explaining the auto-fill behavior
+- **Updated Format Guide**: Now lists Kids1, Kids2 as valid relationship types, notes Employee ID links family members
 
 ## Remaining Backlog
 
