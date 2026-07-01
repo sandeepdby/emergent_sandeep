@@ -111,10 +111,16 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - documents, testimonials, career_applications, contact_leads
 - cd_ledger, audit_log, import_batches, email_settings
 
+### Bug Fix - Dashboard Metrics (DONE - Jul 2026)
+- **Root Cause**: 6 backend endpoints used `submitted_by` filter for HR users instead of `policy_number` based on policy assignments. This meant HR users only saw endorsements they personally submitted (often 0), not endorsements for their assigned policies.
+- **Endpoints Fixed**: `GET /api/dashboard/analytics`, `GET /api/endorsements`, `GET /api/endorsements/import-batches`, `GET /api/endorsements/batch/{batch_id}`, `GET /api/endorsements/batch/{batch_id}/download`, `GET /api/endorsements/stats/summary`
+- **Result**: HR users now correctly see all endorsement data (premium charges, refunds, net premium impact, counts) for policies assigned to them. Admin view unaffected.
+- **Verified metrics**: Premium Charges, Refunds, Net Premium Impact, Total Policies Premium (FY-filtered), Total Endorsement Premium, Claims Ratio all displaying correctly on both HR and Admin dashboards.
+
 ## Remaining Backlog
 
 ### P0 - Critical Tech Debt
-- Backend modularization: server.py (~4000+ lines) needs splitting into /routes, /models, /services
+- Backend modularization: server.py (~5500+ lines) needs splitting into /routes, /models, /services
 
 ### P1 - Upcoming
 - Twilio SMS notifications for user workflows
