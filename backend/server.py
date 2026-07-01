@@ -2002,9 +2002,12 @@ async def get_endorsements(
     """Get all endorsements with optional filters"""
     query = {}
     
-    # HR users can only see their own submissions
+    # HR users see endorsements for their assigned policies
     if current_user.role == UserRole.HR:
-        query["submitted_by"] = current_user.id
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        query["policy_number"] = {"$in": assigned}
     
     if policy_number:
         query["policy_number"] = policy_number
@@ -2139,10 +2142,13 @@ async def preview_excel_import(
 # ==================== IMPORT BATCHES ENDPOINT ====================
 @api_router.get("/endorsements/import-batches")
 async def get_import_batches(current_user: User = Depends(get_current_user)):
-    """Get list of import batches - HR sees only their own, Admin sees all"""
+    """Get list of import batches - HR sees only their assigned policies, Admin sees all"""
     match_filter = {"import_batch_id": {"$exists": True, "$ne": None}}
     if current_user.role == UserRole.HR:
-        match_filter["submitted_by"] = current_user.id
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return []
+        match_filter["policy_number"] = {"$in": assigned}
     
     pipeline = [
         {"$match": match_filter},
@@ -2201,7 +2207,10 @@ async def download_batch_excel(batch_id: str, current_user: User = Depends(get_c
     """Download all endorsements from a batch as Excel"""
     query = {"import_batch_id": batch_id}
     if current_user.role == UserRole.HR:
-        query["submitted_by"] = current_user.id
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            raise HTTPException(status_code=404, detail="No assigned policies found")
+        query["policy_number"] = {"$in": assigned}
     endorsements = await db.endorsements.find(
         query, {"_id": 0}
     ).to_list(10000)
@@ -3015,7 +3024,10 @@ async def get_endorsements_summary(current_user: User = Depends(get_current_user
     """Get summary statistics for endorsements"""
     query = {}
     if current_user.role == UserRole.HR:
-        query["submitted_by"] = current_user.id
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return {"total": 0, "pending": 0, "approved": 0, "rejected": 0, "total_policies": 0, "by_relationship": []}
+        query["policy_number"] = {"$in": assigned}
     
     total_endorsements = await db.endorsements.count_documents(query)
     pending = await db.endorsements.count_documents({**query, "status": EndorsementStatus.PENDING.value})
@@ -3313,7 +3325,15 @@ async def get_dashboard_analytics(current_user: User = Depends(get_current_user)
     """Get comprehensive dashboard analytics for charts"""
     query = {}
     if current_user.role == UserRole.HR:
-        query["submitted_by"] = current_user.id
+        assigned = await get_hr_assigned_policy_numbers(current_user.id)
+        if not assigned:
+            return {
+                "status_distribution": {"total": 0, "pending": 0, "approved": 0, "rejected": 0},
+                "by_endorsement_type": [], "by_relationship_type": [], "by_policy": [],
+                "monthly_trend": [],
+                "premium_summary": {"total_charge": 0, "total_refund": 0, "net_premium": 0}
+            }
+        query["policy_number"] = {"$in": assigned}
     
     # Basic stats
     total = await db.endorsements.count_documents(query)
