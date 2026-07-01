@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu, Table2 } from "lucide-react";
 import { AuthContext } from "../auth";
 import UserProfileMenu from "./UserProfileMenu";
 import ApproveEndorsements from "./ApproveEndorsements";
@@ -18,6 +18,7 @@ import AuditLog from "./AuditLog";
 import PolicyAssignment from "./PolicyAssignment";
 import TestimonialsManagement from "./TestimonialsManagement";
 import PolicyExplainer from "./PolicyExplainer";
+import Raters from "./Raters";
 
 const navGroups = [
   {
@@ -48,6 +49,7 @@ const navGroups = [
     label: "Finance",
     items: [
       { path: "/admin/cd-ledger", label: "CD Ledger", icon: Wallet },
+      { path: "/admin/raters", label: "Rate Cards", icon: Table2 },
     ],
   },
   {
@@ -181,6 +183,7 @@ class AdminDashboard extends React.Component {
               <Route path="/policy-assign" element={<PolicyAssignment />} />
               <Route path="/claims" element={<ClaimsManagement />} />
               <Route path="/cd-ledger" element={<CDLedger />} />
+              <Route path="/raters" element={<Raters isAdmin={true} />} />
               <Route path="/download" element={<DownloadApproved />} />
               <Route path="/email" element={<EmailSettings />} />
               <Route path="/storage" element={<CloudStorage />} />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck, Wallet, BookOpen, ChevronLeft, ChevronRight, Menu } from "lucide-react";
+import { FileSpreadsheet, ClipboardList, Plus, CloudUpload, LayoutDashboard, Shield, FileCheck, Wallet, BookOpen, ChevronLeft, ChevronRight, Menu, BarChart3 } from "lucide-react";
 import { AuthContext, API, getAuthHeaders } from "../auth";
 import axios from "axios";
 import UserProfileMenu from "./UserProfileMenu";
@@ -13,6 +13,7 @@ import HRPoliciesDashboard from "./HRPoliciesDashboard";
 import HRClaimsDashboard from "./HRClaimsDashboard";
 import CDLedger from "./CDLedger";
 import PolicyExplainer from "./PolicyExplainer";
+import Raters from "./Raters";
 
 const getNavGroups = (hasPolicyTC) => [
   {
@@ -41,6 +42,7 @@ const getNavGroups = (hasPolicyTC) => [
     label: "Finance & Storage",
     items: [
       { path: "/hr/cd-ledger", label: "CD Ledger", icon: Wallet },
+      { path: "/hr/raters", label: "Rate Cards", icon: BarChart3 },
       { path: "/hr/storage", label: "Cloud Storage", icon: CloudUpload },
     ],
   },
@@ -171,6 +173,7 @@ class HRDashboard extends React.Component {
               <Route path="/my-endorsements" element={<MyEndorsements />} />
               <Route path="/import" element={<ImportEndorsements />} />
               <Route path="/cd-ledger" element={<CDLedger />} />
+              <Route path="/raters" element={<Raters isAdmin={false} />} />
               <Route path="/policy-explainer" element={<PolicyExplainer isAdmin={false} />} />
               <Route path="/storage" element={<CloudStorage />} />
               <Route path="/" element={<Navigate to="/hr/dashboard" />} />

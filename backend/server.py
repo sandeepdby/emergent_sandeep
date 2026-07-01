@@ -389,6 +389,25 @@ class PolicyAssignmentCreate(BaseModel):
     hr_user_id: str
 
 
+# Rater Models
+class AgeBand(BaseModel):
+    min_age: int
+    max_age: int
+    per_life_rate: float
+
+class RaterCreate(BaseModel):
+    name: str
+    policy_number: str
+    age_bands: List[AgeBand]
+    assigned_hr_users: List[str] = []  # list of user IDs
+
+class RaterUpdate(BaseModel):
+    name: Optional[str] = None
+    policy_number: Optional[str] = None
+    age_bands: Optional[List[AgeBand]] = None
+    assigned_hr_users: Optional[List[str]] = None
+
+
 class PolicyAssignment(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -3926,6 +3945,191 @@ async def update_cd_ledger_entry(
     await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "cd_ledger", entry_id, f"Updated CD ledger entry: {update.reference}")
     result = await db.cd_ledger.find_one({"id": entry_id}, {"_id": 0})
     return result
+
+
+# ==================== RATER ENDPOINTS ====================
+
+@api_router.post("/raters")
+async def create_rater(rater: RaterCreate, current_user: User = Depends(get_current_user)):
+    """Create a new rater (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can create raters")
+
+    policy = await db.policies.find_one({"policy_number": rater.policy_number}, {"_id": 0})
+    if not policy:
+        raise HTTPException(status_code=404, detail=f"Policy {rater.policy_number} not found")
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": rater.name,
+        "policy_number": rater.policy_number,
+        "policy_type": policy.get("policy_type", ""),
+        "insurer_name": policy.get("insurer_name") or policy.get("insurance_company") or "",
+        "age_bands": [ab.model_dump() for ab in rater.age_bands],
+        "assigned_hr_users": rater.assigned_hr_users,
+        "created_by": current_user.id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.raters.insert_one(doc)
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "rater", doc["id"], f"Created rater: {rater.name} for policy {rater.policy_number}")
+    result = await db.raters.find_one({"id": doc["id"]}, {"_id": 0})
+    return result
+
+
+@api_router.get("/raters")
+async def get_raters(
+    policy_number: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+):
+    """List raters. Admin: all. HR: only those assigned to them."""
+    query = {}
+    if current_user.role == UserRole.HR:
+        query["assigned_hr_users"] = current_user.id
+    if policy_number:
+        query["policy_number"] = policy_number
+
+    raters = await db.raters.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+    # Enrich with HR user names for admin view
+    if current_user.role == UserRole.ADMIN:
+        all_hr_ids = list(set(uid for r in raters for uid in r.get("assigned_hr_users", [])))
+        if all_hr_ids:
+            hr_users = await db.users.find({"id": {"$in": all_hr_ids}}, {"_id": 0, "id": 1, "full_name": 1, "username": 1}).to_list(500)
+            hr_map = {u["id"]: u.get("full_name") or u.get("username") for u in hr_users}
+            for r in raters:
+                r["assigned_hr_names"] = [hr_map.get(uid, "Unknown") for uid in r.get("assigned_hr_users", [])]
+
+    return raters
+
+
+@api_router.get("/raters/{rater_id}")
+async def get_rater(rater_id: str, current_user: User = Depends(get_current_user)):
+    """Get a single rater"""
+    rater = await db.raters.find_one({"id": rater_id}, {"_id": 0})
+    if not rater:
+        raise HTTPException(status_code=404, detail="Rater not found")
+    if current_user.role == UserRole.HR and current_user.id not in rater.get("assigned_hr_users", []):
+        raise HTTPException(status_code=403, detail="Not authorized to view this rater")
+    return rater
+
+
+@api_router.put("/raters/{rater_id}")
+async def update_rater(rater_id: str, update: RaterUpdate, current_user: User = Depends(get_current_user)):
+    """Update a rater (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can update raters")
+
+    existing = await db.raters.find_one({"id": rater_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rater not found")
+
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if "age_bands" in update_data:
+        update_data["age_bands"] = [ab if isinstance(ab, dict) else ab.model_dump() for ab in update_data["age_bands"]]
+
+    # If policy_number changed, update policy metadata
+    if "policy_number" in update_data:
+        policy = await db.policies.find_one({"policy_number": update_data["policy_number"]}, {"_id": 0})
+        if not policy:
+            raise HTTPException(status_code=404, detail=f"Policy {update_data['policy_number']} not found")
+        update_data["policy_type"] = policy.get("policy_type", "")
+        update_data["insurer_name"] = policy.get("insurer_name") or policy.get("insurance_company") or ""
+
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.raters.update_one({"id": rater_id}, {"$set": update_data})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "UPDATE", "rater", rater_id, f"Updated rater: {existing.get('name')}")
+    result = await db.raters.find_one({"id": rater_id}, {"_id": 0})
+    return result
+
+
+@api_router.delete("/raters/{rater_id}")
+async def delete_rater(rater_id: str, current_user: User = Depends(get_current_user)):
+    """Delete a rater (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete raters")
+
+    existing = await db.raters.find_one({"id": rater_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rater not found")
+
+    await db.raters.delete_one({"id": rater_id})
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "DELETE", "rater", rater_id, f"Deleted rater: {existing.get('name')}")
+    return {"message": "Rater deleted successfully"}
+
+
+@api_router.get("/raters/{rater_id}/download")
+async def download_rater(
+    rater_id: str,
+    format: str = "xlsx",
+    current_user: User = Depends(get_current_user),
+):
+    """Download rater as Excel or PDF"""
+    rater = await db.raters.find_one({"id": rater_id}, {"_id": 0})
+    if not rater:
+        raise HTTPException(status_code=404, detail="Rater not found")
+    if current_user.role == UserRole.HR and current_user.id not in rater.get("assigned_hr_users", []):
+        raise HTTPException(status_code=403, detail="Not authorized to download this rater")
+
+    age_bands = rater.get("age_bands", [])
+    rater_name = rater.get("name", "Rater")
+    policy_num = rater.get("policy_number", "")
+    safe_name = rater_name.replace(" ", "_")
+
+    if format == "pdf":
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40, bottomMargin=40)
+        elements = []
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle('RaterTitle', parent=styles['Heading1'], fontSize=18, spaceAfter=4, alignment=1, textColor=colors.HexColor('#1e293b'))
+        sub_style = ParagraphStyle('RaterSub', parent=styles['Normal'], fontSize=10, alignment=1, textColor=colors.HexColor('#64748b'), spaceAfter=20)
+
+        elements.append(Paragraph(f"Rate Card — {rater_name}", title_style))
+        elements.append(Paragraph(f"Policy: {policy_num} &nbsp;|&nbsp; Type: {rater.get('policy_type', '')} &nbsp;|&nbsp; Insurer: {rater.get('insurer_name', '')}", sub_style))
+
+        data = [["#", "Age Range", "Per Life Rate (₹)"]]
+        for i, ab in enumerate(age_bands, 1):
+            data.append([str(i), f"{ab['min_age']} – {ab['max_age']}", f"₹{ab['per_life_rate']:,.2f}"])
+
+        t = Table(data, colWidths=[0.6*inch, 2.5*inch, 2.5*inch])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('ALIGN', (0, 0), (0, -1), 'CENTER'),
+            ('ALIGN', (2, 0), (2, -1), 'RIGHT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e1')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(t)
+        elements.append(Spacer(1, 20))
+        note = ParagraphStyle('RaterNote', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#94a3b8'), alignment=1)
+        elements.append(Paragraph(f"Generated on {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')} — InsureHub, Aarogya Assist", note))
+        doc.build(elements)
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{safe_name}_RateCard.pdf"'})
+
+    else:  # xlsx
+        df = pd.DataFrame([{
+            "Age From": ab["min_age"],
+            "Age To": ab["max_age"],
+            "Per Life Rate (₹)": ab["per_life_rate"],
+        } for ab in age_bands])
+
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Rate Card")
+            ws = writer.sheets["Rate Card"]
+            ws.insert_rows(1, 3)
+            ws.cell(row=1, column=1, value=f"Rate Card: {rater_name}")
+            ws.cell(row=2, column=1, value=f"Policy: {policy_num}  |  Type: {rater.get('policy_type', '')}  |  Insurer: {rater.get('insurer_name', '')}")
+            for col in range(1, 4):
+                ws.column_dimensions[ws.cell(row=4, column=col).column_letter].width = 20
+        buffer.seek(0)
+        return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f'attachment; filename="{safe_name}_RateCard.xlsx"'})
 
 
 # ==================== Claims Management Endpoints ====================
