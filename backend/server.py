@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query, Body
 from fastapi.responses import StreamingResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -3983,13 +3983,16 @@ async def export_financial_summary(
 @api_router.get("/cd-ledger")
 async def get_cd_ledger(
     policy_number: Optional[str] = None,
+    untagged: bool = False,
     current_user: User = Depends(get_current_user)
 ):
     """Get CD Ledger entries and running balance (HR sees only assigned policies)"""
     query = {}
 
-    # HR isolation: only show CD entries for assigned policies (case-insensitive)
-    if current_user.role == UserRole.HR:
+    # Handle untagged filter (admin only)
+    if untagged and current_user.role == UserRole.ADMIN:
+        query["$or"] = [{"policy_number": None}, {"policy_number": ""}, {"policy_number": {"$exists": False}}]
+    elif current_user.role == UserRole.HR:
         assignments = await db.policy_assignments.find(
             {"hr_user_id": current_user.id}, {"_id": 0, "policy_number": 1}
         ).to_list(1000)
@@ -4260,6 +4263,32 @@ async def import_cd_ledger(
         "error_count": error_count,
         "errors": errors[:20],
     }
+
+
+@api_router.post("/cd-ledger/bulk-tag")
+async def bulk_tag_cd_entries(
+    policy_number: str = Body(..., embed=True),
+    entry_ids: List[str] = Body(..., embed=True),
+    current_user: User = Depends(get_current_user),
+):
+    """Bulk-tag untagged CD entries with a policy_number (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can bulk-tag entries")
+
+    # Validate policy exists
+    policy = await db.policies.find_one({"policy_number": policy_number}, {"_id": 0})
+    if not policy:
+        raise HTTPException(status_code=404, detail=f"Policy {policy_number} not found")
+
+    result = await db.cd_ledger.update_many(
+        {"id": {"$in": entry_ids}},
+        {"$set": {"policy_number": policy_number}}
+    )
+
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "BULK_TAG", "cd_ledger", None,
+                    f"Tagged {result.modified_count} entries with policy {policy_number}")
+
+    return {"tagged_count": result.modified_count}
 
 
 # ==================== EMPLOYEE DIRECTORY ENDPOINTS ====================

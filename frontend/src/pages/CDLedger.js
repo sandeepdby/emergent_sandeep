@@ -35,6 +35,8 @@ export default function CDLedger() {
   const [importing, setImporting] = useState(false);
   const [totalDeposits, setTotalDeposits] = useState(0);
   const [totalDeductions, setTotalDeductions] = useState(0);
+  const [bulkTagPolicy, setBulkTagPolicy] = useState("");
+  const [bulkTagging, setBulkTagging] = useState(false);
   const importRef = React.useRef(null);
 
   const token = localStorage.getItem("token");
@@ -50,7 +52,13 @@ export default function CDLedger() {
   const fetchLedger = useCallback(async () => {
     try {
       let url = `${API}/cd-ledger`;
-      if (selectedPolicy && selectedPolicy !== "all") url += `?policy_number=${encodeURIComponent(selectedPolicy)}`;
+      if (selectedPolicy && selectedPolicy !== "all") {
+        if (selectedPolicy === "__untagged__") {
+          url += `?untagged=true`;
+        } else {
+          url += `?policy_number=${encodeURIComponent(selectedPolicy)}`;
+        }
+      }
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       setEntries(res.data.entries || []);
       setTotalBalance(res.data.total_balance || 0);
@@ -66,6 +74,7 @@ export default function CDLedger() {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (!formData.reference || !formData.amount) { toast.error("Reference and Amount are required"); return; }
+    if (!formData.policy_number) { toast.error("Policy selection is required"); return; }
     setAdding(true);
     try {
       await axios.post(`${API}/cd-ledger`, { ...formData, amount: parseFloat(formData.amount), policy_number: formData.policy_number || null }, { headers });
@@ -144,23 +153,53 @@ export default function CDLedger() {
     finally { setImporting(false); if (importRef.current) importRef.current.value = ""; }
   };
 
+  const handleBulkTag = async () => {
+    if (!bulkTagPolicy) { toast.error("Select a policy to tag entries"); return; }
+    const untaggedIds = entries.filter(e => !e.policy_number).map(e => e.id);
+    if (untaggedIds.length === 0) { toast.info("No untagged entries to tag"); return; }
+    setBulkTagging(true);
+    try {
+      const res = await axios.post(`${API}/cd-ledger/bulk-tag`, { policy_number: bulkTagPolicy, entry_ids: untaggedIds }, { headers });
+      toast.success(`Tagged ${res.data.tagged_count} entries with ${bulkTagPolicy}`);
+      setBulkTagPolicy("");
+      fetchLedger();
+    } catch (err) { toast.error(err.response?.data?.detail || "Bulk tag failed"); }
+    finally { setBulkTagging(false); }
+  };
+
   const fmtAmt = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
     <div className="space-y-6" data-testid="cd-ledger-page">
       {/* Policy Filter */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Label className="text-sm font-medium whitespace-nowrap">Filter by Policy:</Label>
           <Select value={selectedPolicy} onValueChange={setSelectedPolicy}>
             <SelectTrigger className="w-[260px]" data-testid="cd-policy-filter"><SelectValue placeholder="All Policies" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Policies</SelectItem>
+              {isAdmin && <SelectItem value="__untagged__">Untagged (No Policy)</SelectItem>}
               {policies.map((p) => <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
       </div>
+
+      {/* Bulk Tag Bar for untagged entries */}
+      {isAdmin && selectedPolicy === "__untagged__" && entries.length > 0 && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg p-3 flex-wrap" data-testid="bulk-tag-bar">
+          <span className="text-xs font-medium text-amber-800">{entries.length} untagged — assign to:</span>
+          <Select value={bulkTagPolicy} onValueChange={setBulkTagPolicy}>
+            <SelectTrigger className="w-[240px] h-8 text-xs" data-testid="bulk-tag-policy-select"><SelectValue placeholder="Select Policy" /></SelectTrigger>
+            <SelectContent>{policies.map((p) => <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name || ""}</SelectItem>)}</SelectContent>
+          </Select>
+          <Button size="sm" onClick={handleBulkTag} disabled={bulkTagging || !bulkTagPolicy} className="h-8 text-xs" data-testid="bulk-tag-btn">
+            {bulkTagging ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+            Tag All
+          </Button>
+        </div>
+      )}
 
       {/* Balance Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -220,10 +259,10 @@ export default function CDLedger() {
               <div className="space-y-1"><Label className="text-xs">Reference *</Label><Input placeholder="e.g. NEFT-123" value={formData.reference} onChange={(e) => setFormData({ ...formData, reference: e.target.value })} required data-testid="cd-reference-input" /></div>
               <div className="space-y-1"><Label className="text-xs">Description</Label><Input placeholder="Cash deposit" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} data-testid="cd-description-input" /></div>
               <div className="space-y-1">
-                <Label className="text-xs">Policy</Label>
-                <Select value={formData.policy_number || "none"} onValueChange={(v) => setFormData({ ...formData, policy_number: v === "none" ? "" : v })}>
-                  <SelectTrigger data-testid="cd-policy-select"><SelectValue placeholder="Select Policy" /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">No Policy</SelectItem>{policies.map((p) => <SelectItem key={p.id} value={p.policy_number}>{p.policy_number}</SelectItem>)}</SelectContent>
+                <Label className="text-xs">Policy *</Label>
+                <Select value={formData.policy_number || ""} onValueChange={(v) => setFormData({ ...formData, policy_number: v })} required>
+                  <SelectTrigger data-testid="cd-policy-select"><SelectValue placeholder="Select Policy *" /></SelectTrigger>
+                  <SelectContent>{policies.map((p) => <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name || ""}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1"><Label className="text-xs">Amount (₹) *</Label><Input type="number" step="0.01" placeholder="+5000 or -1000" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} required data-testid="cd-amount-input" /></div>
@@ -260,7 +299,7 @@ export default function CDLedger() {
                       <TableCell className="whitespace-nowrap text-xs">{entry.date}</TableCell>
                       <TableCell className="font-mono text-xs">{entry.reference}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-xs">{entry.description || "—"}</TableCell>
-                      <TableCell className="text-xs">{entry.policy_number || "—"}</TableCell>
+                      <TableCell className="text-xs">{entry.policy_number || <Badge variant="destructive" className="text-[9px]">Untagged</Badge>}</TableCell>
                       <TableCell>
                         <Badge variant={entry.entry_type === "Manual" ? "secondary" : entry.entry_type === "Refund Credit" ? "default" : "destructive"} className="text-[10px]">
                           {entry.entry_type}
