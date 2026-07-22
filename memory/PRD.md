@@ -195,8 +195,11 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Admin Only**: HR users get 403 on both template download and import
 
 ### CD Ledger Infographics Fix (DONE - Jul 2026)
-- **Root Cause**: Frontend used `entries.reduce()` to compute deposits/deductions client-side. When Excel-imported entries stored `amount` as string, JS `+` operator caused string concatenation → NaN/₹0 on summary cards while transaction table still displayed correctly.
-- **Fix**: Backend now coerces `amount` to `float()` during fetch and returns pre-computed `total_deposits`, `total_deductions` alongside `total_balance`. Frontend reads server values instead of recomputing. Works correctly across All Policies, per-policy filter, and HR isolation views.
+- **Root Cause**: Frontend calculated deposits/deductions client-side → broke with string amounts. Fix: backend returns pre-computed totals.
+- **Case-insensitive Policy Filter**: CD entries with different casing (e.g., "RELYON(SELF+5)" vs "Relyon(self+5)") now match via regex. Special chars handled via re.escape().
+- **Policy Tagging Required**: Add Entry form now requires policy selection. Import normalizes policy_number against canonical name from policies collection.
+- **Untagged Filter**: Admin has "Untagged (No Policy)" filter option to find orphaned entries. Red "Untagged" badge on entries without policy.
+- **Bulk Tag**: POST /api/cd-ledger/bulk-tag endpoint + UI bar to assign untagged entries to a policy in bulk.
 
 ## Remaining Backlog
 
