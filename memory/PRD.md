@@ -191,9 +191,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ### CD Ledger Excel Import (DONE - Jul 2026)
 - **Template Download**: GET /api/cd-ledger/template/download — Excel with sample entries and Instructions sheet
-- **Excel Import**: POST /api/cd-ledger/import — bulk-creates CD Ledger entries from Excel. Smart column normalization (handles date/ref/desc/amount/policy variations). Entries created with entry_type='Excel Import'.
-- **UI**: "Template" + "Import Excel" buttons on CD Ledger page (Admin only). Import shows success/error counts via toast.
-- **Admin Only**: HR users get 403 on both template download and import.
+- **Excel Import**: POST /api/cd-ledger/import — bulk-creates CD Ledger entries with smart column normalization
+- **Admin Only**: HR users get 403 on both template download and import
+
+### CD Ledger Infographics Fix (DONE - Jul 2026)
+- **Root Cause**: Frontend used `entries.reduce()` to compute deposits/deductions client-side. When Excel-imported entries stored `amount` as string, JS `+` operator caused string concatenation → NaN/₹0 on summary cards while transaction table still displayed correctly.
+- **Fix**: Backend now coerces `amount` to `float()` during fetch and returns pre-computed `total_deposits`, `total_deductions` alongside `total_balance`. Frontend reads server values instead of recomputing. Works correctly across All Policies, per-policy filter, and HR isolation views.
 
 ## Remaining Backlog
 
