@@ -4011,15 +4011,25 @@ async def get_cd_ledger(
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
     
-    # Calculate running balance
+    # Calculate running balance and totals — coerce amount to float for safety
     running_balance = 0
+    total_deposits = 0
+    total_deductions = 0
     for entry in entries:
-        running_balance += entry.get("amount", 0)
+        amt = float(entry.get("amount", 0) or 0)
+        entry["amount"] = amt  # Ensure amount is always a number
+        running_balance += amt
         entry["running_balance"] = round(running_balance, 2)
+        if amt > 0:
+            total_deposits += amt
+        else:
+            total_deductions += abs(amt)
     
     return {
         "entries": entries,
-        "total_balance": round(running_balance, 2)
+        "total_balance": round(running_balance, 2),
+        "total_deposits": round(total_deposits, 2),
+        "total_deductions": round(total_deductions, 2),
     }
 
 

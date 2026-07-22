@@ -33,6 +33,8 @@ export default function CDLedger() {
   const [editForm, setEditForm] = useState({ date: "", reference: "", description: "", amount: "", policy_number: "" });
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [totalDeposits, setTotalDeposits] = useState(0);
+  const [totalDeductions, setTotalDeductions] = useState(0);
   const importRef = React.useRef(null);
 
   const token = localStorage.getItem("token");
@@ -52,6 +54,8 @@ export default function CDLedger() {
       const res = await axios.get(url, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
       setEntries(res.data.entries || []);
       setTotalBalance(res.data.total_balance || 0);
+      setTotalDeposits(res.data.total_deposits || 0);
+      setTotalDeductions(res.data.total_deductions || 0);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [selectedPolicy]);
@@ -140,8 +144,6 @@ export default function CDLedger() {
     finally { setImporting(false); if (importRef.current) importRef.current.value = ""; }
   };
 
-  const totalDeposits = entries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0);
-  const totalDeductions = Math.abs(entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0));
   const fmtAmt = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
