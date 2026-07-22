@@ -3988,15 +3988,17 @@ async def get_cd_ledger(
     """Get CD Ledger entries and running balance (HR sees only assigned policies)"""
     query = {}
 
-    # HR isolation: only show CD entries for assigned policies
+    # HR isolation: only show CD entries for assigned policies (case-insensitive)
     if current_user.role == UserRole.HR:
         assignments = await db.policy_assignments.find(
             {"hr_user_id": current_user.id}, {"_id": 0, "policy_number": 1}
         ).to_list(1000)
         assigned_policy_numbers = [a["policy_number"] for a in assignments]
         if not assigned_policy_numbers:
-            return {"entries": [], "total_balance": 0}
-        query["policy_number"] = {"$in": assigned_policy_numbers}
+            return {"entries": [], "total_balance": 0, "total_deposits": 0, "total_deductions": 0}
+        import re
+        regex_patterns = [{"policy_number": {"$regex": f"^{re.escape(pn)}$", "$options": "i"}} for pn in assigned_policy_numbers]
+        query["$or"] = regex_patterns
 
     if policy_number:
         # For HR, ensure they can only filter within their assigned policies
@@ -4006,8 +4008,11 @@ async def get_cd_ledger(
             ).to_list(1000)
             allowed = [a["policy_number"] for a in assignments]
             if policy_number not in allowed:
-                return {"entries": [], "total_balance": 0}
-        query["policy_number"] = policy_number
+                return {"entries": [], "total_balance": 0, "total_deposits": 0, "total_deductions": 0}
+        # Case-insensitive match to handle import mismatches (e.g., "Relyon(Self+5)" vs "Relyon(self+5)")
+        import re
+        escaped_pn = re.escape(policy_number)
+        query["policy_number"] = {"$regex": f"^{escaped_pn}$", "$options": "i"}
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
     
@@ -4218,6 +4223,16 @@ async def import_cd_ledger(
             policy = str(row.get("policy_number", "")).strip() if pd.notna(row.get("policy_number")) else None
             if policy == "nan":
                 policy = None
+
+            # Normalize policy_number to match canonical name in policies collection (case-insensitive)
+            if policy:
+                import re
+                canonical = await db.policies.find_one(
+                    {"policy_number": {"$regex": f"^{re.escape(policy)}$", "$options": "i"}},
+                    {"_id": 0, "policy_number": 1}
+                )
+                if canonical:
+                    policy = canonical["policy_number"]  # Use exact canonical name
 
             entry = CDLedgerEntry(
                 date=date_str,
