@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Trash2, Loader2, Wallet, TrendingUp, TrendingDown, RefreshCw, Eye, Pencil } from "lucide-react";
+import { Plus, Trash2, Loader2, Wallet, TrendingUp, TrendingDown, RefreshCw, Eye, Pencil, Upload, FileSpreadsheet } from "lucide-react";
 
 export default function CDLedger() {
   const { user } = useContext(AuthContext);
@@ -32,6 +32,8 @@ export default function CDLedger() {
   const [editEntry, setEditEntry] = useState(null);
   const [editForm, setEditForm] = useState({ date: "", reference: "", description: "", amount: "", policy_number: "" });
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importRef = React.useRef(null);
 
   const token = localStorage.getItem("token");
   const headers = { Authorization: `Bearer ${token}` };
@@ -106,6 +108,38 @@ export default function CDLedger() {
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" /></div>;
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await axios.get(`${API}/cd-ledger/template/download`, { headers, responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "cd_ledger_template.xlsx";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Template downloaded");
+    } catch { toast.error("Failed to download template"); }
+  };
+
+  const handleImportExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.match(/\.xlsx?$/)) { toast.error("Please select an Excel file"); return; }
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await axios.post(`${API}/cd-ledger/import`, fd, { headers: { ...headers, "Content-Type": "multipart/form-data" } });
+      const d = res.data;
+      toast.success(`Imported ${d.success_count} entries${d.error_count > 0 ? ` (${d.error_count} errors)` : ""}`);
+      if (d.errors?.length > 0) d.errors.slice(0, 5).forEach(err => toast.error(`Row ${err.row}: ${err.error}`));
+      fetchLedger();
+    } catch (err) { toast.error(err.response?.data?.detail || "Import failed"); }
+    finally { setImporting(false); if (importRef.current) importRef.current.value = ""; }
+  };
+
   const totalDeposits = entries.filter(e => e.amount > 0).reduce((s, e) => s + e.amount, 0);
   const totalDeductions = Math.abs(entries.filter(e => e.amount < 0).reduce((s, e) => s + e.amount, 0));
   const fmtAmt = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -161,9 +195,19 @@ export default function CDLedger() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg">CD Ledger Statement</CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button variant="outline" size="sm" onClick={fetchLedger} data-testid="refresh-ledger-btn"><RefreshCw className="w-4 h-4 mr-1" /> Refresh</Button>
-            {isAdmin && <Button size="sm" onClick={() => setShowForm(!showForm)} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="add-entry-btn"><Plus className="w-4 h-4 mr-1" /> Add Deposit / Entry</Button>}
+            {isAdmin && (
+              <>
+                <Button variant="outline" size="sm" onClick={handleDownloadTemplate} data-testid="cd-download-template-btn"><FileSpreadsheet className="w-4 h-4 mr-1" /> Template</Button>
+                <Button variant="outline" size="sm" disabled={importing} onClick={() => importRef.current?.click()} data-testid="cd-import-btn">
+                  {importing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Upload className="w-4 h-4 mr-1" />}
+                  {importing ? "Importing..." : "Import Excel"}
+                </Button>
+                <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportExcel} data-testid="cd-import-input" />
+                <Button size="sm" onClick={() => setShowForm(!showForm)} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="add-entry-btn"><Plus className="w-4 h-4 mr-1" /> Add Entry</Button>
+              </>
+            )}
           </div>
         </CardHeader>
 

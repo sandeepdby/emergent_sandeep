@@ -4099,6 +4099,144 @@ async def update_cd_ledger_entry(
     return result
 
 
+@api_router.get("/cd-ledger/template/download")
+async def download_cd_ledger_template(current_user: User = Depends(get_current_user)):
+    """Download Excel template for CD Ledger import"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can download templates")
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    template_data = [
+        {"Date": today, "Reference": "PREM/2026-27/001", "Description": "Premium deposit for GMC policy", "Amount": 50000, "Policy Number": "GMC001"},
+        {"Date": today, "Reference": "PREM/2026-27/002", "Description": "Endorsement deduction — Addition", "Amount": -5200, "Policy Number": "GMC001"},
+        {"Date": today, "Reference": "REF/2026-27/001", "Description": "Refund credit — Deletion", "Amount": 3500, "Policy Number": "GMC001"},
+        {"Date": today, "Reference": "PREM/2026-27/003", "Description": "GPA premium deposit", "Amount": 25000, "Policy Number": "GPA001"},
+    ]
+
+    df = pd.DataFrame(template_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='CD Ledger')
+        inst = pd.DataFrame({
+            'Field': ['Date', 'Reference', 'Description', 'Amount', 'Policy Number'],
+            'Required': ['YES', 'YES', 'Optional', 'YES', 'Optional'],
+            'Description': [
+                'Transaction date (YYYY-MM-DD)',
+                'Unique reference number for the entry',
+                'Description of the transaction',
+                'Positive = Deposit/Credit, Negative = Deduction/Withdrawal',
+                'Link to a specific policy (must match existing policy number)',
+            ]
+        })
+        inst.to_excel(writer, index=False, sheet_name='Instructions')
+
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=cd_ledger_template.xlsx"})
+
+
+@api_router.post("/cd-ledger/import")
+async def import_cd_ledger(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Import CD Ledger entries from Excel file (Admin only)"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can import CD ledger entries")
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Please upload an Excel file (.xlsx or .xls)")
+
+    contents = await file.read()
+    try:
+        df = pd.read_excel(io.BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read Excel file: {str(e)}")
+
+    # Normalize column names
+    col_map = {}
+    for col in df.columns:
+        cl = col.strip().lower().replace(" ", "_")
+        if "date" in cl:
+            col_map[col] = "date"
+        elif "ref" in cl:
+            col_map[col] = "reference"
+        elif "desc" in cl:
+            col_map[col] = "description"
+        elif "amount" in cl or "amt" in cl:
+            col_map[col] = "amount"
+        elif "policy" in cl:
+            col_map[col] = "policy_number"
+    df = df.rename(columns=col_map)
+
+    required = ["date", "reference", "amount"]
+    for r in required:
+        if r not in df.columns:
+            raise HTTPException(status_code=400, detail=f"Missing required column: {r}")
+
+    success_count = 0
+    error_count = 0
+    errors = []
+
+    for idx, row in df.iterrows():
+        try:
+            date_val = row.get("date")
+            if pd.isna(date_val):
+                errors.append({"row": idx + 2, "error": "Missing date"})
+                error_count += 1
+                continue
+
+            if isinstance(date_val, datetime):
+                date_str = date_val.strftime("%Y-%m-%d")
+            else:
+                date_str = str(date_val).strip()[:10]
+
+            ref = str(row.get("reference", "")).strip()
+            if not ref or ref == "nan":
+                errors.append({"row": idx + 2, "error": "Missing reference"})
+                error_count += 1
+                continue
+
+            amount = row.get("amount")
+            if pd.isna(amount):
+                errors.append({"row": idx + 2, "error": "Missing amount"})
+                error_count += 1
+                continue
+            amount = float(amount)
+
+            desc = str(row.get("description", "")).strip() if pd.notna(row.get("description")) else None
+            policy = str(row.get("policy_number", "")).strip() if pd.notna(row.get("policy_number")) else None
+            if policy == "nan":
+                policy = None
+
+            entry = CDLedgerEntry(
+                date=date_str,
+                reference=ref,
+                description=desc,
+                amount=amount,
+                policy_number=policy,
+                entry_type="Excel Import",
+                created_by=current_user.id,
+                created_by_name=current_user.full_name,
+            )
+            await db.cd_ledger.insert_one(entry.model_dump())
+            success_count += 1
+
+        except Exception as e:
+            errors.append({"row": idx + 2, "error": str(e)})
+            error_count += 1
+
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "IMPORT", "cd_ledger", None,
+                    f"Imported {success_count} CD ledger entries from Excel ({error_count} errors)")
+
+    return {
+        "total_rows": len(df),
+        "success_count": success_count,
+        "error_count": error_count,
+        "errors": errors[:20],
+    }
+
+
 # ==================== EMPLOYEE DIRECTORY ENDPOINTS ====================
 
 @api_router.get("/employee-directory")
