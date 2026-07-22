@@ -181,10 +181,14 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Updated Format Guide**: Now lists Kids1, Kids2 as valid relationship types, notes Employee ID links family members
 
 ### Admin Edit Premium on Approved Endorsements (DONE - Jul 2026)
-- **Feature**: Admin can now edit annual premium, per-life premium, and prorated premium on approved endorsements (previously edit was restricted to pending only)
-- **Fields Added**: Per Life Premium (₹), Annual Premium / Life (₹), Prorated Premium (₹) in the Edit Endorsement dialog
-- **Smart Recalculation**: Prorata auto-recalcs only when endorsement date/type actually changes AND user didn't explicitly provide prorata value. User-supplied prorata is always preserved.
+- **Feature**: Admin can now edit annual premium, per-life premium, and prorated premium on approved endorsements
+- **Smart Recalculation**: Prorata auto-recalcs only when date/type actually changes AND user didn't explicitly provide prorata value
 - **HR Restriction**: HR users still cannot edit approved endorsements (403)
+
+### Profile Photo Fix (DONE - Jul 2026)
+- **Root Cause**: Object storage put_object returns {path, size, etag} with NO url field. Old code used result.get('url', '') → always empty.
+- **Fix**: New GET /api/auth/profile-photo/{user_id} endpoint streams photos from object storage. Upload stores path, login converts to served URL. Frontend resolvePhotoUrl prepends REACT_APP_BACKEND_URL for relative paths.
+- **Verified**: Both Admin and HR photos upload, persist, and display correctly after re-login.
 
 ## Remaining Backlog
 
