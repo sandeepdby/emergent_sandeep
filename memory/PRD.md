@@ -186,9 +186,14 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **HR Restriction**: HR users still cannot edit approved endorsements (403)
 
 ### Profile Photo Fix (DONE - Jul 2026)
-- **Root Cause**: Object storage put_object returns {path, size, etag} with NO url field. Old code used result.get('url', '') → always empty.
-- **Fix**: New GET /api/auth/profile-photo/{user_id} endpoint streams photos from object storage. Upload stores path, login converts to served URL. Frontend resolvePhotoUrl prepends REACT_APP_BACKEND_URL for relative paths.
-- **Verified**: Both Admin and HR photos upload, persist, and display correctly after re-login.
+- **Root Cause**: Object storage put_object returns {path, size, etag} with NO url field. Fixed with backend-served endpoint.
+- **Fix**: New GET /api/auth/profile-photo/{user_id} streams photos from object storage. Frontend resolvePhotoUrl constructs full URLs.
+
+### CD Ledger Excel Import (DONE - Jul 2026)
+- **Template Download**: GET /api/cd-ledger/template/download — Excel with sample entries and Instructions sheet
+- **Excel Import**: POST /api/cd-ledger/import — bulk-creates CD Ledger entries from Excel. Smart column normalization (handles date/ref/desc/amount/policy variations). Entries created with entry_type='Excel Import'.
+- **UI**: "Template" + "Import Excel" buttons on CD Ledger page (Admin only). Import shows success/error counts via toast.
+- **Admin Only**: HR users get 403 on both template download and import.
 
 ## Remaining Backlog
 
