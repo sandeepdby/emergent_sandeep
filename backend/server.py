@@ -1151,6 +1151,18 @@ async def login(credentials: UserLogin):
     
     await log_audit(user['id'], user['username'], user['role'], "LOGIN", "auth", details="User logged in")
     
+    # Convert storage path to served URL for profile photo
+    raw_photo = user.get('profile_photo')
+    photo_url = None
+    if raw_photo:
+        if raw_photo.startswith("http"):
+            photo_url = raw_photo
+        elif raw_photo.startswith("/api/"):
+            photo_url = raw_photo
+        else:
+            from urllib.parse import quote
+            photo_url = f"/api/auth/profile-photo/{quote(user['id'])}"
+
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -1161,7 +1173,7 @@ async def login(credentials: UserLogin):
             "email": user['email'],
             "phone": user.get('phone'),
             "role": user['role'],
-            "profile_photo": user.get('profile_photo')
+            "profile_photo": photo_url
         }
     }
 
@@ -1185,10 +1197,35 @@ async def upload_profile_photo(
         raise HTTPException(status_code=400, detail="Image must be under 5MB")
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else "png"
     path = f"profile_photos/{current_user.id}.{ext}"
-    result = put_object(path, contents, file.content_type)
-    photo_url = result.get("url", "")
-    await db.users.update_one({"id": current_user.id}, {"$set": {"profile_photo": photo_url}})
-    return {"profile_photo": photo_url}
+    put_object(path, contents, file.content_type)
+    # Store the storage path (not a direct URL — served via backend endpoint)
+    photo_path = path
+    await db.users.update_one({"id": current_user.id}, {"$set": {"profile_photo": photo_path}})
+    # Return the backend-served URL for the frontend
+    from urllib.parse import quote
+    served_url = f"/api/auth/profile-photo/{quote(current_user.id)}"
+    return {"profile_photo": served_url}
+
+
+@api_router.get("/auth/profile-photo/{user_id}")
+async def get_profile_photo(user_id: str):
+    """Serve a user's profile photo from object storage"""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "profile_photo": 1})
+    if not user or not user.get("profile_photo"):
+        raise HTTPException(status_code=404, detail="No profile photo found")
+
+    storage_path = user["profile_photo"]
+    # If it's already a full URL (legacy), redirect to it
+    if storage_path.startswith("http"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=storage_path)
+
+    try:
+        data, content_type = get_object(storage_path)
+        return Response(content=data, media_type=content_type, headers={"Cache-Control": "public, max-age=3600"})
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Profile photo retrieval failed: {e}")
+        raise HTTPException(status_code=404, detail="Photo not found")
 
 
 class ForgotPasswordRequest(BaseModel):

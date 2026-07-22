@@ -16,7 +16,15 @@ export default function UserProfileMenu({ user, onLogout }) {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [photoUrl, setPhotoUrl] = useState(user?.profile_photo || null);
+  const resolvePhotoUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith("http")) return url;
+    // Relative path like /api/auth/profile-photo/{id} -> prepend backend origin
+    const backendOrigin = process.env.REACT_APP_BACKEND_URL || "";
+    return `${backendOrigin}${url}`;
+  };
+
+  const [photoUrl, setPhotoUrl] = useState(resolvePhotoUrl(user?.profile_photo));
   const fileRef = useRef(null);
 
   const handleChangePassword = async () => {
@@ -46,7 +54,7 @@ export default function UserProfileMenu({ user, onLogout }) {
       const res = await axios.post(`${API}/auth/profile-photo`, formData, {
         headers: { ...getAuthHeaders(), "Content-Type": "multipart/form-data" },
       });
-      setPhotoUrl(res.data.profile_photo);
+      setPhotoUrl(resolvePhotoUrl(res.data.profile_photo));
       toast.success("Profile photo updated!");
     } catch (err) { toast.error(err.response?.data?.detail || "Upload failed"); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
