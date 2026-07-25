@@ -1091,7 +1091,7 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
                 </div>
                 <p style="color: #475569;">You can now log in and start managing insurance endorsements.</p>
                 <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                    This is an automated message from InsureHub by Aarogya-Assist.
+                    This is an automated message from InsureHub by Aarogya Innovate Pvt Ltd.
                 </p>
             </div>
         </div>
@@ -1127,7 +1127,7 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
                         <p style="margin: 5px 0;"><strong>Registered At:</strong> {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}</p>
                     </div>
                     <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                        This is an automated notification from InsureHub by Aarogya-Assist.
+                        This is an automated notification from InsureHub by Aarogya Innovate Pvt Ltd.
                     </p>
                 </div>
             </div>
@@ -2050,7 +2050,7 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                         </div>
                         <p style="color: #475569;">Please log in to the Admin portal to review and approve/reject this endorsement.</p>
                         <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                            This is an automated notification from InsureHub by Aarogya-Assist.
+                            This is an automated notification from InsureHub by Aarogya Innovate Pvt Ltd.
                         </p>
                     </div>
                 </div>
@@ -2521,7 +2521,7 @@ async def approve_reject_endorsement(
                         </div>
                         <p style="color: #475569;">Please log in to the HR portal to view the details.</p>
                         <p style="color: #64748b; font-size: 12px; margin-top: 30px;">
-                            This is an automated notification from InsureHub by Aarogya-Assist.
+                            This is an automated notification from InsureHub by Aarogya Innovate Pvt Ltd.
                         </p>
                     </div>
                 </div>
