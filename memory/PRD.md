@@ -220,6 +220,17 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **SEC-005 (MEDIUM)**: Document download missing authz. FIX: HR ownership check.
 - **Hardening**: Rotated SECRET_KEY, sanitized error messages.
 
+### Batch Approve/Reject Endorsements (DONE - Jul 2026)
+- **Feature**: Admin + Master Admin can select multiple pending endorsements via checkboxes and approve/reject all at once
+- **Status Filter**: New "Status" dropdown in filters (All/Pending/Approved/Rejected) for client-side filtering
+- **Checkboxes**: Only appear on Pending endorsement rows. Header "Select All" checkbox selects all visible pending items
+- **Batch Action Bar**: Blue bar appears when items are selected with "Approve All" and "Reject All" buttons and count
+- **Confirmation Dialog**: Opens with optional remarks textarea, shows summary of what will happen (CD Ledger entries, policy lives update, email notifications)
+- **CD Ledger Integration**: Batch approve auto-creates CD Ledger deduction/credit entries for each endorsement's pro-rata premium
+- **Policy Lives Update**: Approved additions increment, approved deletions decrement policy total_lives_covered
+- **Email Notifications**: Submitting HR users are notified when their endorsements are batch approved/rejected
+- **Endpoint**: POST /api/endorsements/bulk-approve (already existed; enhanced with CD Ledger auto-deduction)
+
 ### P0 - Critical Tech Debt
 - Backend modularization: server.py (~6450 lines) needs splitting into /routes, /models, /services
 
