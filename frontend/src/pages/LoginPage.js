@@ -38,7 +38,7 @@ const LoginPage = () => {
             </div>
           </div>
           <CardTitle className="text-2xl font-bold">InsureHub Portal</CardTitle>
-          <CardDescription>Aarogya Assist - Endorsement Management</CardDescription>
+          <CardDescription>Aarogya Innovate Pvt Ltd - Endorsement Management</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

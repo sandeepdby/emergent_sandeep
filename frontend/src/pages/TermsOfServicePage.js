@@ -10,7 +10,7 @@ export default function TermsOfServicePage() {
           <Link to="/" className="flex items-center gap-3">
             <img
               src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png"
-              alt="Aarogya Assist"
+              alt="Aarogya Innovate Pvt Ltd"
               className="h-11 w-auto"
             />
             <span className="text-xl font-bold tracking-tight">InsureHub</span>
@@ -36,7 +36,7 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">1. Acceptance of Terms</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              By accessing or using the InsureHub platform operated by Aarogya Assist, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
+              By accessing or using the InsureHub platform operated by Aarogya Innovate Pvt Ltd, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.
             </p>
           </section>
 
@@ -73,14 +73,14 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">5. Data Accuracy</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              Users are responsible for the accuracy of insurance data, endorsement details, and employee information uploaded to the platform. Aarogya Assist is not liable for decisions made based on inaccurate data provided by users.
+              Users are responsible for the accuracy of insurance data, endorsement details, and employee information uploaded to the platform. Aarogya Innovate Pvt Ltd is not liable for decisions made based on inaccurate data provided by users.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">6. Intellectual Property</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              The InsureHub platform, including its design, code, AI models, and branding, is the intellectual property of Aarogya Assist. You retain ownership of data you upload but grant us a limited license to process it as needed to provide our services.
+              The InsureHub platform, including its design, code, AI models, and branding, is the intellectual property of Aarogya Innovate Pvt Ltd. You retain ownership of data you upload but grant us a limited license to process it as needed to provide our services.
             </p>
           </section>
 
@@ -94,14 +94,14 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">8. Limitation of Liability</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              To the maximum extent permitted by law, Aarogya Assist shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the platform. Our total liability shall not exceed the amount paid by you for the services in the twelve months preceding the claim.
+              To the maximum extent permitted by law, Aarogya Innovate Pvt Ltd shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the platform. Our total liability shall not exceed the amount paid by you for the services in the twelve months preceding the claim.
             </p>
           </section>
 
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">9. Indemnification</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              You agree to indemnify and hold harmless Aarogya Assist from any claims, losses, or damages arising from your use of the platform or violation of these terms.
+              You agree to indemnify and hold harmless Aarogya Innovate Pvt Ltd from any claims, losses, or damages arising from your use of the platform or violation of these terms.
             </p>
           </section>
 
@@ -125,7 +125,7 @@ export default function TermsOfServicePage() {
               For questions about these Terms of Service, contact us at:
             </p>
             <div className="bg-[#F3F2F0] rounded-xl p-4 mt-3">
-              <p className="text-sm text-[#4A4D54]"><strong>Aarogya Assist</strong></p>
+              <p className="text-sm text-[#4A4D54]"><strong>Aarogya Innovate Pvt Ltd</strong></p>
               <p className="text-sm text-[#4A4D54]">Email: connect@aarogya-assist.com</p>
               <p className="text-sm text-[#4A4D54]">Phone: +91 98862 60579</p>
               <p className="text-sm text-[#4A4D54]">Address: Bengaluru, Karnataka, India</p>
@@ -135,7 +135,7 @@ export default function TermsOfServicePage() {
       </main>
 
       <footer className="bg-[#0F1115] text-[#FAF9F6]/50 py-8 text-center text-sm">
-        &copy; {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.
+        &copy; {new Date().getFullYear()} InsureHub by Aarogya Innovate Pvt Ltd. All rights reserved.
       </footer>
     </div>
   );

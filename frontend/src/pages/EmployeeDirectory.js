@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Search, Eye, UserMinus, Users, RefreshCw, History, CheckCircle, Clock, XCircle, Plus, Minus, Pencil, ArrowUpRight, UsersRound } from "lucide-react";
+import { Loader2, Search, Eye, UserMinus, Users, RefreshCw, History, CheckCircle, Clock, XCircle, Plus, Minus, Pencil, ArrowUpRight, UsersRound, Upload, FileSpreadsheet } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const fmt = (v) => `₹${(v || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -303,13 +303,14 @@ function MemberTableRow({ member, onView, onDelete, onHistory, onFamily }) {
 }
 
 /* Sub-component: Policy filter option */
-function PolicyFilterOption({ policyNumber }) {
-  return <SelectItem value={policyNumber}>{policyNumber}</SelectItem>;
+function PolicyFilterOption({ policy }) {
+  return <SelectItem value={policy.number}>{policy.number}{policy.name ? ` — ${policy.name}` : ""}</SelectItem>;
 }
 
 /* ─── MAIN ─── */
 export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" }) {
   const [members, setMembers] = useState([]);
+  const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [policyFilter, setPolicyFilter] = useState("all");
@@ -322,6 +323,8 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
   const [familyEmployee, setFamilyEmployee] = useState(null);
   const [familyOpen, setFamilyOpen] = useState(false);
   const [familyGroup, setFamilyGroup] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const uploadRef = React.useRef(null);
   const navigate = useNavigate();
 
   const fetchMembers = useCallback(async () => {
@@ -333,9 +336,14 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchMembers(); }, [fetchMembers]);
+  useEffect(() => {
+    fetchMembers();
+    // Fetch all policies for the filter dropdown
+    axios.get(`${API}/policies`, { headers: hdrs() }).then(r => setPolicies(r.data || [])).catch(() => {});
+  }, [fetchMembers]);
 
-  const policyNumbers = useMemo(() => [...new Set(members.map(m => m.policy_number))].sort(), [members]);
+  // Policy numbers from fetched policies (ALL policies, not just from members)
+  const policyNumbers = useMemo(() => policies.map(p => ({ number: p.policy_number, name: p.policy_holder_name })), [policies]);
 
   const filtered = useMemo(() => {
     let list = members;
@@ -395,6 +403,34 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
     setFamilyOpen(true);
   };
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await axios.get(`${API}/employee-directory/template`, { headers: hdrs(), responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url; link.download = "member_upload_template.xlsx";
+      document.body.appendChild(link); link.click(); link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success("Template downloaded");
+    } catch { toast.error("Failed to download template"); }
+  };
+
+  const handleUploadExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.match(/\.xlsx?$/)) { toast.error("Please select an Excel file"); return; }
+    setUploading(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      const res = await axios.post(`${API}/employee-directory/upload`, fd, { headers: { ...hdrs(), "Content-Type": "multipart/form-data" } });
+      const d = res.data;
+      toast.success(`Uploaded ${d.success_count} members${d.error_count > 0 ? ` (${d.error_count} errors)` : ""}`);
+      if (d.errors?.length > 0) d.errors.slice(0, 3).forEach(err => toast.error(`Row ${err.row}: ${err.error}`));
+      fetchMembers();
+    } catch (err) { toast.error(err.response?.data?.detail || "Upload failed"); }
+    finally { setUploading(false); if (uploadRef.current) uploadRef.current.value = ""; }
+  };
+
   const totalMembers = members.length;
   const totalEmployees = members.filter(m => m.relationship_type === "Employee").length;
   const totalDependents = totalMembers - totalEmployees;
@@ -409,7 +445,19 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
           <h1 className="text-2xl font-bold text-stone-900">Employee Directory</h1>
           <p className="text-sm text-stone-500 mt-0.5">Active members across {isAdmin ? "all" : "your assigned"} policies</p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchMembers} className="gap-1.5" data-testid="refresh-directory"><RefreshCw className="w-3.5 h-3.5" /> Refresh</Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && (
+            <>
+              <Button variant="outline" size="sm" onClick={handleDownloadTemplate} className="gap-1.5" data-testid="dir-template-btn"><FileSpreadsheet className="w-3.5 h-3.5" /> Template</Button>
+              <Button variant="outline" size="sm" disabled={uploading} onClick={() => uploadRef.current?.click()} className="gap-1.5" data-testid="dir-upload-btn">
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                {uploading ? "Uploading..." : "Upload Members"}
+              </Button>
+              <input ref={uploadRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleUploadExcel} data-testid="dir-upload-input" />
+            </>
+          )}
+          <Button variant="outline" size="sm" onClick={fetchMembers} className="gap-1.5" data-testid="refresh-directory"><RefreshCw className="w-3.5 h-3.5" /> Refresh</Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-4 flex-wrap">
@@ -424,10 +472,10 @@ export default function EmployeeDirectory({ isAdmin = false, basePath = "/hr" })
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or employee ID..." className="pl-9 h-9 text-sm" data-testid="directory-search" />
         </div>
         <Select value={policyFilter} onValueChange={setPolicyFilter}>
-          <SelectTrigger className="w-[220px] h-9" data-testid="directory-policy-filter"><SelectValue placeholder="All Policies" /></SelectTrigger>
+          <SelectTrigger className="w-[280px] h-9" data-testid="directory-policy-filter"><SelectValue placeholder="All Policies" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Policies</SelectItem>
-            {policyNumbers.map(pn => <PolicyFilterOption key={pn} policyNumber={pn} />)}
+            {policyNumbers.map(p => <PolicyFilterOption key={p.number} policy={p} />)}
           </SelectContent>
         </Select>
       </div>

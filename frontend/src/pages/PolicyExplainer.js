@@ -344,7 +344,7 @@ export default function PolicyExplainer({ isAdmin = false }) {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-stone-800 font-heading">Policy T&C Explainer & Benchmarking</h2>
-          <p className="text-xs text-stone-500">AI-powered insurance analysis by Aarogya Assist</p>
+          <p className="text-xs text-stone-500">AI-powered insurance analysis by Aarogya Innovate Pvt Ltd</p>
         </div>
       </div>
 
@@ -457,7 +457,7 @@ export default function PolicyExplainer({ isAdmin = false }) {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div><Label>Plan Name *</Label><Input value={benchmarkForm.plan_name} onChange={e => setBenchmarkForm(f => ({ ...f, plan_name: e.target.value }))} placeholder="e.g. Group Health Protect" data-testid="benchmark-plan" /></div>
-                  <div className="flex items-end"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={benchmarkForm.is_aarogya_addon} onChange={e => setBenchmarkForm(f => ({ ...f, is_aarogya_addon: e.target.checked }))} className="rounded" /><span className="text-sm">Aarogya Assist Add-on</span></label></div>
+                  <div className="flex items-end"><label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={benchmarkForm.is_aarogya_addon} onChange={e => setBenchmarkForm(f => ({ ...f, is_aarogya_addon: e.target.checked }))} className="rounded" /><span className="text-sm">Aarogya Innovate Pvt Ltd Add-on</span></label></div>
                 </div>
                 <div>
                   <Label className="mb-2 block">Parameters</Label>
@@ -627,10 +627,10 @@ function BenchmarkReportPreview({ report, reportId, onDownload, downloading }) {
         )}
       </div>
 
-      {/* Aarogya Assist Add-ons */}
+      {/* Aarogya Innovate Pvt Ltd Add-ons */}
       {addons.length > 0 && (
         <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-[#E05A47]/20">
-          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-[#E05A47]">Aarogya Assist Wellness Add-ons</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-semibold text-[#E05A47]">Aarogya Innovate Pvt Ltd Wellness Add-ons</CardTitle></CardHeader>
           <CardContent><AdviceList items={addons} color="text-[#E05A47]" /></CardContent>
         </Card>
       )}

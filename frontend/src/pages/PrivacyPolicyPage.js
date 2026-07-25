@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
           <Link to="/" className="flex items-center gap-3">
             <img
               src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png"
-              alt="Aarogya Assist"
+              alt="Aarogya Innovate Pvt Ltd"
               className="h-11 w-auto"
             />
             <span className="text-xl font-bold tracking-tight">InsureHub</span>
@@ -36,7 +36,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-xl font-semibold text-[#16332A] border-b border-black/5 pb-2">1. Introduction</h2>
             <p className="text-[#4A4D54] leading-relaxed mt-3">
-              Aarogya Assist ("we", "our", "us") operates the InsureHub platform. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our insurance endorsement management platform.
+              Aarogya Innovate Pvt Ltd ("we", "our", "us") operates the InsureHub platform. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our insurance endorsement management platform.
             </p>
           </section>
 
@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
               For privacy-related inquiries, contact us at:
             </p>
             <div className="bg-[#F3F2F0] rounded-xl p-4 mt-3">
-              <p className="text-sm text-[#4A4D54]"><strong>Aarogya Assist</strong></p>
+              <p className="text-sm text-[#4A4D54]"><strong>Aarogya Innovate Pvt Ltd</strong></p>
               <p className="text-sm text-[#4A4D54]">Email: connect@aarogya-assist.com</p>
               <p className="text-sm text-[#4A4D54]">Phone: +91 98862 60579</p>
               <p className="text-sm text-[#4A4D54]">Address: Bengaluru, Karnataka, India</p>
@@ -114,7 +114,7 @@ export default function PrivacyPolicyPage() {
       </main>
 
       <footer className="bg-[#0F1115] text-[#FAF9F6]/50 py-8 text-center text-sm">
-        &copy; {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.
+        &copy; {new Date().getFullYear()} InsureHub by Aarogya Innovate Pvt Ltd. All rights reserved.
       </footer>
     </div>
   );

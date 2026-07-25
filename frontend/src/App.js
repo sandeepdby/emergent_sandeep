@@ -262,7 +262,7 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
           <div className="flex justify-center mb-4">
             <img 
               src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
-              alt="Aarogya Assist" 
+              alt="Aarogya Innovate Pvt Ltd" 
               className="h-16 w-auto"
             />
           </div>

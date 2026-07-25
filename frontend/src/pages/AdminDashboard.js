@@ -113,7 +113,7 @@ const Sidebar = ({ collapsed, onToggle }) => {
       <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3 px-5'} h-16 border-b border-stone-200/60`}>
         <img
           src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png"
-          alt="Aarogya Assist"
+          alt="Aarogya Innovate Pvt Ltd"
           className="h-9 w-auto shrink-0"
         />
         {!collapsed && (

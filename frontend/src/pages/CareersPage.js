@@ -85,7 +85,7 @@ export default function CareersPage() {
           <Link to="/" className="flex items-center gap-3">
             <img
               src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png"
-              alt="Aarogya Assist"
+              alt="Aarogya Innovate Pvt Ltd"
               className="h-11 w-auto"
             />
             <span className="text-xl font-bold tracking-tight">InsureHub</span>
@@ -105,7 +105,7 @@ export default function CareersPage() {
               Build the Future of<br />Insurance Technology
             </h1>
             <p className="text-lg text-white/70 max-w-2xl mx-auto mt-6">
-              Join Aarogya Assist and help transform how organizations manage health insurance.
+              Join Aarogya Innovate Pvt Ltd and help transform how organizations manage health insurance.
               We're a passionate team solving real problems with AI and great software.
             </p>
           </motion.div>
@@ -134,7 +134,7 @@ export default function CareersPage() {
       <section className="py-20 px-6 sm:px-8 lg:px-12">
         <div className="max-w-7xl mx-auto">
           <motion.div className="text-center mb-12" {...fadeInUp}>
-            <span className="text-xs tracking-[0.2em] uppercase font-bold text-[#E05D36]">Why Aarogya Assist</span>
+            <span className="text-xs tracking-[0.2em] uppercase font-bold text-[#E05D36]">Why Aarogya Innovate Pvt Ltd</span>
             <h2 className="text-3xl sm:text-4xl tracking-tight leading-tight font-bold mt-4">Why You'll Love Working Here</h2>
           </motion.div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -205,7 +205,7 @@ export default function CareersPage() {
             <motion.div className="bg-green-50 border border-green-200 rounded-2xl p-12 text-center" {...fadeInUp} data-testid="career-application-success">
               <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" />
               <h3 className="text-2xl font-bold mb-2">Application Submitted!</h3>
-              <p className="text-[#4A4D54]">Thank you for your interest in joining Aarogya Assist. We'll review your profile and reach out soon.</p>
+              <p className="text-[#4A4D54]">Thank you for your interest in joining Aarogya Innovate Pvt Ltd. We'll review your profile and reach out soon.</p>
               <button onClick={() => { setSubmitted(false); setForm({ full_name: "", email: "", phone: "", position: "", experience_years: "", current_company: "", cover_letter: "", linkedin_url: "" }); }} className="mt-6 text-sm text-[#E05D36] hover:underline">
                 Submit another application
               </button>
@@ -294,7 +294,7 @@ export default function CareersPage() {
       </section>
 
       <footer className="bg-[#0F1115] text-[#FAF9F6]/50 py-8 text-center text-sm">
-        &copy; {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.
+        &copy; {new Date().getFullYear()} InsureHub by Aarogya Innovate Pvt Ltd. All rights reserved.
       </footer>
     </div>
   );

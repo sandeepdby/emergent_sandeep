@@ -79,7 +79,7 @@ export default function LandingPage({ onGetStarted }) {
           <div className="flex items-center gap-3">
             <img 
               src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
-              alt="Aarogya Assist" 
+              alt="Aarogya Innovate Pvt Ltd" 
               className="h-11 w-auto"
             />
             <span className="text-xl font-bold tracking-tight">InsureHub</span>
@@ -202,7 +202,7 @@ export default function LandingPage({ onGetStarted }) {
       <section className="py-12 border-y border-black/5 bg-[#F3F2F0]">
         <Marquee speed={40} gradient={false} className="overflow-hidden">
           <div className="flex items-center gap-16 px-8 opacity-50">
-            {["Aarogya Assist", "HealthFirst", "MediCare Plus", "InsureTech", "CareShield", "LifeGuard", "WellnessHub"].map((name, i) => (
+            {["Aarogya Innovate", "HealthFirst", "MediCare Plus", "InsureTech", "CareShield", "LifeGuard", "WellnessHub"].map((name, i) => (
               <span key={i} className="text-xl font-bold tracking-tight whitespace-nowrap">{name}</span>
             ))}
           </div>
@@ -639,12 +639,12 @@ export default function LandingPage({ onGetStarted }) {
                 <div className="flex items-center gap-2 mb-4">
                   <img 
                     src="https://customer-assets.emergentagent.com/job_policy-plus-1/artifacts/j6pmedsr_Aarogya-assist%20Logo%20trade.png" 
-                    alt="Aarogya Assist" 
+                    alt="Aarogya Innovate Pvt Ltd" 
                     className="h-8 w-auto brightness-0 invert"
                   />
                   <span className="font-bold">InsureHub</span>
                 </div>
-                <p className="text-sm text-[#FAF9F6]/50">AI-powered endorsement management by Aarogya Assist</p>
+                <p className="text-sm text-[#FAF9F6]/50">AI-powered endorsement management by Aarogya Innovate Pvt Ltd</p>
               </div>
               <div>
                 <h4 className="font-semibold mb-4">Product</h4>
@@ -671,9 +671,9 @@ export default function LandingPage({ onGetStarted }) {
               </div>
             </div>
             <div className="text-center mt-12 pt-8 border-t border-white/10 text-sm text-[#FAF9F6]/50">
-              <p>&copy; {new Date().getFullYear()} InsureHub by Aarogya Assist. All rights reserved.</p>
+              <p>&copy; {new Date().getFullYear()} InsureHub by Aarogya Innovate Pvt Ltd. All rights reserved.</p>
               <p className="mt-2 text-xs text-[#FAF9F6]/30">
-                InsureHub is a registered trademark of Aarogya Assist. All content, features, and functionality are owned by Aarogya Assist and protected by international copyright, trademark, and other intellectual property laws. Unauthorized reproduction or distribution is strictly prohibited.
+                InsureHub is a registered trademark of Aarogya Innovate Pvt Ltd. All content, features, and functionality are owned by Aarogya Innovate Pvt Ltd and protected by international copyright, trademark, and other intellectual property laws. Unauthorized reproduction or distribution is strictly prohibited.
               </p>
             </div>
           </div>
