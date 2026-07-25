@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { API } from "../auth";
 import { Button } from "@/components/ui/button";
@@ -9,9 +9,78 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Edit, Trash2, Loader2, Filter, X, Eye } from "lucide-react";
+import { Edit, Trash2, Loader2, Filter, X, Eye, CheckCircle2, XCircle, CheckCheck } from "lucide-react";
 
+const hdrs = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+
+const REL_COLORS = {
+  Employee: "bg-blue-100 text-blue-800", Spouse: "bg-pink-100 text-pink-800",
+  Kids: "bg-green-100 text-green-800", Kids1: "bg-green-100 text-green-800",
+  Kids2: "bg-teal-100 text-teal-800", Mother: "bg-purple-100 text-purple-800",
+  Father: "bg-orange-100 text-orange-800",
+};
+
+/* ─── Sub: Endorsement Table Row ─── */
+function EndorsementRow({ e, selected, onToggle, onView, onEdit, onDelete }) {
+  const isPending = e.status === "Pending";
+  return (
+    <TableRow key={e.id} data-testid={`endorsement-row-${e.id}`} className={selected ? "bg-blue-50/50" : ""}>
+      <TableCell className="w-10">
+        {isPending ? (
+          <Checkbox checked={selected} onCheckedChange={() => onToggle(e.id)} data-testid={`select-endorsement-${e.id}`} />
+        ) : <div className="w-4" />}
+      </TableCell>
+      <TableCell className="font-medium text-xs">{e.policy_number}</TableCell>
+      <TableCell className="text-xs">{e.employee_id || "-"}</TableCell>
+      <TableCell className="text-xs">{e.member_name}</TableCell>
+      <TableCell><Badge className={`text-[10px] ${REL_COLORS[e.relationship_type] || "bg-gray-100 text-gray-800"}`}>{e.relationship_type}</Badge></TableCell>
+      <TableCell>
+        <Badge variant={e.endorsement_type === "Addition" || e.endorsement_type === "Midterm addition" ? "default" : e.endorsement_type === "Deletion" ? "destructive" : "secondary"} className="text-[10px]">
+          {e.endorsement_type}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        <Badge variant={e.status === "Approved" ? "default" : e.status === "Rejected" ? "destructive" : "secondary"} className="text-[10px]">
+          {e.status}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-xs">{e.sum_insured ? `₹${e.sum_insured.toLocaleString()}` : "-"}</TableCell>
+      <TableCell className="text-xs">{new Date(e.endorsement_date).toLocaleDateString()}</TableCell>
+      <TableCell className="text-xs text-gray-600">₹{e.annual_premium_per_life?.toLocaleString() || "—"}</TableCell>
+      <TableCell className={`text-xs font-semibold ${(e.prorata_premium || 0) < 0 ? "text-red-600" : "text-green-600"}`}>
+        {(e.prorata_premium || 0) < 0 ? `₹${Math.abs(e.prorata_premium).toLocaleString()} (Refund)` : `₹${(e.prorata_premium || 0).toLocaleString()}`}
+      </TableCell>
+      <TableCell className="text-right space-x-0.5">
+        <Button variant="ghost" size="sm" onClick={() => onView(e)} data-testid={`view-endorsement-${e.id}`}><Eye className="w-4 h-4 text-blue-600" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onEdit(e)} data-testid={`edit-endorsement-${e.id}`}><Edit className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="sm" onClick={() => onDelete(e.id)} data-testid={`delete-endorsement-${e.id}`}><Trash2 className="w-4 h-4 text-red-600" /></Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+/* ─── Sub: Batch Action Bar ─── */
+function BatchActionBar({ count, onApprove, onReject, onClear }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg" data-testid="batch-action-bar">
+      <CheckCheck className="w-4 h-4 text-blue-600" />
+      <span className="text-sm font-medium text-blue-800">{count} pending endorsement{count !== 1 ? "s" : ""} selected</span>
+      <div className="flex-1" />
+      <Button size="sm" onClick={onApprove} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" data-testid="batch-approve-btn">
+        <CheckCircle2 className="w-3.5 h-3.5" /> Approve All
+      </Button>
+      <Button size="sm" variant="destructive" onClick={onReject} className="gap-1.5" data-testid="batch-reject-btn">
+        <XCircle className="w-3.5 h-3.5" /> Reject All
+      </Button>
+      <Button size="sm" variant="ghost" onClick={onClear} className="text-stone-500">Clear</Button>
+    </div>
+  );
+}
+
+/* ─── MAIN ─── */
 const EndorsementsPage = () => {
   const [endorsements, setEndorsements] = useState([]);
   const [policies, setPolicies] = useState([]);
@@ -20,19 +89,17 @@ const EndorsementsPage = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewEndorsement, setViewEndorsement] = useState(null);
   const [editingEndorsement, setEditingEndorsement] = useState(null);
-  const [filters, setFilters] = useState({
-    policy_number: "all",
-    relationship_type: "all",
-  });
+  const [filters, setFilters] = useState({ policy_number: "all", relationship_type: "all", status: "all" });
   const [stats, setStats] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchAction, setBatchAction] = useState("Approved");
+  const [batchRemarks, setBatchRemarks] = useState("");
+  const [batchLoading, setBatchLoading] = useState(false);
 
   const [formData, setFormData] = useState({
-    policy_number: "",
-    member_name: "",
-    relationship_type: "",
-    endorsement_type: "",
-    endorsement_date: "",
-    effective_date: "",
+    policy_number: "", member_name: "", relationship_type: "", endorsement_type: "",
+    endorsement_date: "", effective_date: "", annual_premium_per_life: "", prorata_premium: "", per_life_premium: "",
   });
 
   useEffect(() => {
@@ -43,79 +110,95 @@ const EndorsementsPage = () => {
   }, []);
 
   const fetchPolicies = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API}/policies`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setPolicies(response.data);
-    } catch (error) {
-      console.error("Error fetching policies:", error);
-    }
+    try { const r = await axios.get(`${API}/policies`, { headers: hdrs() }); setPolicies(r.data); } catch {}
   };
 
   const fetchEndorsements = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      let url = `${API}/endorsements`;
       const params = new URLSearchParams();
       if (filters.policy_number && filters.policy_number !== "all") params.append("policy_number", filters.policy_number);
       if (filters.relationship_type && filters.relationship_type !== "all") params.append("relationship_type", filters.relationship_type);
-      
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-      
-      const response = await axios.get(url, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setEndorsements(response.data);
-    } catch (error) {
-      console.error("Error fetching endorsements:", error);
-      toast.error("Failed to fetch endorsements");
-    } finally {
-      setLoading(false);
-    }
+      const url = params.toString() ? `${API}/endorsements?${params}` : `${API}/endorsements`;
+      const r = await axios.get(url, { headers: hdrs() });
+      setEndorsements(r.data);
+      setSelectedIds(new Set());
+    } catch { toast.error("Failed to fetch endorsements"); }
+    finally { setLoading(false); }
   };
 
   const fetchStats = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get(`${API}/endorsements/stats/summary`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setStats(response.data);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
+    try { const r = await axios.get(`${API}/endorsements/stats/summary`, { headers: hdrs() }); setStats(r.data); } catch {}
+  };
+
+  // Client-side status filter
+  const displayed = useMemo(() => {
+    if (filters.status === "all") return endorsements;
+    return endorsements.filter(e => e.status === filters.status);
+  }, [endorsements, filters.status]);
+
+  const pendingIds = useMemo(() => displayed.filter(e => e.status === "Pending").map(e => e.id), [displayed]);
+  const allPendingSelected = pendingIds.length > 0 && pendingIds.every(id => selectedIds.has(id));
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allPendingSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pendingIds));
     }
   };
 
-  const handleFilterChange = (key, value) => {
-    setFilters({ ...filters, [key]: value });
+  const openBatchDialog = (action) => {
+    setBatchAction(action);
+    setBatchRemarks("");
+    setBatchDialogOpen(true);
   };
 
-  const applyFilters = () => {
-    fetchEndorsements();
+  const executeBatch = async () => {
+    if (selectedIds.size === 0) return;
+    setBatchLoading(true);
+    try {
+      const r = await axios.post(`${API}/endorsements/bulk-approve`, {
+        endorsement_ids: [...selectedIds],
+        status: batchAction,
+        remarks: batchRemarks || null,
+      }, { headers: hdrs() });
+      const d = r.data;
+      if (batchAction === "Approved") {
+        toast.success(`${d.success_count} endorsement${d.success_count !== 1 ? "s" : ""} approved`);
+      } else {
+        toast.success(`${d.success_count} endorsement${d.success_count !== 1 ? "s" : ""} rejected`);
+      }
+      if (d.failed_count > 0) toast.warning(`${d.failed_count} failed`);
+      setBatchDialogOpen(false);
+      setSelectedIds(new Set());
+      fetchEndorsements();
+      fetchStats();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Batch operation failed");
+    } finally { setBatchLoading(false); }
   };
 
-  const clearFilters = () => {
-    setFilters({ policy_number: "all", relationship_type: "all" });
-    setTimeout(() => fetchEndorsements(), 100);
-  };
+  const handleFilterChange = (key, value) => setFilters(f => ({ ...f, [key]: value }));
+  const applyFilters = () => fetchEndorsements();
+  const clearFilters = () => { setFilters({ policy_number: "all", relationship_type: "all", status: "all" }); setTimeout(() => fetchEndorsements(), 100); };
 
   const handleEdit = (endorsement) => {
     setEditingEndorsement(endorsement);
     setFormData({
-      policy_number: endorsement.policy_number,
-      member_name: endorsement.member_name,
-      relationship_type: endorsement.relationship_type,
-      endorsement_type: endorsement.endorsement_type,
-      endorsement_date: endorsement.endorsement_date,
-      effective_date: endorsement.effective_date,
+      policy_number: endorsement.policy_number, member_name: endorsement.member_name,
+      relationship_type: endorsement.relationship_type, endorsement_type: endorsement.endorsement_type,
+      endorsement_date: endorsement.endorsement_date, effective_date: endorsement.effective_date,
       annual_premium_per_life: endorsement.annual_premium_per_life ?? "",
-      prorata_premium: endorsement.prorata_premium ?? "",
-      per_life_premium: endorsement.per_life_premium ?? "",
+      prorata_premium: endorsement.prorata_premium ?? "", per_life_premium: endorsement.per_life_premium ?? "",
     });
     setIsDialogOpen(true);
   };
@@ -125,26 +208,14 @@ const EndorsementsPage = () => {
     try {
       if (editingEndorsement) {
         const updateData = {
-          member_name: formData.member_name,
-          relationship_type: formData.relationship_type,
-          endorsement_type: formData.endorsement_type,
-          endorsement_date: formData.endorsement_date,
+          member_name: formData.member_name, relationship_type: formData.relationship_type,
+          endorsement_type: formData.endorsement_type, endorsement_date: formData.endorsement_date,
           effective_date: formData.effective_date || formData.endorsement_date,
         };
-        // Include premium fields if provided
-        if (formData.annual_premium_per_life !== "" && formData.annual_premium_per_life != null) {
-          updateData.annual_premium_per_life = parseFloat(formData.annual_premium_per_life);
-        }
-        if (formData.prorata_premium !== "" && formData.prorata_premium != null) {
-          updateData.prorata_premium = parseFloat(formData.prorata_premium);
-        }
-        if (formData.per_life_premium !== "" && formData.per_life_premium != null) {
-          updateData.per_life_premium = parseFloat(formData.per_life_premium);
-        }
-        const token = localStorage.getItem('token');
-        await axios.put(`${API}/endorsements/${editingEndorsement.id}`, updateData, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        if (formData.annual_premium_per_life !== "" && formData.annual_premium_per_life != null) updateData.annual_premium_per_life = parseFloat(formData.annual_premium_per_life);
+        if (formData.prorata_premium !== "" && formData.prorata_premium != null) updateData.prorata_premium = parseFloat(formData.prorata_premium);
+        if (formData.per_life_premium !== "" && formData.per_life_premium != null) updateData.per_life_premium = parseFloat(formData.per_life_premium);
+        await axios.put(`${API}/endorsements/${editingEndorsement.id}`, updateData, { headers: hdrs() });
         toast.success("Endorsement updated successfully");
       }
       setIsDialogOpen(false);
@@ -152,246 +223,160 @@ const EndorsementsPage = () => {
       fetchEndorsements();
       fetchStats();
     } catch (error) {
-      console.error("Error saving endorsement:", error);
       toast.error(error.response?.data?.detail || "Failed to save endorsement");
     }
   };
 
   const handleDelete = async (endorsementId) => {
-    if (!window.confirm("Are you sure you want to delete this endorsement?")) {
-      return;
-    }
+    if (!window.confirm("Are you sure you want to delete this endorsement?")) return;
     try {
-      const token = localStorage.getItem('token');
-      await axios.delete(`${API}/endorsements/${endorsementId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      await axios.delete(`${API}/endorsements/${endorsementId}`, { headers: hdrs() });
       toast.success("Endorsement deleted successfully");
       fetchEndorsements();
       fetchStats();
-    } catch (error) {
-      console.error("Error deleting endorsement:", error);
-      toast.error("Failed to delete endorsement");
-    }
+    } catch { toast.error("Failed to delete endorsement"); }
   };
 
   const resetForm = () => {
-    setFormData({
-      policy_number: "",
-      member_name: "",
-      relationship_type: "",
-      endorsement_type: "",
-      endorsement_date: "",
-      effective_date: "",
-      annual_premium_per_life: "",
-      prorata_premium: "",
-      per_life_premium: "",
-    });
+    setFormData({ policy_number: "", member_name: "", relationship_type: "", endorsement_type: "", endorsement_date: "", effective_date: "", annual_premium_per_life: "", prorata_premium: "", per_life_premium: "" });
     setEditingEndorsement(null);
-  };
-
-  const handleDialogClose = () => {
-    setIsDialogOpen(false);
-    resetForm();
-  };
-
-  const getRelationshipColor = (type) => {
-    const colors = {
-      Employee: "bg-blue-100 text-blue-800",
-      Spouse: "bg-pink-100 text-pink-800",
-      Kids: "bg-green-100 text-green-800",
-      Mother: "bg-purple-100 text-purple-800",
-      Father: "bg-orange-100 text-orange-800",
-    };
-    return colors[type] || "bg-gray-100 text-gray-800";
   };
 
   return (
     <div className="space-y-6" data-testid="endorsements-page">
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Endorsements</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="total-endorsements">{stats.total_endorsements}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Total Policies</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="total-policies">{stats.total_policies}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Additions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {stats.by_endorsement_type.find(t => t._id === "Addition")?.count || 0}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">Deletions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {stats.by_endorsement_type.find(t => t._id === "Deletion")?.count || 0}
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Total Endorsements</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold" data-testid="total-endorsements">{stats.total_endorsements}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Total Policies</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold" data-testid="total-policies">{stats.total_policies}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Additions</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold text-green-600">{stats.by_endorsement_type?.find(t => t._id === "Addition")?.count || 0}</div></CardContent></Card>
+          <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-gray-600">Deletions</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold text-red-600">{stats.by_endorsement_type?.find(t => t._id === "Deletion")?.count || 0}</div></CardContent></Card>
         </div>
       )}
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Filters</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label>Policy Number</Label>
-              <Select
-                value={filters.policy_number}
-                onValueChange={(value) => handleFilterChange("policy_number", value)}
-              >
-                <SelectTrigger data-testid="filter-policy-select">
-                  <SelectValue placeholder="All Policies" />
-                </SelectTrigger>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Policy Number</Label>
+              <Select value={filters.policy_number} onValueChange={v => handleFilterChange("policy_number", v)}>
+                <SelectTrigger data-testid="filter-policy-select"><SelectValue placeholder="All Policies" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Policies</SelectItem>
-                  {policies.map((policy) => (
-                    <SelectItem key={policy.id} value={policy.policy_number}>
-                      {policy.policy_number} - {policy.policy_holder_name}
-                    </SelectItem>
-                  ))}
+                  {policies.map(p => <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} - {p.policy_holder_name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Relationship Type</Label>
-              <Select
-                value={filters.relationship_type}
-                onValueChange={(value) => handleFilterChange("relationship_type", value)}
-              >
-                <SelectTrigger data-testid="filter-relationship-select">
-                  <SelectValue placeholder="All Relationships" />
-                </SelectTrigger>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Relationship Type</Label>
+              <Select value={filters.relationship_type} onValueChange={v => handleFilterChange("relationship_type", v)}>
+                <SelectTrigger data-testid="filter-relationship-select"><SelectValue placeholder="All Relationships" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Relationships</SelectItem>
                   <SelectItem value="Employee">Employee</SelectItem>
                   <SelectItem value="Spouse">Spouse</SelectItem>
                   <SelectItem value="Kids">Kids</SelectItem>
+                  <SelectItem value="Kids1">Kids1</SelectItem>
+                  <SelectItem value="Kids2">Kids2</SelectItem>
                   <SelectItem value="Mother">Mother</SelectItem>
                   <SelectItem value="Father">Father</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Status</Label>
+              <Select value={filters.status} onValueChange={v => handleFilterChange("status", v)}>
+                <SelectTrigger data-testid="filter-status-select"><SelectValue placeholder="All Statuses" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                  <SelectItem value="Approved">Approved</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-end gap-2">
-              <Button onClick={applyFilters} className="flex-1" data-testid="apply-filters-button">
-                <Filter className="w-4 h-4 mr-2" />
-                Apply
-              </Button>
-              <Button onClick={clearFilters} variant="outline" data-testid="clear-filters-button">
-                <X className="w-4 h-4 mr-2" />
-                Clear
-              </Button>
+              <Button onClick={applyFilters} className="flex-1" data-testid="apply-filters-button"><Filter className="w-4 h-4 mr-2" />Apply</Button>
+              <Button onClick={clearFilters} variant="outline" data-testid="clear-filters-button"><X className="w-4 h-4 mr-2" />Clear</Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Batch Action Bar */}
+      {selectedIds.size > 0 && (
+        <BatchActionBar
+          count={selectedIds.size}
+          onApprove={() => openBatchDialog("Approved")}
+          onReject={() => openBatchDialog("Rejected")}
+          onClear={() => setSelectedIds(new Set())}
+        />
+      )}
+
       {/* Endorsements Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Endorsements</CardTitle>
-          <CardDescription>View and manage policy endorsements</CardDescription>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Endorsements</CardTitle>
+              <CardDescription>View and manage policy endorsements</CardDescription>
+            </div>
+            {pendingIds.length > 0 && (
+              <div className="flex items-center gap-2 text-sm text-stone-500">
+                <Badge variant="secondary" className="text-xs">{pendingIds.length} pending</Badge>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex justify-center items-center py-8">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-            </div>
-          ) : endorsements.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No endorsements found. Import endorsements from the Import Excel page.
-            </div>
+            <div className="flex justify-center items-center py-8"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+          ) : displayed.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">No endorsements found.</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Policy</TableHead>
-                    <TableHead>Employee ID</TableHead>
-                    <TableHead>Member Name</TableHead>
-                    <TableHead>Relationship</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Coverage</TableHead>
-                    <TableHead>Endorsement Date</TableHead>
-                    <TableHead>Remaining Days</TableHead>
-                    <TableHead>Annual Premium</TableHead>
-                    <TableHead>Pro-rata Premium</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-10">
+                      {pendingIds.length > 0 && (
+                        <Checkbox
+                          checked={allPendingSelected}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="select-all-pending"
+                          title="Select all pending"
+                        />
+                      )}
+                    </TableHead>
+                    <TableHead className="text-xs">Policy</TableHead>
+                    <TableHead className="text-xs">Employee ID</TableHead>
+                    <TableHead className="text-xs">Member Name</TableHead>
+                    <TableHead className="text-xs">Relationship</TableHead>
+                    <TableHead className="text-xs">Type</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Coverage</TableHead>
+                    <TableHead className="text-xs">Endorsement Date</TableHead>
+                    <TableHead className="text-xs">Annual Premium</TableHead>
+                    <TableHead className="text-xs">Pro-rata Premium</TableHead>
+                    <TableHead className="text-xs text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {endorsements.map((endorsement) => (
-                    <TableRow key={endorsement.id} data-testid={`endorsement-row-${endorsement.id}`}>
-                      <TableCell className="font-medium">{endorsement.policy_number}</TableCell>
-                      <TableCell>{endorsement.employee_id || "-"}</TableCell>
-                      <TableCell>{endorsement.member_name}</TableCell>
-                      <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getRelationshipColor(endorsement.relationship_type)}`}>
-                          {endorsement.relationship_type}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={endorsement.endorsement_type === "Addition" || endorsement.endorsement_type === "Midterm addition" ? "default" : endorsement.endorsement_type === "Deletion" ? "destructive" : "secondary"}>
-                          {endorsement.endorsement_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{endorsement.sum_insured ? `₹${endorsement.sum_insured.toLocaleString()}` : "-"}</TableCell>
-                      <TableCell>{new Date(endorsement.endorsement_date).toLocaleDateString()}</TableCell>
-                      <TableCell>{endorsement.remaining_days} days</TableCell>
-                      <TableCell className="text-gray-600">₹{endorsement.annual_premium_per_life?.toLocaleString() || '—'}</TableCell>
-                      <TableCell className={`font-semibold ${endorsement.prorata_premium < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {endorsement.prorata_premium < 0 ? `₹${Math.abs(endorsement.prorata_premium).toLocaleString()} (Refund)` : `₹${endorsement.prorata_premium.toLocaleString()}`}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setViewEndorsement(endorsement); setViewDialogOpen(true); }}
-                          data-testid={`view-endorsement-${endorsement.id}`}
-                        >
-                          <Eye className="w-4 h-4 text-blue-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(endorsement)}
-                          data-testid={`edit-endorsement-${endorsement.id}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(endorsement.id)}
-                          data-testid={`delete-endorsement-${endorsement.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-red-600" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                  {displayed.map(e => (
+                    <EndorsementRow
+                      key={e.id} e={e}
+                      selected={selectedIds.has(e.id)}
+                      onToggle={toggleSelect}
+                      onView={en => { setViewEndorsement(en); setViewDialogOpen(true); }}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -401,7 +386,7 @@ const EndorsementsPage = () => {
       </Card>
 
       {/* Edit Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
+      <Dialog open={isDialogOpen} onOpenChange={() => { setIsDialogOpen(false); resetForm(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Endorsement</DialogTitle>
@@ -409,117 +394,40 @@ const EndorsementsPage = () => {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="member_name">Member Name</Label>
-                <Input
-                  id="member_name"
-                  data-testid="edit-member-name-input"
-                  value={formData.member_name}
-                  onChange={(e) => setFormData({ ...formData, member_name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="relationship_type">Relationship Type</Label>
-                <Select
-                  value={formData.relationship_type}
-                  onValueChange={(value) => setFormData({ ...formData, relationship_type: value })}
-                >
-                  <SelectTrigger data-testid="edit-relationship-select">
-                    <SelectValue />
-                  </SelectTrigger>
+              <div className="space-y-2"><Label htmlFor="member_name">Member Name</Label>
+                <Input id="member_name" data-testid="edit-member-name-input" value={formData.member_name} onChange={e => setFormData({ ...formData, member_name: e.target.value })} required /></div>
+              <div className="space-y-2"><Label htmlFor="relationship_type">Relationship Type</Label>
+                <Select value={formData.relationship_type} onValueChange={v => setFormData({ ...formData, relationship_type: v })}>
+                  <SelectTrigger data-testid="edit-relationship-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Employee">Employee</SelectItem>
-                    <SelectItem value="Spouse">Spouse</SelectItem>
-                    <SelectItem value="Kids">Kids</SelectItem>
-                    <SelectItem value="Mother">Mother</SelectItem>
-                    <SelectItem value="Father">Father</SelectItem>
+                    <SelectItem value="Employee">Employee</SelectItem><SelectItem value="Spouse">Spouse</SelectItem>
+                    <SelectItem value="Kids">Kids</SelectItem><SelectItem value="Kids1">Kids1</SelectItem><SelectItem value="Kids2">Kids2</SelectItem>
+                    <SelectItem value="Mother">Mother</SelectItem><SelectItem value="Father">Father</SelectItem>
                   </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endorsement_type">Endorsement Type</Label>
-                <Select
-                  value={formData.endorsement_type}
-                  onValueChange={(value) => setFormData({ ...formData, endorsement_type: value })}
-                >
-                  <SelectTrigger data-testid="edit-type-select">
-                    <SelectValue />
-                  </SelectTrigger>
+                </Select></div>
+              <div className="space-y-2"><Label htmlFor="endorsement_type">Endorsement Type</Label>
+                <Select value={formData.endorsement_type} onValueChange={v => setFormData({ ...formData, endorsement_type: v })}>
+                  <SelectTrigger data-testid="edit-type-select"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Addition">Addition</SelectItem>
-                    <SelectItem value="Deletion">Deletion</SelectItem>
-                    <SelectItem value="Correction">Correction</SelectItem>
-                    <SelectItem value="Midterm addition">Midterm addition</SelectItem>
+                    <SelectItem value="Addition">Addition</SelectItem><SelectItem value="Deletion">Deletion</SelectItem>
+                    <SelectItem value="Correction">Correction</SelectItem><SelectItem value="Midterm addition">Midterm addition</SelectItem>
                   </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="endorsement_date">Endorsement Date</Label>
-                <Input
-                  id="endorsement_date"
-                  type="date"
-                  data-testid="edit-endorsement-date-input"
-                  value={formData.endorsement_date}
-                  onChange={(e) => setFormData({ ...formData, endorsement_date: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="effective_date">Effective Date</Label>
-                <Input
-                  id="effective_date"
-                  type="date"
-                  data-testid="edit-effective-date-input"
-                  value={formData.effective_date}
-                  onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="per_life_premium">Per Life Premium (₹)</Label>
-                <Input
-                  id="per_life_premium"
-                  type="number"
-                  step="0.01"
-                  data-testid="edit-per-life-premium-input"
-                  value={formData.per_life_premium}
-                  onChange={(e) => setFormData({ ...formData, per_life_premium: e.target.value })}
-                  placeholder="Per life premium"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="annual_premium_per_life">Annual Premium / Life (₹)</Label>
-                <Input
-                  id="annual_premium_per_life"
-                  type="number"
-                  step="0.01"
-                  data-testid="edit-annual-premium-input"
-                  value={formData.annual_premium_per_life}
-                  onChange={(e) => setFormData({ ...formData, annual_premium_per_life: e.target.value })}
-                  placeholder="Annual premium per life"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="prorata_premium">Prorated Premium (₹)</Label>
-                <Input
-                  id="prorata_premium"
-                  type="number"
-                  step="0.01"
-                  data-testid="edit-prorata-premium-input"
-                  value={formData.prorata_premium}
-                  onChange={(e) => setFormData({ ...formData, prorata_premium: e.target.value })}
-                  placeholder="Prorated premium amount"
-                />
-                <p className="text-xs text-stone-500">Negative for refunds, positive for charges</p>
-              </div>
+                </Select></div>
+              <div className="space-y-2"><Label htmlFor="endorsement_date">Endorsement Date</Label>
+                <Input id="endorsement_date" type="date" data-testid="edit-endorsement-date-input" value={formData.endorsement_date} onChange={e => setFormData({ ...formData, endorsement_date: e.target.value })} required /></div>
+              <div className="space-y-2"><Label htmlFor="effective_date">Effective Date</Label>
+                <Input id="effective_date" type="date" data-testid="edit-effective-date-input" value={formData.effective_date} onChange={e => setFormData({ ...formData, effective_date: e.target.value })} /></div>
+              <div className="space-y-2"><Label htmlFor="per_life_premium">Per Life Premium (₹)</Label>
+                <Input id="per_life_premium" type="number" step="0.01" data-testid="edit-per-life-premium-input" value={formData.per_life_premium} onChange={e => setFormData({ ...formData, per_life_premium: e.target.value })} placeholder="Per life premium" /></div>
+              <div className="space-y-2"><Label htmlFor="annual_premium_per_life">Annual Premium / Life (₹)</Label>
+                <Input id="annual_premium_per_life" type="number" step="0.01" data-testid="edit-annual-premium-input" value={formData.annual_premium_per_life} onChange={e => setFormData({ ...formData, annual_premium_per_life: e.target.value })} placeholder="Annual premium per life" /></div>
+              <div className="space-y-2"><Label htmlFor="prorata_premium">Prorated Premium (₹)</Label>
+                <Input id="prorata_premium" type="number" step="0.01" data-testid="edit-prorata-premium-input" value={formData.prorata_premium} onChange={e => setFormData({ ...formData, prorata_premium: e.target.value })} placeholder="Prorated premium amount" />
+                <p className="text-xs text-stone-500">Negative for refunds, positive for charges</p></div>
             </div>
             <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={handleDialogClose}>
-                Cancel
-              </Button>
-              <Button type="submit" data-testid="save-endorsement-button">
-                Update
-              </Button>
+              <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }}>Cancel</Button>
+              <Button type="submit" data-testid="save-endorsement-button">Update</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -549,10 +457,59 @@ const EndorsementsPage = () => {
               <div><span className="text-gray-500 block text-xs">Date of Joining</span><strong>{viewEndorsement.date_of_joining || "—"}</strong></div>
               <div><span className="text-gray-500 block text-xs">Date of Leaving</span><strong>{viewEndorsement.date_of_leaving || "—"}</strong></div>
               <div><span className="text-gray-500 block text-xs">Annual Premium/Life</span><strong>₹{viewEndorsement.annual_premium_per_life?.toLocaleString() || "—"}</strong></div>
-              <div><span className="text-gray-500 block text-xs">Pro-rata Premium</span><strong className={viewEndorsement.prorata_premium < 0 ? "text-red-600" : "text-green-600"}>₹{viewEndorsement.prorata_premium?.toLocaleString()}</strong></div>
+              <div><span className="text-gray-500 block text-xs">Pro-rata Premium</span><strong className={(viewEndorsement.prorata_premium || 0) < 0 ? "text-red-600" : "text-green-600"}>₹{viewEndorsement.prorata_premium?.toLocaleString()}</strong></div>
               <div className="col-span-2"><span className="text-gray-500 block text-xs">Remarks</span><strong>{viewEndorsement.remarks || "—"}</strong></div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Approve/Reject Confirmation Dialog */}
+      <Dialog open={batchDialogOpen} onOpenChange={() => setBatchDialogOpen(false)}>
+        <DialogContent className="max-w-md" data-testid="batch-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle className={batchAction === "Approved" ? "text-emerald-700" : "text-red-700"}>
+              {batchAction === "Approved" ? "Batch Approve" : "Batch Reject"} Endorsements
+            </DialogTitle>
+            <DialogDescription>
+              You are about to {batchAction === "Approved" ? "approve" : "reject"} <strong>{selectedIds.size}</strong> pending endorsement{selectedIds.size !== 1 ? "s" : ""}.
+              {batchAction === "Approved" && " CD Ledger entries will be created for each."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Remarks (optional)</Label>
+              <Textarea
+                value={batchRemarks}
+                onChange={e => setBatchRemarks(e.target.value)}
+                placeholder={batchAction === "Approved" ? "e.g. Batch approved after HR verification" : "e.g. Incomplete documentation"}
+                rows={3}
+                data-testid="batch-remarks-input"
+              />
+            </div>
+            <div className="rounded-lg bg-stone-50 p-3 text-xs text-stone-600">
+              <p className="font-medium mb-1">This will:</p>
+              <ul className="list-disc pl-4 space-y-0.5">
+                <li>Set status to <strong>{batchAction}</strong> for {selectedIds.size} endorsement{selectedIds.size !== 1 ? "s" : ""}</li>
+                {batchAction === "Approved" && <li>Create CD Ledger deduction/credit entries</li>}
+                {batchAction === "Approved" && <li>Update policy lives covered counts</li>}
+                <li>Send email notifications to submitting HR users</li>
+              </ul>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBatchDialogOpen(false)} disabled={batchLoading}>Cancel</Button>
+            <Button
+              onClick={executeBatch}
+              disabled={batchLoading}
+              className={batchAction === "Approved" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+              variant={batchAction === "Rejected" ? "destructive" : "default"}
+              data-testid="batch-confirm-btn"
+            >
+              {batchLoading ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              {batchAction === "Approved" ? "Confirm Approve" : "Confirm Reject"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

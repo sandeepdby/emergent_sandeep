@@ -3322,6 +3322,24 @@ async def bulk_approve_endorsements(
                     {"id": endorsement['policy_id']},
                     {"$inc": {"total_lives_covered": -1}}
                 )
+
+            # Auto-adjust CD Ledger balance
+            premium = endorsement.get('prorata_premium', 0)
+            if premium != 0:
+                cd_entry = {
+                    "id": str(uuid.uuid4()),
+                    "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    "reference": f"END-{endorsement_id[:8].upper()}",
+                    "description": f"{'Premium Charge' if premium > 0 else 'Refund Credit'} - {endorsement['member_name']} ({endorsement['endorsement_type']})",
+                    "amount": -premium,
+                    "policy_number": endorsement.get('policy_number'),
+                    "entry_type": "Endorsement Deduction" if premium > 0 else "Refund Credit",
+                    "endorsement_id": endorsement_id,
+                    "created_by": current_user.id,
+                    "created_by_name": current_user.full_name,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.cd_ledger.insert_one(cd_entry)
         
         processed_endorsements.append(endorsement)
         success_count += 1
