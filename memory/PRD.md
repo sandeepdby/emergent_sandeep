@@ -201,6 +201,15 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Untagged Filter**: Admin has "Untagged (No Policy)" filter option to find orphaned entries. Red "Untagged" badge on entries without policy.
 - **Bulk Tag**: POST /api/cd-ledger/bulk-tag endpoint + UI bar to assign untagged entries to a policy in bulk.
 
+### Employee Directory Excel Upload & Copyright Update (DONE - Jul 2026)
+- **Active Members Upload**: Admin can upload Excel with active members (Employee ID, Name, Relationship, DOB, Age, Gender, Policy, Mobile, Email, Sum Insured, Coverage Type). Creates Addition endorsements. Includes template download.
+- **Policy Filter Fix**: Employee Directory policy filter now shows ALL system policies (from /api/policies), not just policies with active members.
+- **All Policy Filter**: "All Policies" option correctly shows all members unfiltered.
+- **Email on Endorsement Import**: POST /api/endorsements/import and POST /api/employee-directory/upload both send background email notifications to mapped HR users and Admins.
+- **Copyright Update**: All pages display "Aarogya Innovate Pvt Ltd" in copyright footers and branding.
+- **Mobile Number Fix**: Excel uploads read all columns as strings (dtype=str) to prevent pandas float coercion corrupting mobile numbers like +919876543210.
+- **Endpoints**: GET /api/employee-directory/template, POST /api/employee-directory/upload
+
 ## Remaining Backlog
 
 ### Security Audit & Fixes (DONE - Jul 2026)

@@ -2541,7 +2541,7 @@ async def approve_reject_endorsement(
 @api_router.post("/endorsements/import", response_model=ImportResult)
 async def import_endorsements_from_excel(
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -2552,7 +2552,7 @@ async def import_endorsements_from_excel(
     
     try:
         contents = await file.read()
-        df = pd.read_excel(io.BytesIO(contents))
+        df = pd.read_excel(io.BytesIO(contents), dtype=str)
         
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
@@ -2650,9 +2650,9 @@ async def import_endorsements_from_excel(
                 
                 # Parse age
                 age = None
-                if 'age' in df.columns and pd.notna(row.get('age')):
+                if 'age' in df.columns and pd.notna(row.get('age')) and str(row.get('age')).strip() not in ("", "nan"):
                     try:
-                        age = int(row['age'])
+                        age = int(float(row['age']))
                     except (ValueError, TypeError):
                         pass
                 
@@ -4437,7 +4437,7 @@ async def download_member_upload_template(current_user: User = Depends(get_curre
 @api_router.post("/employee-directory/upload")
 async def upload_active_members(
     file: UploadFile = File(...),
-    background_tasks: BackgroundTasks = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     current_user: User = Depends(get_current_user),
 ):
     """Upload active members via Excel — creates Addition endorsements for each member"""
@@ -4446,7 +4446,7 @@ async def upload_active_members(
 
     contents = await file.read()
     try:
-        df = pd.read_excel(io.BytesIO(contents))
+        df = pd.read_excel(io.BytesIO(contents), dtype=str)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to read Excel: {str(e)}")
 
@@ -4504,8 +4504,8 @@ async def upload_active_members(
                 dob = dob_val.strftime("%Y-%m-%d") if isinstance(dob_val, datetime) else str(dob_val).strip()[:10]
 
             age = None
-            if "age" in df.columns and pd.notna(row.get("age")):
-                try: age = int(row["age"])
+            if "age" in df.columns and pd.notna(row.get("age")) and str(row.get("age")).strip() not in ("", "nan"):
+                try: age = int(float(row["age"]))
                 except: pass
 
             gender = None
@@ -4519,7 +4519,10 @@ async def upload_active_members(
             if mobile == "nan": mobile = None
             email = str(row.get("email", "")).strip() if pd.notna(row.get("email")) else None
             if email == "nan": email = None
-            si = float(row["sum_insured"]) if "sum_insured" in df.columns and pd.notna(row.get("sum_insured")) else None
+            si = None
+            if "sum_insured" in df.columns and pd.notna(row.get("sum_insured")) and str(row.get("sum_insured")).strip() not in ("", "nan"):
+                try: si = float(row["sum_insured"])
+                except: pass
             cov = str(row.get("coverage_type", "")).strip() if pd.notna(row.get("coverage_type")) else None
             if cov == "nan": cov = None
 
