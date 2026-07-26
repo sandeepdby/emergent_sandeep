@@ -1595,29 +1595,7 @@ async def assign_policy_to_hr(
     result = await db.policy_assignments.find_one({"id": assignment.id}, {"_id": 0})
     await log_audit(current_user.id, current_user.username, current_user.role.value, "ASSIGN_POLICY", "policy_assignment", assignment.id, f"Assigned policy {policy['policy_number']} to HR {hr_user['username']}")
 
-    # Send email notification to HR user
-    hr_email = hr_user.get("email")
-    if hr_email:
-        subject = f"Policy Assigned - {policy['policy_number']} | InsureHub"
-        body = f"""
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-                <h2 style="color: white; margin: 0;">Policy Assigned to You</h2>
-            </div>
-            <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
-                <p style="color: #334155;">Hi <strong>{hr_user['full_name']}</strong>,</p>
-                <p style="color: #475569;">A new policy has been assigned to you on InsureHub. You can now view the policy details and claims.</p>
-                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin: 16px 0;">
-                    <p style="margin: 5px 0;"><strong>Policy Number:</strong> {policy['policy_number']}</p>
-                    <p style="margin: 5px 0;"><strong>Policy Holder:</strong> {policy.get('policy_holder_name', 'N/A')}</p>
-                    <p style="margin: 5px 0;"><strong>Policy Type:</strong> {policy.get('policy_type', 'N/A')}</p>
-                    <p style="margin: 5px 0;"><strong>Status:</strong> {policy.get('status', 'N/A')}</p>
-                    <p style="margin: 5px 0;"><strong>Assigned By:</strong> {current_user.full_name}</p>
-                </div>
-                <p style="color: #64748b; font-size: 13px;">Log in to InsureHub to view the full policy details, claims, and analytics.</p>
-            </div>
-        </div>"""
-        background_tasks.add_task(send_email_notification, [hr_email], subject, body)
+    # Email is now handled via AI preview flow on frontend — no auto-send here
 
     return result
 
