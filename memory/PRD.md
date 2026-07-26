@@ -231,6 +231,19 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Email Notifications**: Submitting HR users are notified when their endorsements are batch approved/rejected
 - **Endpoint**: POST /api/endorsements/bulk-approve (already existed; enhanced with CD Ledger auto-deduction)
 
+### AI Email Preview on Policy Assignment (DONE - Jul 2026)
+- **Feature**: When Admin assigns policies to HR, an AI-generated email preview dialog opens automatically
+- **AI Generation**: Uses GPT-4o-mini to craft a personalized email with policy details, coverage info, insurer, period, lives covered, and a welcome message
+- **Editable Preview**: Admin sees rendered HTML preview with To, Subject fields. Can toggle raw HTML editor to customize
+- **Send/Skip**: Admin can send the email or skip. No duplicate emails (removed auto-send from bulk assignment)
+- **Fallback**: If AI fails, a professional static HTML template with terracotta branding is used
+- **Endpoints**: POST /api/policy-assignments/preview-email, POST /api/policy-assignments/send-email
+
+### Excel Attachment on Endorsement Import Emails (DONE - Jul 2026)
+- **Feature**: When endorsements are imported via Excel (POST /api/endorsements/import), the notification email to HR & Admin now includes the uploaded Excel file as an attachment
+- **Employee Directory Upload**: POST /api/employee-directory/upload also attaches the uploaded Excel to notification emails
+- **Implementation**: Uses existing `send_email_notification` attachments parameter with `[(filename, contents)]`
+
 ### P0 - Critical Tech Debt
 - Backend modularization: server.py (~6450 lines) needs splitting into /routes, /models, /services
 

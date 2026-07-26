@@ -151,16 +151,17 @@ export default function PolicyAssignment() {
     );
   };
 
-  const alreadyAssigned = assignments.filter((a) => a.hr_user_id === selectedHr).map((a) => a.policy_id);
+  const alreadyAssigned = assignments.filter((a) => a.hr_user_id === selectedHr && a.policy_id).map((a) => a.policy_id);
   const availablePolicies = policies.filter((p) => !alreadyAssigned.includes(p.id));
 
   const hrGroupMap = {};
   for (let i = 0; i < assignments.length; i++) {
     const a = assignments[i];
-    if (!hrGroupMap[a.hr_user_id]) {
-      hrGroupMap[a.hr_user_id] = { hrName: a.hr_full_name, hrUsername: a.hr_username, list: [] };
+    const hrId = a.hr_user_id || "unknown";
+    if (!hrGroupMap[hrId]) {
+      hrGroupMap[hrId] = { hrName: a.hr_full_name || a.hr_username || "Unknown", hrUsername: a.hr_username || "—", list: [] };
     }
-    hrGroupMap[a.hr_user_id].list.push(a);
+    hrGroupMap[hrId].list.push(a);
   }
   const hrGroupEntries = Object.entries(hrGroupMap);
 
@@ -350,7 +351,7 @@ export default function PolicyAssignment() {
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-stone-50 border-b px-3 py-1.5 text-[10px] text-stone-400 uppercase tracking-wider">Preview</div>
                   <div
-                    className="p-4 bg-white max-h-[340px] overflow-y-auto text-sm"
+                    className="p-4 bg-white max-h-[340px] overflow-y-auto overflow-x-auto text-sm"
                     dangerouslySetInnerHTML={{ __html: emailBody }}
                     data-testid="email-body-preview"
                   />

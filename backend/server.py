@@ -1717,41 +1717,7 @@ async def bulk_assign_policies(
                 "status": policy.get("status", "N/A"),
             })
 
-    # Send one email per HR user with all newly assigned policies
-    for hr_id, info in hr_notifications.items():
-        policy_rows = ""
-        for p in info["policies"]:
-            policy_rows += f"""<tr>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{p['policy_number']}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['policy_holder_name']}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['policy_type']}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #e2e8f0;">{p['status']}</td>
-            </tr>"""
-        count = len(info["policies"])
-        subject = f"{count} {'Policy' if count == 1 else 'Policies'} Assigned to You | InsureHub"
-        body = f"""
-        <div style="font-family: Arial, sans-serif; max-width: 650px; margin: 0 auto; padding: 20px;">
-            <div style="background: linear-gradient(135deg, #3b82f6, #6366f1); padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-                <h2 style="color: white; margin: 0;">{count} {'Policy' if count == 1 else 'Policies'} Assigned to You</h2>
-            </div>
-            <div style="background: #f8fafc; padding: 24px; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;">
-                <p style="color: #334155;">Hi <strong>{info['full_name']}</strong>,</p>
-                <p style="color: #475569;">The following {'policy has' if count == 1 else 'policies have'} been assigned to you on InsureHub by <strong>{current_user.full_name}</strong>.</p>
-                <table style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #e2e8f0; border-radius: 6px; margin: 16px 0;">
-                    <thead>
-                        <tr style="background: #f1f5f9;">
-                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Policy #</th>
-                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Holder</th>
-                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Type</th>
-                            <th style="padding: 8px 12px; text-align: left; font-size: 12px; color: #64748b;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>{policy_rows}</tbody>
-                </table>
-                <p style="color: #64748b; font-size: 13px;">Log in to InsureHub to view full policy details, claims, and analytics.</p>
-            </div>
-        </div>"""
-        background_tasks.add_task(send_email_notification, [info["email"]], subject, body)
+    # Email is now handled via AI preview flow on frontend — no auto-send here
 
     return {"results": results}
 
