@@ -1756,6 +1756,182 @@ async def bulk_assign_policies(
     return {"results": results}
 
 
+class PolicyEmailPreviewRequest(BaseModel):
+    hr_user_id: str
+    policy_ids: List[str]
+
+class PolicyEmailSendRequest(BaseModel):
+    to_emails: List[str]
+    subject: str
+    body: str
+
+
+@api_router.post("/policy-assignments/preview-email")
+async def generate_policy_assignment_email(
+    request: PolicyEmailPreviewRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate AI-powered email preview for policy assignment notification"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can generate assignment emails")
+
+    hr_user = await db.users.find_one({"id": request.hr_user_id, "role": "HR"}, {"_id": 0})
+    if not hr_user:
+        raise HTTPException(status_code=404, detail="HR user not found")
+
+    policies_data = []
+    for pid in request.policy_ids:
+        p = await db.policies.find_one({"id": pid}, {"_id": 0})
+        if p:
+            policies_data.append(p)
+
+    if not policies_data:
+        raise HTTPException(status_code=404, detail="No valid policies found")
+
+    # Build policy details string for AI
+    policy_details = ""
+    for p in policies_data:
+        policy_details += f"""
+- Policy Number: {p['policy_number']}
+  Holder: {p.get('policy_holder_name', 'N/A')}
+  Type: {p.get('policy_type', 'N/A')}
+  Insurer: {p.get('insurer_name', 'N/A')}
+  Status: {p.get('status', 'Active')}
+  Inception: {p.get('inception_date', 'N/A')}
+  Expiry: {p.get('expiry_date', 'N/A')}
+  Premium: {p.get('premium', 'N/A')}
+  Lives Covered: {p.get('total_lives_covered', 'N/A')}
+  Sum Insured: {p.get('sum_insured', 'N/A')}
+"""
+
+    # Try AI generation
+    ai_subject = None
+    ai_body = None
+
+    if EMERGENT_LLM_KEY:
+        try:
+            chat = LlmChat(
+                api_key=EMERGENT_LLM_KEY,
+                session_id=f"policy-assign-email-{uuid.uuid4()}",
+                system_message="""You are InsureHub's email assistant for Aarogya Innovate Pvt Ltd. Generate professional, warm, and informative policy assignment notification emails. Use clean HTML formatting with inline styles. The email should feel welcoming and provide clear coverage information."""
+            ).with_model("openai", "gpt-4o-mini")
+
+            prompt = f"""Generate a professional policy assignment notification email for an HR user.
+
+HR User: {hr_user['full_name']} ({hr_user.get('email', 'N/A')})
+Assigned By: {current_user.full_name}
+Number of Policies: {len(policies_data)}
+
+Policy Details:
+{policy_details}
+
+Requirements:
+1. Welcome the HR user warmly
+2. List each policy with key details (number, holder, type, insurer, inception/expiry, coverage)
+3. Include a coverage summary section
+4. Mention they can now view policy details, submit endorsements, and access claims
+5. Professional sign-off from Aarogya Innovate Pvt Ltd / InsureHub team
+6. Use a clean, modern HTML email design with terracotta (#E05A47) accent color
+7. Include a styled table for multiple policies
+
+Format your response EXACTLY as:
+EMAIL_SUBJECT: [subject line here]
+---EMAIL_BODY---
+[full HTML email body here]"""
+
+            user_message = UserMessage(text=prompt)
+            response = await chat.send_message(user_message)
+
+            if "EMAIL_SUBJECT:" in response:
+                ai_subject = response.split("EMAIL_SUBJECT:")[1].split("---")[0].strip()
+            if "---EMAIL_BODY---" in response:
+                ai_body = response.split("---EMAIL_BODY---")[1].strip()
+        except Exception as e:
+            logging.error(f"AI email generation failed: {e}")
+
+    # Fallback if AI fails
+    if not ai_subject or not ai_body:
+        count = len(policies_data)
+        policy_rows = ""
+        for p in policies_data:
+            policy_rows += f"""<tr>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-family: monospace; font-size: 13px;">{p['policy_number']}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">{p.get('policy_holder_name', 'N/A')}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">{p.get('policy_type', 'N/A')}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">{p.get('insurer_name', 'N/A')}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">{p.get('inception_date', 'N/A')} — {p.get('expiry_date', 'N/A')}</td>
+                <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; font-size: 13px;">{p.get('total_lives_covered', 'N/A')}</td>
+            </tr>"""
+
+        ai_subject = f"Welcome! {count} {'Policy' if count == 1 else 'Policies'} Assigned to You | InsureHub"
+        ai_body = f"""
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 680px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #E05A47 0%, #c44a3a 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                <h1 style="color: white; margin: 0; font-size: 22px;">Policy Assignment Notification</h1>
+                <p style="color: rgba(255,255,255,0.85); margin: 8px 0 0; font-size: 14px;">InsureHub by Aarogya Innovate Pvt Ltd</p>
+            </div>
+            <div style="background: #f8fafc; padding: 28px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 8px 8px;">
+                <p style="color: #334155; font-size: 15px;">Dear <strong>{hr_user['full_name']}</strong>,</p>
+                <p style="color: #475569; font-size: 14px;">Welcome! We are pleased to inform you that <strong>{count}</strong> {'policy has' if count == 1 else 'policies have'} been assigned to your account by <strong>{current_user.full_name}</strong>.</p>
+
+                <h3 style="color: #E05A47; font-size: 15px; margin: 24px 0 12px; border-bottom: 2px solid #E05A47; padding-bottom: 6px;">Coverage Details</h3>
+                <table style="width: 100%; border-collapse: collapse; background: white; border: 1px solid #e2e8f0; border-radius: 6px; margin: 0 0 20px;">
+                    <thead>
+                        <tr style="background: #f1f5f9;">
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Policy #</th>
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Holder</th>
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Type</th>
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Insurer</th>
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Period</th>
+                            <th style="padding: 10px 14px; text-align: left; font-size: 11px; color: #64748b; text-transform: uppercase;">Lives</th>
+                        </tr>
+                    </thead>
+                    <tbody>{policy_rows}</tbody>
+                </table>
+
+                <div style="background: #FFF7ED; border-left: 4px solid #E05A47; padding: 14px 18px; border-radius: 4px; margin: 20px 0;">
+                    <p style="margin: 0 0 6px; color: #9a3412; font-weight: 600; font-size: 13px;">What you can now do:</p>
+                    <ul style="margin: 0; padding-left: 18px; color: #78350f; font-size: 13px;">
+                        <li>View complete policy details and coverage information</li>
+                        <li>Submit endorsements (additions, deletions, corrections)</li>
+                        <li>Access claims data and analytics for assigned policies</li>
+                        <li>Download reports and financial summaries</li>
+                    </ul>
+                </div>
+
+                <p style="color: #64748b; font-size: 13px; margin-top: 20px;">Log in to <strong>InsureHub</strong> to get started. If you have any questions, please reach out to your administrator.</p>
+
+                <p style="color: #94a3b8; font-size: 12px; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+                    This is an automated notification from InsureHub by Aarogya Innovate Pvt Ltd.
+                </p>
+            </div>
+        </div>"""
+
+    return {
+        "subject": ai_subject,
+        "body": ai_body,
+        "to_email": hr_user.get("email", ""),
+        "hr_name": hr_user["full_name"],
+    }
+
+
+@api_router.post("/policy-assignments/send-email")
+async def send_policy_assignment_email(
+    request: PolicyEmailSendRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
+    """Send the (possibly edited) policy assignment email"""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can send assignment emails")
+
+    if not request.to_emails or not request.subject or not request.body:
+        raise HTTPException(status_code=400, detail="Email, subject, and body are required")
+
+    background_tasks.add_task(send_email_notification, request.to_emails, request.subject, request.body)
+    return {"message": f"Email queued for delivery to {', '.join(request.to_emails)}"}
+
+
 # ==================== ENDORSEMENT ENDPOINTS ====================
 
 
@@ -2871,10 +3047,13 @@ async def import_endorsements_from_excel(
                         <p>Policies: {', '.join(imported_policies[:5])}</p>
                         {f'<p style="color: #dc2626;">{error_count} rows had errors.</p>' if error_count > 0 else ''}
                         <p>Batch ID: {import_batch_id}</p>
+                        <p style="color: #64748b; font-size: 12px;">The uploaded Excel file is attached for your reference.</p>
                         <p style="color: #64748b; font-size: 12px;">Please review in the Admin portal.</p>
                     </div>
                     """
-                    background_tasks.add_task(send_email_notification, all_emails, import_subject, import_body)
+                    # Attach the uploaded Excel file
+                    excel_attachment = [(file.filename or "endorsements_import.xlsx", contents)]
+                    background_tasks.add_task(send_email_notification, all_emails, import_subject, import_body, None, None, None, excel_attachment)
             except Exception as e:
                 logging.error(f"Failed to send import notification email: {e}")
 
@@ -4604,9 +4783,11 @@ async def upload_active_members(
                     <h2 style="color: #E05A47;">Member Upload — Employee Directory</h2>
                     <p><strong>{success_count}</strong> members uploaded by <strong>{current_user.full_name}</strong>.</p>
                     {f'<p style="color: #dc2626;">{error_count} rows had errors.</p>' if error_count > 0 else ''}
+                    <p style="color: #64748b; font-size: 12px;">The uploaded Excel file is attached for your reference.</p>
                     <p style="color: #64748b; font-size: 12px;">All entries created as Pending endorsements awaiting approval.</p>
                 </div>"""
-                background_tasks.add_task(send_email_notification, emails, f"InsureHub — {success_count} Members Uploaded via Directory", body)
+                excel_attachment = [(file.filename or "member_upload.xlsx", contents)]
+                background_tasks.add_task(send_email_notification, emails, f"InsureHub — {success_count} Members Uploaded via Directory", body, None, None, None, excel_attachment)
         except: pass
 
     await log_audit(current_user.id, current_user.username, current_user.role.value, "UPLOAD", "employee_directory", None,

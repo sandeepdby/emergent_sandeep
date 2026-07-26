@@ -280,6 +280,7 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
               value={credentials.username}
               onChange={(e) => setCredentials({...credentials, username: e.target.value})}
               required
+              data-testid="login-username-input"
             />
           </div>
           

@@ -3,12 +3,16 @@ import axios from "axios";
 import { API } from "../auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, Link2, UserCheck, Shield, Plus, Users } from "lucide-react";
+import { Loader2, Link2, UserCheck, Shield, Plus, Users, Mail, Send, Sparkles } from "lucide-react";
 import AssignmentTable from "./AssignmentTable";
+
+const hdrs = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
 
 export default function PolicyAssignment() {
   const [assignments, setAssignments] = useState([]);
@@ -20,18 +24,21 @@ export default function PolicyAssignment() {
   const [selectedPolicies, setSelectedPolicies] = useState([]);
   const [assigning, setAssigning] = useState(false);
 
-  const getHeaders = useCallback(() => {
-    const token = localStorage.getItem("token");
-    return { Authorization: `Bearer ${token}` };
-  }, []);
+  // Email preview state
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailTo, setEmailTo] = useState("");
+  const [emailHrName, setEmailHrName] = useState("");
 
   const fetchData = useCallback(async () => {
     try {
-      const hdrs = getHeaders();
       const [assignRes, policyRes, hrRes] = await Promise.all([
-        axios.get(`${API}/policy-assignments`, { headers: hdrs }),
-        axios.get(`${API}/policies`, { headers: hdrs }),
-        axios.get(`${API}/users/hr`, { headers: hdrs }),
+        axios.get(`${API}/policy-assignments`, { headers: hdrs() }),
+        axios.get(`${API}/policies`, { headers: hdrs() }),
+        axios.get(`${API}/users/hr`, { headers: hdrs() }),
       ]);
       setAssignments(assignRes.data);
       setPolicies(policyRes.data);
@@ -41,7 +48,7 @@ export default function PolicyAssignment() {
     } finally {
       setLoading(false);
     }
-  }, [getHeaders]);
+  }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -56,15 +63,24 @@ export default function PolicyAssignment() {
         policy_id: pid,
         hr_user_id: selectedHr,
       }));
-      const res = await axios.post(`${API}/policy-assignments/bulk`, payload, { headers: getHeaders() });
+      const res = await axios.post(`${API}/policy-assignments/bulk`, payload, { headers: hdrs() });
       const assignedCount = res.data.results.filter((r) => r.status === "assigned").length;
       const skippedCount = res.data.results.filter((r) => r.status === "skipped").length;
       if (assignedCount > 0) toast.success(`${assignedCount} policy(ies) assigned`);
       if (skippedCount > 0) toast.info(`${skippedCount} already assigned (skipped)`);
       setDialogOpen(false);
+      fetchData();
+
+      // Generate AI email preview if any were newly assigned
+      if (assignedCount > 0) {
+        const assignedPolicyIds = res.data.results
+          .filter((r) => r.status === "assigned")
+          .map((r) => r.policy_id);
+        generateEmailPreview(selectedHr, assignedPolicyIds);
+      }
+
       setSelectedHr("");
       setSelectedPolicies([]);
-      fetchData();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to assign");
     } finally {
@@ -72,10 +88,56 @@ export default function PolicyAssignment() {
     }
   };
 
+  const generateEmailPreview = async (hrUserId, policyIds) => {
+    setEmailLoading(true);
+    setEmailDialogOpen(true);
+    setEmailSubject("");
+    setEmailBody("");
+    setEmailTo("");
+    setEmailHrName("");
+    try {
+      const res = await axios.post(`${API}/policy-assignments/preview-email`, {
+        hr_user_id: hrUserId,
+        policy_ids: policyIds,
+      }, { headers: hdrs() });
+      setEmailSubject(res.data.subject || "");
+      setEmailBody(res.data.body || "");
+      setEmailTo(res.data.to_email || "");
+      setEmailHrName(res.data.hr_name || "");
+    } catch (err) {
+      console.error("Email preview failed:", err);
+      toast.error("Failed to generate email preview");
+      setEmailDialogOpen(false);
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailTo || !emailSubject || !emailBody) {
+      toast.error("Email, subject, and body are required");
+      return;
+    }
+    setEmailSending(true);
+    try {
+      await axios.post(`${API}/policy-assignments/send-email`, {
+        to_emails: [emailTo],
+        subject: emailSubject,
+        body: emailBody,
+      }, { headers: hdrs() });
+      toast.success(`Email sent to ${emailHrName || emailTo}`);
+      setEmailDialogOpen(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send email");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   const handleRevoke = async (assignmentId, policyNumber, hrName) => {
     if (!window.confirm(`Revoke policy "${policyNumber}" from "${hrName}"?`)) return;
     try {
-      await axios.delete(`${API}/policy-assignments/${assignmentId}`, { headers: getHeaders() });
+      await axios.delete(`${API}/policy-assignments/${assignmentId}`, { headers: hdrs() });
       toast.success("Assignment revoked");
       fetchData();
     } catch (err) {
@@ -89,11 +151,9 @@ export default function PolicyAssignment() {
     );
   };
 
-  // Compute derived data
   const alreadyAssigned = assignments.filter((a) => a.hr_user_id === selectedHr).map((a) => a.policy_id);
   const availablePolicies = policies.filter((p) => !alreadyAssigned.includes(p.id));
 
-  // Build grouped data
   const hrGroupMap = {};
   for (let i = 0; i < assignments.length; i++) {
     const a = assignments[i];
@@ -114,7 +174,7 @@ export default function PolicyAssignment() {
 
   return (
     <div className="space-y-6" data-testid="policy-assignment-page">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="border-l-4 border-l-indigo-500">
           <CardContent className="p-4 flex items-center gap-3">
             <Link2 className="w-8 h-8 text-indigo-200" />
@@ -187,6 +247,7 @@ export default function PolicyAssignment() {
         </CardContent>
       </Card>
 
+      {/* Assign Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -218,10 +279,7 @@ export default function PolicyAssignment() {
                 ) : (
                   <div className="max-h-60 overflow-y-auto border rounded-md divide-y">
                     {availablePolicies.map((p) => (
-                      <label
-                        key={p.id}
-                        className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
-                      >
+                      <label key={p.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={selectedPolicies.includes(p.id)}
@@ -252,6 +310,76 @@ export default function PolicyAssignment() {
             >
               {assigning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Link2 className="w-4 h-4 mr-2" />}
               Assign {selectedPolicies.length > 0 ? `(${selectedPolicies.length})` : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Email Preview Dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={(open) => { if (!emailLoading) setEmailDialogOpen(open); }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="email-preview-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-amber-500" />
+              AI-Generated Email Preview
+            </DialogTitle>
+            <DialogDescription>
+              {emailHrName ? `Notification email for ${emailHrName}. Review, edit if needed, then send.` : "Generating email..."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {emailLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-[#E05A47]" />
+              <p className="text-sm text-stone-500">AI is crafting the perfect email...</p>
+            </div>
+          ) : (
+            <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">To</Label>
+                <Input value={emailTo} onChange={(e) => setEmailTo(e.target.value)} data-testid="email-to-input" placeholder="recipient@email.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Subject</Label>
+                <Input value={emailSubject} onChange={(e) => setEmailSubject(e.target.value)} data-testid="email-subject-input" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5" /> Email Body (HTML)
+                </Label>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="bg-stone-50 border-b px-3 py-1.5 text-[10px] text-stone-400 uppercase tracking-wider">Preview</div>
+                  <div
+                    className="p-4 bg-white max-h-[340px] overflow-y-auto text-sm"
+                    dangerouslySetInnerHTML={{ __html: emailBody }}
+                    data-testid="email-body-preview"
+                  />
+                </div>
+                <details className="text-xs">
+                  <summary className="cursor-pointer text-stone-400 hover:text-stone-600">Edit raw HTML</summary>
+                  <textarea
+                    className="w-full mt-2 border rounded-md p-3 font-mono text-xs h-48 resize-y focus:outline-none focus:ring-2 focus:ring-[#E05A47]/30"
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    data-testid="email-body-editor"
+                  />
+                </details>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-4 mt-2">
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={emailSending} data-testid="skip-email-btn">
+              Skip
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={emailLoading || emailSending || !emailTo || !emailSubject}
+              className="bg-[#E05A47] hover:bg-[#c44a3a] gap-1.5"
+              data-testid="send-email-btn"
+            >
+              {emailSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Send Email
             </Button>
           </DialogFooter>
         </DialogContent>
