@@ -4220,23 +4220,8 @@ async def get_cd_ledger(
             allowed = [a["policy_number"] for a in assignments]
             if policy_number not in allowed:
                 return {"entries": [], "total_balance": 0, "total_deposits": 0, "total_deductions": 0}
-        # Find the policy to get both policy_number and holder_name for matching
-        import re
-        escaped_pn = re.escape(policy_number)
-        policy_doc = await db.policies.find_one(
-            {"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}},
-            {"_id": 0, "policy_number": 1, "policy_holder_name": 1}
-        )
-        # Strict match: exact policy_number OR exact full holder name only
-        match_conditions = [{"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}}]
-        if policy_doc and policy_doc.get("policy_holder_name"):
-            holder = policy_doc["policy_holder_name"].strip()
-            # Match entries stored with full holder name
-            match_conditions.append({"policy_number": {"$regex": f"^{re.escape(holder)}$", "$options": "i"}})
-        if len(match_conditions) > 1:
-            query["$or"] = match_conditions
-        else:
-            query["policy_number"] = match_conditions[0]["policy_number"]
+        # EXACT policy_number match only
+        query["policy_number"] = policy_number
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
     
