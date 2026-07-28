@@ -37,6 +37,7 @@ export default function CDLedger() {
   const [totalDeductions, setTotalDeductions] = useState(0);
   const [bulkTagPolicy, setBulkTagPolicy] = useState("");
   const [bulkTagging, setBulkTagging] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
   const importRef = React.useRef(null);
 
   const token = localStorage.getItem("token");
@@ -167,6 +168,20 @@ export default function CDLedger() {
     finally { setBulkTagging(false); }
   };
 
+  const handleNormalize = async () => {
+    setNormalizing(true);
+    try {
+      const res = await axios.post(`${API}/cd-ledger/normalize-policies`, {}, { headers });
+      if (res.data.fixed_count > 0) {
+        toast.success(`Fixed ${res.data.fixed_count} entries (checked ${res.data.total_checked})`);
+        fetchLedger();
+      } else {
+        toast.info(`All ${res.data.total_checked} entries already have correct policy numbers`);
+      }
+    } catch (err) { toast.error(err.response?.data?.detail || "Normalization failed"); }
+    finally { setNormalizing(false); }
+  };
+
   const fmtAmt = (v) => `₹${(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   return (
@@ -246,6 +261,10 @@ export default function CDLedger() {
                   {importing ? "Importing..." : "Import Excel"}
                 </Button>
                 <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleImportExcel} data-testid="cd-import-input" />
+                <Button variant="outline" size="sm" disabled={normalizing} onClick={handleNormalize} className="text-amber-700 border-amber-300 hover:bg-amber-50" data-testid="normalize-policies-btn">
+                  {normalizing ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                  Fix Policy Names
+                </Button>
                 <Button size="sm" onClick={() => setShowForm(!showForm)} className="bg-[#E05A47] hover:bg-[#C94837]" data-testid="add-entry-btn"><Plus className="w-4 h-4 mr-1" /> Add Entry</Button>
               </>
             )}

@@ -4220,10 +4220,22 @@ async def get_cd_ledger(
             allowed = [a["policy_number"] for a in assignments]
             if policy_number not in allowed:
                 return {"entries": [], "total_balance": 0, "total_deposits": 0, "total_deductions": 0}
-        # Case-insensitive match to handle import mismatches (e.g., "Relyon(Self+5)" vs "Relyon(self+5)")
+        # Find the policy to get both policy_number and holder_name for matching
         import re
         escaped_pn = re.escape(policy_number)
-        query["policy_number"] = {"$regex": f"^{escaped_pn}$", "$options": "i"}
+        policy_doc = await db.policies.find_one(
+            {"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}},
+            {"_id": 0, "policy_number": 1, "policy_holder_name": 1}
+        )
+        # Build match: policy_number OR policy_holder_name (for entries imported with holder name)
+        match_conditions = [{"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}}]
+        if policy_doc and policy_doc.get("policy_holder_name"):
+            holder = re.escape(policy_doc["policy_holder_name"])
+            match_conditions.append({"policy_number": {"$regex": holder, "$options": "i"}})
+        if len(match_conditions) > 1:
+            query["$or"] = match_conditions
+        else:
+            query["policy_number"] = match_conditions[0]["policy_number"]
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
     
@@ -4435,15 +4447,22 @@ async def import_cd_ledger(
             if policy == "nan":
                 policy = None
 
-            # Normalize policy_number to match canonical name in policies collection (case-insensitive)
+            # Normalize policy_number to match canonical name in policies collection
+            # Try matching by policy_number first, then by policy_holder_name (case-insensitive)
             if policy:
                 import re
                 canonical = await db.policies.find_one(
                     {"policy_number": {"$regex": f"^{re.escape(policy)}$", "$options": "i"}},
                     {"_id": 0, "policy_number": 1}
                 )
+                if not canonical:
+                    # Try matching by policy_holder_name (partial, case-insensitive)
+                    canonical = await db.policies.find_one(
+                        {"policy_holder_name": {"$regex": re.escape(policy), "$options": "i"}},
+                        {"_id": 0, "policy_number": 1}
+                    )
                 if canonical:
-                    policy = canonical["policy_number"]  # Use exact canonical name
+                    policy = canonical["policy_number"]  # Use exact canonical policy number
 
             entry = CDLedgerEntry(
                 date=date_str,
@@ -4497,6 +4516,53 @@ async def bulk_tag_cd_entries(
                     f"Tagged {result.modified_count} entries with policy {policy_number}")
 
     return {"tagged_count": result.modified_count}
+
+
+@api_router.post("/cd-ledger/normalize-policies")
+async def normalize_cd_ledger_policies(current_user: User = Depends(get_current_user)):
+    """Normalize all CD Ledger policy_number values to match canonical policy numbers.
+    Matches by policy_number (case-insensitive) and policy_holder_name (partial match).
+    Admin only."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can normalize entries")
+
+    import re
+    all_policies = await db.policies.find({}, {"_id": 0, "policy_number": 1, "policy_holder_name": 1}).to_list(1000)
+    all_entries = await db.cd_ledger.find({"policy_number": {"$ne": None, "$ne": ""}}, {"_id": 0, "id": 1, "policy_number": 1}).to_list(50000)
+
+    fixed_count = 0
+    for entry in all_entries:
+        entry_pn = entry.get("policy_number", "")
+        if not entry_pn:
+            continue
+        # Check if already canonical
+        canonical_pns = [p["policy_number"] for p in all_policies]
+        if entry_pn in canonical_pns:
+            continue
+        # Try case-insensitive match on policy_number
+        matched = None
+        for p in all_policies:
+            if re.match(f"^{re.escape(entry_pn)}$", p["policy_number"], re.IGNORECASE):
+                matched = p["policy_number"]
+                break
+        # Try partial match on policy_holder_name
+        if not matched:
+            for p in all_policies:
+                holder = p.get("policy_holder_name", "")
+                if holder and re.search(re.escape(entry_pn), holder, re.IGNORECASE):
+                    matched = p["policy_number"]
+                    break
+                # Also try reverse: holder name stored as policy_number
+                if holder and re.search(re.escape(holder), entry_pn, re.IGNORECASE):
+                    matched = p["policy_number"]
+                    break
+        if matched and matched != entry_pn:
+            await db.cd_ledger.update_one({"id": entry["id"]}, {"$set": {"policy_number": matched}})
+            fixed_count += 1
+
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "NORMALIZE", "cd_ledger", None,
+                    f"Normalized {fixed_count} CD Ledger entries to canonical policy numbers")
+    return {"fixed_count": fixed_count, "total_checked": len(all_entries)}
 
 
 # ==================== EMPLOYEE DIRECTORY ENDPOINTS ====================
