@@ -173,7 +173,8 @@ class UserCreate(BaseModel):
     role: UserRole
     full_name: str
     email: str
-    phone: Optional[str] = None  # Phone number for SMS notifications
+    phone: Optional[str] = None
+    managed_by_admin_id: Optional[str] = None  # Admin assigned to manage this HR user
 
 
 class User(BaseModel):
@@ -185,6 +186,7 @@ class User(BaseModel):
     email: str
     phone: Optional[str] = None
     role: UserRole
+    managed_by_admin_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -474,6 +476,27 @@ async def get_hr_assigned_policy_numbers(hr_user_id: str) -> list:
         {"hr_user_id": hr_user_id}, {"_id": 0, "policy_number": 1}
     ).to_list(1000)
     return [a["policy_number"] for a in assignments]
+
+
+async def get_scoped_admin_emails(hr_user_id: str = None) -> list:
+    """Get notification emails scoped to assigned admin + master admin.
+    If hr_user_id is provided, looks up the HR's managed_by_admin_id.
+    Always includes master admin email.
+    """
+    emails = []
+    # Always include master admin
+    master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "email": 1})
+    if master and master.get("email"):
+        emails.append(master["email"])
+    # Include assigned admin for this HR user
+    if hr_user_id:
+        hr_user = await db.users.find_one({"id": hr_user_id}, {"_id": 0, "managed_by_admin_id": 1})
+        if hr_user and hr_user.get("managed_by_admin_id"):
+            admin = await db.users.find_one({"id": hr_user["managed_by_admin_id"], "role": "Admin"}, {"_id": 0, "email": 1})
+            if admin and admin.get("email"):
+                emails.append(admin["email"])
+    return list(set(emails))
+
 
 
 def calculate_prorata_premium(
@@ -1060,7 +1083,8 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
         full_name=user_data.full_name,
         email=user_data.email,
         phone=user_data.phone,
-        role=user_data.role
+        role=user_data.role,
+        managed_by_admin_id=user_data.managed_by_admin_id
     )
     
     doc = user.model_dump()
@@ -1098,14 +1122,20 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
         """
         background_tasks.add_task(send_email_notification, [user_data.email], welcome_subject, welcome_body)
     
-    # Notify only Admin users (not HR) about new registration
+    # Notify assigned admin + master admin about new registration (not all admins)
     if SMTP_USERNAME:
-        admin_users = await db.users.find(
-            {"role": "Admin", "id": {"$ne": user.id}},
-            {"_id": 0, "email": 1}
-        ).to_list(100)
+        notify_emails = []
+        # Always include master admin
+        master_admin = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "email": 1})
+        if master_admin and master_admin.get("email"):
+            notify_emails.append(master_admin["email"])
+        # Include assigned admin if set
+        if user_data.managed_by_admin_id:
+            assigned_admin = await db.users.find_one({"id": user_data.managed_by_admin_id, "role": "Admin"}, {"_id": 0, "email": 1})
+            if assigned_admin and assigned_admin.get("email"):
+                notify_emails.append(assigned_admin["email"])
         
-        notify_emails = [u['email'] for u in admin_users if u.get('email')]
+        notify_emails = list(set(notify_emails))
         
         if notify_emails:
             notify_subject = f"New {user_data.role.value} User Registered - InsureHub"
@@ -1424,6 +1454,16 @@ async def get_admin_users(current_user: User = Depends(get_current_user)):
     admins = await db.users.find(
         {"role": "Admin"},
         {"_id": 0, "id": 1, "full_name": 1, "email": 1, "phone": 1}
+    ).to_list(100)
+    return admins
+
+
+@api_router.get("/users/admins/public")
+async def get_admin_users_public():
+    """Get admin users list for registration dropdown (public, minimal fields)"""
+    admins = await db.users.find(
+        {"role": "Admin"},
+        {"_id": 0, "id": 1, "full_name": 1}
     ).to_list(100)
     return admins
 
@@ -2121,17 +2161,10 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     # Fixed notification recipients
     FIXED_NOTIFY_EMAILS = ["ks@aarogya-assist.com", "connect@aarogya-assist.com"]
     
-    # Generate AI notification and send to fixed recipients + all Admins
+    # Send to assigned admin + master admin (scoped) + fixed recipients
     if SMTP_USERNAME:
-        admin_users = await db.users.find(
-            {"role": "Admin"},
-            {"_id": 0, "email": 1, "phone": 1, "full_name": 1}
-        ).to_list(100)
-        
-        admin_emails = [u['email'] for u in admin_users if u.get('email')]
-        
-        # Combine fixed + admin emails (deduplicate)
-        all_notify_emails = list(set(FIXED_NOTIFY_EMAILS + admin_emails))
+        scoped_emails = await get_scoped_admin_emails(current_user.id)
+        all_notify_emails = list(set(FIXED_NOTIFY_EMAILS + scoped_emails))
         
         if all_notify_emails:
             # Try AI-generated content first

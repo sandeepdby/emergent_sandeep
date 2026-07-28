@@ -105,9 +105,17 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
   const [showForgot, setShowForgot] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [registerData, setRegisterData] = useState({
-    username: "", password: "", full_name: "", email: "", phone: "", role: "HR"
+    username: "", password: "", full_name: "", email: "", phone: "", role: "HR", managed_by_admin_id: ""
   });
+
+  // Fetch admin users when register form is shown
+  React.useEffect(() => {
+    if (showRegister) {
+      axios.get(`${API}/users/admins/public`).then(r => setAdminUsers(r.data || [])).catch(() => {});
+    }
+  }, [showRegister]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -126,10 +134,13 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.post(`${API}/auth/register`, registerData);
+      await axios.post(`${API}/auth/register`, {
+        ...registerData,
+        managed_by_admin_id: registerData.managed_by_admin_id || null
+      });
       alert('Registration successful! You will receive a welcome email. Please login.');
       setShowRegister(false);
-      setRegisterData({ username: "", password: "", full_name: "", email: "", phone: "", role: "HR" });
+      setRegisterData({ username: "", password: "", full_name: "", email: "", phone: "", role: "HR", managed_by_admin_id: "" });
     } catch (error) {
       alert('Registration failed: ' + (error.response?.data?.detail || error.message));
     } finally {
@@ -218,6 +229,22 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
                   {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Assigned Admin</label>
+              <select
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
+                value={registerData.managed_by_admin_id}
+                onChange={(e) => setRegisterData({...registerData, managed_by_admin_id: e.target.value})}
+                data-testid="register-admin-select"
+              >
+                <option value="">Select Admin (optional)</option>
+                {adminUsers.map(a => (
+                  <option key={a.id} value={a.id}>{a.full_name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Notifications will go to this admin</p>
             </div>
             
             <div>
