@@ -4227,11 +4227,19 @@ async def get_cd_ledger(
             {"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}},
             {"_id": 0, "policy_number": 1, "policy_holder_name": 1}
         )
-        # Build match: policy_number OR policy_holder_name (for entries imported with holder name)
+        # Build match: policy_number OR holder name variations (for entries imported with holder name)
         match_conditions = [{"policy_number": {"$regex": f"^{escaped_pn}$", "$options": "i"}}]
         if policy_doc and policy_doc.get("policy_holder_name"):
-            holder = re.escape(policy_doc["policy_holder_name"])
-            match_conditions.append({"policy_number": {"$regex": holder, "$options": "i"}})
+            holder = policy_doc["policy_holder_name"].strip()
+            # Full holder name match
+            match_conditions.append({"policy_number": {"$regex": re.escape(holder), "$options": "i"}})
+            # Also match if entry's policy_number is a SUBSTRING of holder name (e.g. "Hemogenomics" vs "Hemogenomics Pvt Ltd")
+            # Get significant words from holder name (3+ chars, skip common suffixes)
+            skip_words = {"pvt", "ltd", "llp", "inc", "corp", "private", "limited", "company", "group", "the"}
+            words = [w for w in holder.split() if len(w) >= 3 and w.lower() not in skip_words]
+            for word in words:
+                match_conditions.append({"policy_number": {"$regex": f"^{re.escape(word)}", "$options": "i"}})
+        # Deduplicate won't matter for $or
         if len(match_conditions) > 1:
             query["$or"] = match_conditions
         else:
@@ -4531,6 +4539,7 @@ async def normalize_cd_ledger_policies(current_user: User = Depends(get_current_
     all_entries = await db.cd_ledger.find({"policy_number": {"$ne": None, "$ne": ""}}, {"_id": 0, "id": 1, "policy_number": 1}).to_list(50000)
 
     fixed_count = 0
+    skip_words = {"pvt", "ltd", "llp", "inc", "corp", "private", "limited", "company", "group", "the"}
     for entry in all_entries:
         entry_pn = entry.get("policy_number", "")
         if not entry_pn:
@@ -4539,22 +4548,42 @@ async def normalize_cd_ledger_policies(current_user: User = Depends(get_current_
         canonical_pns = [p["policy_number"] for p in all_policies]
         if entry_pn in canonical_pns:
             continue
-        # Try case-insensitive match on policy_number
+        # Try case-insensitive exact match on policy_number
         matched = None
         for p in all_policies:
             if re.match(f"^{re.escape(entry_pn)}$", p["policy_number"], re.IGNORECASE):
                 matched = p["policy_number"]
                 break
-        # Try partial match on policy_holder_name
+        # Try full holder name match (both directions)
         if not matched:
             for p in all_policies:
                 holder = p.get("policy_holder_name", "")
-                if holder and re.search(re.escape(entry_pn), holder, re.IGNORECASE):
+                if not holder:
+                    continue
+                # entry_pn contains holder name OR holder name contains entry_pn
+                if re.search(re.escape(entry_pn), holder, re.IGNORECASE):
                     matched = p["policy_number"]
                     break
-                # Also try reverse: holder name stored as policy_number
-                if holder and re.search(re.escape(holder), entry_pn, re.IGNORECASE):
+                if re.search(re.escape(holder), entry_pn, re.IGNORECASE):
                     matched = p["policy_number"]
+                    break
+        # Try word-level match: significant words from holder name or entry_pn
+        if not matched:
+            entry_words = [w for w in entry_pn.split() if len(w) >= 3 and w.lower() not in skip_words]
+            for p in all_policies:
+                holder = p.get("policy_holder_name", "")
+                if not holder:
+                    continue
+                holder_words = [w for w in holder.split() if len(w) >= 3 and w.lower() not in skip_words]
+                # Check if any significant entry word matches any holder word
+                for ew in entry_words:
+                    for hw in holder_words:
+                        if ew.lower() == hw.lower():
+                            matched = p["policy_number"]
+                            break
+                    if matched:
+                        break
+                if matched:
                     break
         if matched and matched != entry_pn:
             await db.cd_ledger.update_one({"id": entry["id"]}, {"$set": {"policy_number": matched}})
