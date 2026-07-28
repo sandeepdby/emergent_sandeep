@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import axios from "axios";
 import { AuthContext, API } from "./auth";
-import { Eye, EyeOff, Loader2, ArrowLeft, Mail } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowLeft, Mail, Info, X } from "lucide-react";
 
 // ==================== FORGOT PASSWORD COMPONENT ====================
 const ForgotPasswordPage = ({ onBack }) => {
@@ -106,6 +106,8 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [adminUsers, setAdminUsers] = useState([]);
+  const [tcAccepted, setTcAccepted] = useState(false);
+  const [tcDialogOpen, setTcDialogOpen] = useState(false);
   const [registerData, setRegisterData] = useState({
     username: "", password: "", full_name: "", email: "", phone: "", role: "HR", managed_by_admin_id: ""
   });
@@ -333,16 +335,96 @@ const LoginRegisterPage = ({ onLogin, onBack }) => {
               </button>
             </div>
           </div>
+
+          {/* Terms & Conditions */}
+          <div className="flex items-start gap-2">
+            <input
+              type="checkbox"
+              id="tc-accept"
+              checked={tcAccepted}
+              onChange={(e) => setTcAccepted(e.target.checked)}
+              className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              data-testid="tc-checkbox"
+            />
+            <label htmlFor="tc-accept" className="text-xs text-gray-600 leading-tight flex-1">
+              I accept the <span className="text-blue-600 font-medium">Terms & Conditions</span> and agree to use this portal in accordance with the mutual agreement.
+            </label>
+            <button
+              type="button"
+              onClick={() => setTcDialogOpen(true)}
+              className="shrink-0 w-5 h-5 rounded-full bg-blue-100 hover:bg-blue-200 flex items-center justify-center transition-colors"
+              title="Read Terms & Conditions"
+              data-testid="tc-info-btn"
+            >
+              <Info className="w-3 h-3 text-blue-600" />
+            </button>
+          </div>
           
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !tcAccepted}
             className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
             data-testid="login-submit-button"
           >
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
+
+        {/* T&C Dialog */}
+        {tcDialogOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setTcDialogOpen(false)}>
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden" onClick={(e) => e.stopPropagation()} data-testid="tc-dialog">
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4 flex items-center justify-between">
+                <h3 className="text-white font-semibold text-base">Terms & Conditions</h3>
+                <button onClick={() => setTcDialogOpen(false)} className="text-white/70 hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="px-6 py-5 overflow-y-auto max-h-[60vh] text-sm text-gray-700 space-y-4">
+                <p className="font-semibold text-gray-900">Non-Disclosure & Acceptable Use Agreement</p>
+                <p>
+                  By accessing and using the InsureHub platform ("Portal"), operated by Aarogya Innovate Pvt Ltd, you acknowledge and agree to the following terms:
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <p className="font-semibold text-gray-800">1. Confidentiality & Non-Disclosure</p>
+                    <p className="text-gray-600 mt-1">
+                      All data, information, and records accessed through this Portal — including but not limited to employee details, policy information, endorsement data, claims records, premium calculations, and financial transactions — are strictly confidential. You shall not disclose, reproduce, distribute, or share any such information with unauthorized third parties without prior written consent from Aarogya Innovate Pvt Ltd. Any breach of confidentiality may result in immediate account termination and legal action as per applicable laws.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">2. Authorized Use Only</p>
+                    <p className="text-gray-600 mt-1">
+                      This Portal is provided exclusively as a tool for insurance administration and healthcare wellness management, as per the mutual agreement between your organization and Aarogya Innovate Pvt Ltd. You agree to use the Portal solely for its intended purpose — managing group health insurance endorsements, policy administration, claims tracking, employee coverage, and related healthcare wellness activities. Any use beyond this scope, including but not limited to data mining, competitive analysis, or unauthorized commercial purposes, is strictly prohibited.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">3. Data Integrity & Responsibility</p>
+                    <p className="text-gray-600 mt-1">
+                      You are responsible for the accuracy and completeness of all data submitted through this Portal. Aarogya Innovate Pvt Ltd shall not be held liable for any consequences arising from incorrect, incomplete, or misleading data provided by users.
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">4. Compliance</p>
+                    <p className="text-gray-600 mt-1">
+                      You agree to comply with all applicable data protection regulations, including but not limited to the Information Technology Act 2000, the Digital Personal Data Protection Act 2023, and any applicable IRDAI guidelines regarding insurance data handling.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-gray-500 text-xs border-t pt-3 mt-4">
+                  By checking "I accept" and logging in, you confirm that you have read, understood, and agree to abide by these terms. This acceptance is logged and constitutes a binding agreement.
+                </p>
+              </div>
+              <div className="px-6 py-3 border-t bg-gray-50 flex justify-end">
+                <button
+                  onClick={() => { setTcAccepted(true); setTcDialogOpen(false); }}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                  data-testid="tc-accept-btn"
+                >
+                  I Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         <div className="mt-6 text-center space-y-2">
           <button
