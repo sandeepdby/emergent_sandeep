@@ -1124,17 +1124,15 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
     
     # Notify assigned admin + master admin about new registration (not all admins)
     if SMTP_USERNAME:
+        # Use helper — for new user, pass managed_by_admin_id directly since user doc isn't queryable yet
         notify_emails = []
-        # Always include master admin
-        master_admin = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "email": 1})
-        if master_admin and master_admin.get("email"):
-            notify_emails.append(master_admin["email"])
-        # Include assigned admin if set
+        master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "email": 1})
+        if master and master.get("email"):
+            notify_emails.append(master["email"])
         if user_data.managed_by_admin_id:
-            assigned_admin = await db.users.find_one({"id": user_data.managed_by_admin_id, "role": "Admin"}, {"_id": 0, "email": 1})
-            if assigned_admin and assigned_admin.get("email"):
-                notify_emails.append(assigned_admin["email"])
-        
+            admin = await db.users.find_one({"id": user_data.managed_by_admin_id, "role": "Admin"}, {"_id": 0, "email": 1})
+            if admin and admin.get("email"):
+                notify_emails.append(admin["email"])
         notify_emails = list(set(notify_emails))
         
         if notify_emails:

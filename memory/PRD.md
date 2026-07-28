@@ -244,6 +244,24 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Employee Directory Upload**: POST /api/employee-directory/upload also attaches the uploaded Excel to notification emails
 - **Implementation**: Uses existing `send_email_notification` attachments parameter with `[(filename, contents)]`
 
+### Admin Assignment to HR Users (DONE - Jul 2026)
+- **Feature**: HR registration form now includes "Assigned Admin" dropdown to select which Admin manages the HR user
+- **Data Model**: `managed_by_admin_id` field added to User model (UserCreate + User)
+- **Public Endpoint**: GET /api/users/admins/public returns admin list (id + full_name) without auth for registration form
+- **Scoped Notifications**: Registration emails now go only to assigned admin + master admin (not all admins)
+
+### Scoped Email Notifications (DONE - Jul 2026)
+- **Feature**: All notification emails now scoped to assigned admin + master admin instead of broadcasting to all admins
+- **Helper**: `get_scoped_admin_emails(hr_user_id)` always includes master admin + HR's assigned admin
+- **Affected Flows**: User registration, endorsement submission notifications
+- **Fixed Recipients**: FIXED_NOTIFY_EMAILS (ks@, connect@) still included for endorsement submissions
+
+### WhatsApp Share Buttons (DONE - Jul 2026)
+- **Feature**: "Share via WhatsApp" buttons added to endorsement import results and batch approve/reject flows
+- **Implementation**: Uses `wa.me` links with pre-filled text (no API needed)
+- **Endorsement Import**: Green WhatsApp button appears in import results section after successful import
+- **Batch Approve/Reject**: WhatsApp share dialog opens after successful batch operation with "Open WhatsApp" button
+
 ### P0 - Critical Tech Debt
 - Backend modularization: server.py (~6450 lines) needs splitting into /routes, /models, /services
 
