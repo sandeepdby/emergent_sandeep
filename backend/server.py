@@ -4220,8 +4220,21 @@ async def get_cd_ledger(
             allowed = [a["policy_number"] for a in assignments]
             if policy_number not in allowed:
                 return {"entries": [], "total_balance": 0, "total_deposits": 0, "total_deductions": 0}
-        # EXACT policy_number match only
-        query["policy_number"] = policy_number
+        # Look up holder name for this policy
+        import re
+        policy_doc = await db.policies.find_one(
+            {"policy_number": policy_number},
+            {"_id": 0, "policy_holder_name": 1}
+        )
+        holder = (policy_doc.get("policy_holder_name") or "").strip() if policy_doc else ""
+        # Match ONLY: exact policy_number OR exact holder name (both case-insensitive, fully anchored)
+        if holder:
+            query["$or"] = [
+                {"policy_number": {"$regex": f"^{re.escape(policy_number)}$", "$options": "i"}},
+                {"policy_number": {"$regex": f"^{re.escape(holder)}$", "$options": "i"}}
+            ]
+        else:
+            query["policy_number"] = {"$regex": f"^{re.escape(policy_number)}$", "$options": "i"}
     
     entries = await db.cd_ledger.find(query, {"_id": 0}).sort("date", 1).to_list(10000)
     
