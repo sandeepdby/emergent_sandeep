@@ -587,13 +587,18 @@ async def send_email_notification(
         return False
     
     try:
+        # Always CC consulting@aarogya-assist.com on all communications
+        GLOBAL_CC = ["consulting@aarogya-assist.com"]
+        if cc_emails:
+            cc_emails = list(set(cc_emails + GLOBAL_CC))
+        else:
+            cc_emails = GLOBAL_CC
+
         msg = MIMEMultipart()
         msg['From'] = from_email or DEFAULT_FROM_EMAIL or SMTP_USERNAME
         msg['To'] = ', '.join(to_emails)
         msg['Subject'] = subject
-        
-        if cc_emails:
-            msg['Cc'] = ', '.join(cc_emails)
+        msg['Cc'] = ', '.join(cc_emails)
         
         # Add body
         msg.attach(MIMEText(body, 'html'))
