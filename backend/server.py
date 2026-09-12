@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query, Body
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query, Body, Request
 from fastapi.responses import StreamingResponse, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
@@ -703,6 +703,14 @@ def normalize_phone(number) -> Optional[str]:
     return f"+{n}"
 
 
+async def is_suppressed(number: str) -> bool:
+    """Return True if a normalized number has opted out (STOP)."""
+    n = normalize_phone(number)
+    if not n:
+        return False
+    return await db.sms_suppressions.find_one({"phone": n}) is not None
+
+
 async def send_sms_notification(to_numbers: List[str], message: str):
     """Send SMS via Twilio to a list of numbers (best-effort, non-blocking)."""
     client = get_twilio_client()
@@ -714,6 +722,9 @@ async def send_sms_notification(to_numbers: List[str], message: str):
         if not num or num in seen:
             continue
         seen.add(num)
+        if await is_suppressed(num):
+            logging.info(f"Skipping suppressed (opted-out) number {num} [SMS]")
+            continue
         try:
             await asyncio.to_thread(
                 client.messages.create,
@@ -737,6 +748,9 @@ async def send_whatsapp_notification(to_numbers: List[str], message: str):
         if not num or num in seen:
             continue
         seen.add(num)
+        if await is_suppressed(num):
+            logging.info(f"Skipping suppressed (opted-out) number {num} [WhatsApp]")
+            continue
         try:
             await asyncio.to_thread(
                 client.messages.create,
@@ -1200,6 +1214,58 @@ async def list_sms_optins(current_user: User = Depends(get_current_user)):
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Only admins can view opt-ins")
     items = await db.sms_optins.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return items
+
+
+# STOP/HELP keyword sets (Twilio standard)
+_OPT_OUT_KEYWORDS = {"STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"}
+_OPT_IN_KEYWORDS = {"START", "YES", "UNSTOP"}
+_HELP_KEYWORDS = {"HELP", "INFO"}
+
+
+@api_router.post("/twilio/inbound")
+async def twilio_inbound(request: Request):
+    """Twilio inbound message webhook — handles STOP/HELP/START auto-replies and suppression.
+    Configure this URL as the number's 'A message comes in' webhook in the Twilio Console."""
+    form = await request.form()
+    body = (form.get("Body") or "").strip()
+    from_number = (form.get("From") or "").strip()
+    bare = normalize_phone(from_number.replace("whatsapp:", "").strip())
+    kw = body.upper().strip()
+    reply = None
+
+    if bare and kw in _OPT_OUT_KEYWORDS:
+        await db.sms_suppressions.update_one(
+            {"phone": bare},
+            {"$set": {"phone": bare, "reason": kw, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True,
+        )
+        await db.users.update_many({"phone": bare}, {"$set": {"sms_consent": False}})
+        await db.sms_optins.update_many({"phone": bare}, {"$set": {"consent": False}})
+        reply = ("You have been unsubscribed from InsureHub (Aarogya Innovate Pvt Ltd) messages. "
+                 "You will no longer receive SMS/WhatsApp from us. Reply START to resubscribe.")
+    elif bare and kw in _OPT_IN_KEYWORDS:
+        await db.sms_suppressions.delete_many({"phone": bare})
+        reply = ("You are resubscribed to InsureHub (Aarogya Innovate Pvt Ltd) alerts. "
+                 "Msg & data rates may apply. Reply STOP to unsubscribe, HELP for help.")
+    elif kw in _HELP_KEYWORDS:
+        reply = ("InsureHub by Aarogya Innovate Pvt Ltd — service & endorsement alerts. "
+                 "Help: connect@aarogya-assist.com or +1 (877) 517-0579. "
+                 "Msg & data rates may apply. Reply STOP to unsubscribe.")
+
+    twiml = '<?xml version="1.0" encoding="UTF-8"?><Response>'
+    if reply:
+        twiml += f"<Message>{reply}</Message>"
+    twiml += "</Response>"
+    return Response(content=twiml, media_type="application/xml")
+
+
+@api_router.get("/sms-suppressions")
+async def list_sms_suppressions(current_user: User = Depends(get_current_user)):
+    """List opted-out (STOP) numbers (Admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view suppressions")
+    items = await db.sms_suppressions.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return items
 
 
