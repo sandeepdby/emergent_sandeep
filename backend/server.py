@@ -28,6 +28,8 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import requests as http_requests
+import asyncio
+from twilio.rest import Client as TwilioClient
 
 
 ROOT_DIR = Path(__file__).parent
@@ -95,6 +97,22 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', '')
 
 # AI/LLM Configuration
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
+
+# Twilio Configuration (SMS + WhatsApp)
+TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID', '')
+TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
+TWILIO_SMS_NUMBER = os.environ.get('TWILIO_SMS_NUMBER', '')
+TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
+DEFAULT_COUNTRY_CODE = os.environ.get('DEFAULT_COUNTRY_CODE', '+91')
+
+_twilio_client = None
+
+def get_twilio_client():
+    """Lazily initialize and return the Twilio client, or None if not configured."""
+    global _twilio_client
+    if _twilio_client is None and TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN:
+        _twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    return _twilio_client
 
 # Create the main app
 app = FastAPI()
@@ -187,6 +205,7 @@ class User(BaseModel):
     phone: Optional[str] = None
     role: UserRole
     managed_by_admin_id: Optional[str] = None
+    sms_consent: Optional[bool] = False
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -578,6 +597,29 @@ def get_premium_type(endorsement_type: str) -> str:
         return "No Change"
 
 
+async def resolve_per_life_from_rater(policy_number: str, age: Optional[int] = None):
+    """Resolve per-life premium from a policy's rate card (rater).
+    Handles flat_rate, per_family, and age_band rate types. Returns None if no rater/match."""
+    if not policy_number:
+        return None
+    rater = await db.raters.find_one(
+        {"policy_number": policy_number},
+        {"_id": 0, "age_bands": 1, "rate_type": 1, "flat_rate": 1, "per_family_rate": 1}
+    )
+    if not rater:
+        return None
+    rt = rater.get("rate_type", "age_band")
+    if rt == "flat_rate" and rater.get("flat_rate"):
+        return rater["flat_rate"]
+    if rt == "per_family" and rater.get("per_family_rate"):
+        return rater["per_family_rate"]
+    if age is not None:
+        for band in rater.get("age_bands", []):
+            if band.get("min_age", 0) <= age <= band.get("max_age", 0):
+                return band["per_life_rate"]
+    return None
+
+
 async def send_email_notification(
     to_emails: List[str],
     subject: str,
@@ -636,6 +678,90 @@ async def send_email_notification(
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
         return False
+
+
+# ==================== SMS / WHATSAPP NOTIFICATIONS (Twilio) ====================
+
+def normalize_phone(number) -> Optional[str]:
+    """Normalize a phone number to E.164 format. Defaults to Indian country code."""
+    if not number:
+        return None
+    n = str(number).strip()
+    for ch in [' ', '-', '(', ')']:
+        n = n.replace(ch, '')
+    if not n:
+        return None
+    if n.startswith('+'):
+        return n
+    n = n.lstrip('0')
+    if not n.isdigit():
+        return None
+    # 10-digit local number → prefix default country code
+    if len(n) == 10:
+        return f"{DEFAULT_COUNTRY_CODE}{n}"
+    # Already has country code (e.g. 91XXXXXXXXXX)
+    return f"+{n}"
+
+
+async def send_sms_notification(to_numbers: List[str], message: str):
+    """Send SMS via Twilio to a list of numbers (best-effort, non-blocking)."""
+    client = get_twilio_client()
+    if not client or not TWILIO_SMS_NUMBER or not to_numbers:
+        return
+    seen = set()
+    for raw in to_numbers:
+        num = normalize_phone(raw)
+        if not num or num in seen:
+            continue
+        seen.add(num)
+        try:
+            await asyncio.to_thread(
+                client.messages.create,
+                body=message,
+                from_=TWILIO_SMS_NUMBER,
+                to=num,
+            )
+            logging.info(f"SMS sent to {num}")
+        except Exception as e:
+            logging.error(f"Failed to send SMS to {num}: {e}")
+
+
+async def send_whatsapp_notification(to_numbers: List[str], message: str):
+    """Send WhatsApp message via Twilio to a list of numbers (best-effort, non-blocking)."""
+    client = get_twilio_client()
+    if not client or not TWILIO_WHATSAPP_NUMBER or not to_numbers:
+        return
+    seen = set()
+    for raw in to_numbers:
+        num = normalize_phone(raw)
+        if not num or num in seen:
+            continue
+        seen.add(num)
+        try:
+            await asyncio.to_thread(
+                client.messages.create,
+                body=message,
+                from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+                to=f"whatsapp:{num}",
+            )
+            logging.info(f"WhatsApp sent to {num}")
+        except Exception as e:
+            logging.error(f"Failed to send WhatsApp to {num}: {e}")
+
+
+async def get_scoped_admin_phones(hr_user_id: str = None) -> list:
+    """Get notification phone numbers scoped to master admin + the HR's assigned admin."""
+    phones = []
+    master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "phone": 1})
+    if master and master.get("phone"):
+        phones.append(master["phone"])
+    if hr_user_id:
+        hr_user = await db.users.find_one({"id": hr_user_id}, {"_id": 0, "managed_by_admin_id": 1})
+        if hr_user and hr_user.get("managed_by_admin_id"):
+            admin = await db.users.find_one({"id": hr_user["managed_by_admin_id"], "role": "Admin"}, {"_id": 0, "phone": 1})
+            if admin and admin.get("phone"):
+                phones.append(admin["phone"])
+    return list(set(phones))
 
 
 # ==================== AI NOTIFICATION GENERATION ====================
@@ -1014,6 +1140,69 @@ async def submit_contact(form: ContactForm):
     return {"message": "Thank you! We'll get back to you shortly."}
 
 
+# ==================== SMS/WHATSAPP OPT-IN (Twilio consent) ====================
+
+SMS_CONSENT_TEXT = (
+    "I agree to receive service updates, endorsement notifications, and occasional offerings "
+    "from InsureHub (Aarogya Innovate Pvt Ltd) via SMS and WhatsApp at the number provided. "
+    "Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe, HELP for help."
+)
+
+
+class SmsOptInRequest(BaseModel):
+    name: str
+    phone: str
+    consent: bool
+    company: Optional[str] = None
+    channel: Optional[str] = "both"  # "sms", "whatsapp", "both"
+
+
+@api_router.post("/sms-optin")
+async def sms_optin(req: SmsOptInRequest, background_tasks: BackgroundTasks):
+    """Public SMS/WhatsApp opt-in lead form (used by landing-page QR)."""
+    if not req.consent:
+        raise HTTPException(status_code=400, detail="Consent is required to opt in")
+    norm = normalize_phone(req.phone)
+    if not norm:
+        raise HTTPException(status_code=400, detail="Please enter a valid phone number")
+
+    entry = {
+        "id": str(uuid.uuid4()),
+        "name": req.name.strip(),
+        "phone": norm,
+        "company": req.company,
+        "consent": True,
+        "consent_text": SMS_CONSENT_TEXT,
+        "channel": req.channel or "both",
+        "source": "landing_qr_optin",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.sms_optins.insert_one(entry)
+
+    # Double opt-in confirmation message
+    confirm_msg = (
+        f"Hi {req.name.strip().split(' ')[0] or 'there'}, thanks for subscribing to InsureHub "
+        "(Aarogya Innovate Pvt Ltd) alerts! You'll receive service updates & offerings via SMS/WhatsApp. "
+        "Msg & data rates may apply. Reply STOP to unsubscribe, HELP for help."
+    )
+    ch = req.channel or "both"
+    if ch in ("sms", "both"):
+        background_tasks.add_task(send_sms_notification, [norm], confirm_msg)
+    if ch in ("whatsapp", "both"):
+        background_tasks.add_task(send_whatsapp_notification, [norm], confirm_msg)
+
+    return {"message": "You're subscribed! A confirmation message has been sent to your phone."}
+
+
+@api_router.get("/sms-optins")
+async def list_sms_optins(current_user: User = Depends(get_current_user)):
+    """List all SMS/WhatsApp opt-in leads (Admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view opt-ins")
+    items = await db.sms_optins.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    return items
+
+
 # ==================== CAREER APPLICATION ENDPOINT ====================
 class CareerApplication(BaseModel):
     full_name: str
@@ -1132,6 +1321,16 @@ async def register_user(user_data: UserCreate, background_tasks: BackgroundTasks
         </div>
         """
         background_tasks.add_task(send_email_notification, [user_data.email], welcome_subject, welcome_body)
+
+    # Welcome SMS + WhatsApp to the new user
+    if user_data.phone:
+        welcome_msg = (
+            f"Welcome to InsureHub, {user_data.full_name}! Your {user_data.role.value} account "
+            f"(username: {user_data.username}) is ready. Log in to manage insurance endorsements. "
+            f"- Aarogya Innovate Pvt Ltd"
+        )
+        background_tasks.add_task(send_sms_notification, [user_data.phone], welcome_msg)
+        background_tasks.add_task(send_whatsapp_notification, [user_data.phone], welcome_msg)
     
     # Notify assigned admin + master admin about new registration (not all admins)
     if SMTP_USERNAME:
@@ -1212,6 +1411,7 @@ async def login(credentials: UserLogin):
             "email": user['email'],
             "phone": user.get('phone'),
             "role": user['role'],
+            "sms_consent": user.get('sms_consent', False),
             "profile_photo": photo_url
         }
     }
@@ -1370,6 +1570,23 @@ async def change_password(req: ChangePasswordRequest, current_user: User = Depen
     await log_audit(current_user.id, current_user.username, current_user.role.value, "PASSWORD_CHANGE", "auth", details="Password changed by user")
 
     return {"message": "Password changed successfully"}
+
+
+class SmsConsentRequest(BaseModel):
+    consent: bool
+
+
+@api_router.post("/auth/sms-consent")
+async def set_sms_consent(req: SmsConsentRequest, current_user: User = Depends(get_current_user)):
+    """Set the logged-in user's SMS/WhatsApp marketing & service consent."""
+    update = {
+        "sms_consent": req.consent,
+        "sms_consent_at": datetime.now(timezone.utc).isoformat() if req.consent else None,
+    }
+    await db.users.update_one({"id": current_user.id}, {"$set": update})
+    await log_audit(current_user.id, current_user.username, current_user.role.value,
+                    "SMS_CONSENT", "user", current_user.id, f"SMS consent set to {req.consent}")
+    return {"sms_consent": req.consent}
 
 
 # ==================== POLICY ENDPOINTS ====================
@@ -1604,7 +1821,56 @@ async def generate_notification_content(request: AINotificationRequest, current_
     }
 
 
-# ==================== POLICY ASSIGNMENT ENDPOINTS ====================
+# ==================== SMS / WHATSAPP TEST ENDPOINT ====================
+
+class TestMessageRequest(BaseModel):
+    to_number: str
+    channel: str = "sms"  # "sms", "whatsapp", or "both"
+    message: Optional[str] = None
+
+
+@api_router.post("/notifications/test-sms")
+async def send_test_message(req: TestMessageRequest, current_user: User = Depends(get_current_user)):
+    """Send a test SMS/WhatsApp message via Twilio (Admin only). Surfaces per-channel errors."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can send test messages")
+    client = get_twilio_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="Twilio is not configured on the server")
+
+    num = normalize_phone(req.to_number)
+    if not num:
+        raise HTTPException(status_code=400, detail="Invalid phone number")
+
+    msg = req.message or "InsureHub test message: your Twilio SMS/WhatsApp integration is working!"
+    results = {}
+
+    if req.channel in ("sms", "both"):
+        if not TWILIO_SMS_NUMBER:
+            results['sms'] = {"status": "skipped", "error": "SMS sender number not configured"}
+        else:
+            try:
+                m = await asyncio.to_thread(client.messages.create, body=msg, from_=TWILIO_SMS_NUMBER, to=num)
+                results['sms'] = {"status": "sent", "sid": m.sid}
+            except Exception as e:
+                results['sms'] = {"status": "failed", "error": str(e)}
+
+    if req.channel in ("whatsapp", "both"):
+        if not TWILIO_WHATSAPP_NUMBER:
+            results['whatsapp'] = {"status": "skipped", "error": "WhatsApp sender number not configured"}
+        else:
+            try:
+                m = await asyncio.to_thread(
+                    client.messages.create,
+                    body=msg,
+                    from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+                    to=f"whatsapp:{num}",
+                )
+                results['whatsapp'] = {"status": "sent", "sid": m.sid}
+            except Exception as e:
+                results['whatsapp'] = {"status": "failed", "error": str(e)}
+
+    return {"success": True, "normalized_number": num, "results": results}
 
 @api_router.post("/policy-assignments")
 async def assign_policy_to_hr(
@@ -2072,9 +2338,13 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     
     effective_date = endorsement_data.effective_date or endorsement_data.endorsement_date
     
-    # Use per_life_premium from form if provided, otherwise fall back to policy's annual_premium_per_life
+    # Use per_life_premium from form if provided, else Rate Card, else policy's annual_premium_per_life
     policy_annual_ppl = policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2))
-    premium_per_life = endorsement_data.per_life_premium if endorsement_data.per_life_premium is not None else policy_annual_ppl
+    if endorsement_data.per_life_premium is not None:
+        premium_per_life = endorsement_data.per_life_premium
+    else:
+        rater_rate = await resolve_per_life_from_rater(endorsement_data.policy_number, endorsement_data.age)
+        premium_per_life = rater_rate if rater_rate is not None else policy_annual_ppl
     
     days_from_inception, days_in_policy_year, remaining_days, prorata_premium = calculate_prorata_premium(
         policy['inception_date'],
@@ -2218,6 +2488,18 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                 </div>
                 """
             background_tasks.add_task(send_email_notification, all_notify_emails, notify_subject, notify_body, None, None, None, excel_attachment)
+
+        # SMS + WhatsApp alert to scoped admins
+        admin_phones = await get_scoped_admin_phones(current_user.id)
+        if admin_phones:
+            wa_msg = ai_content.get('whatsapp_message') if ai_content else None
+            alert_msg = (
+                f"InsureHub: New endorsement submitted by {current_user.full_name} for "
+                f"{endorsement_data.member_name} ({endorsement_data.endorsement_type.value}) on policy "
+                f"{endorsement_data.policy_number}. Premium: INR {prorata_premium:,.2f}. Pending your approval."
+            )
+            background_tasks.add_task(send_sms_notification, admin_phones, alert_msg)
+            background_tasks.add_task(send_whatsapp_notification, admin_phones, wa_msg or alert_msg)
     
     await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "endorsement", endorsement.id, f"Created endorsement for {endorsement_data.member_name} on {endorsement_data.policy_number}")
     return endorsement
@@ -2689,6 +2971,17 @@ async def approve_reject_endorsement(
                 </div>
                 """
             background_tasks.add_task(send_email_notification, [submitter['email']], notify_subject, notify_body)
+
+        # SMS + WhatsApp to the HR who submitted
+        if submitter.get('phone'):
+            wa_msg = ai_content.get('whatsapp_message') if ai_content else None
+            result_msg = (
+                f"InsureHub: Your endorsement for {endorsement['member_name']} on policy "
+                f"{endorsement['policy_number']} has been {status_text}. "
+                f"Premium: INR {endorsement['prorata_premium']:,.2f}."
+            )
+            background_tasks.add_task(send_sms_notification, [submitter['phone']], result_msg)
+            background_tasks.add_task(send_whatsapp_notification, [submitter['phone']], wa_msg or result_msg)
     
     updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if isinstance(updated_endorsement['created_at'], str):
@@ -2922,20 +3215,9 @@ async def import_endorsements_from_excel(
                     except (ValueError, TypeError):
                         pass
 
-                # Auto-fill from Rate Card if per_life is still None and age is available
+                # Auto-fill from Rate Card if per_life is still None
                 if per_life is None:
-                    rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1, "rate_type": 1, "flat_rate": 1, "per_family_rate": 1})
-                    if rater:
-                        rt = rater.get("rate_type", "age_band")
-                        if rt == "flat_rate" and rater.get("flat_rate"):
-                            per_life = rater["flat_rate"]
-                        elif rt == "per_family" and rater.get("per_family_rate"):
-                            per_life = rater["per_family_rate"]
-                        elif age is not None:
-                            for band in rater.get("age_bands", []):
-                                if band["min_age"] <= age <= band["max_age"]:
-                                    per_life = band["per_life_rate"]
-                                    break
+                    per_life = await resolve_per_life_from_rater(policy_number, age)
 
                 premium_for_calc = per_life if per_life is not None else (policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)))
                 
@@ -4801,20 +5083,8 @@ async def upload_active_members(
             cov = str(row.get("coverage_type", "")).strip() if pd.notna(row.get("coverage_type")) else None
             if cov == "nan": cov = None
 
-            # Auto-fill rate from rate card
-            per_life = None
-            if age is not None:
-                rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1, "rate_type": 1, "flat_rate": 1, "per_family_rate": 1})
-                if rater:
-                    rt = rater.get("rate_type", "age_band")
-                    if rt == "flat_rate" and rater.get("flat_rate"):
-                        per_life = rater["flat_rate"]
-                    elif rt == "per_family" and rater.get("per_family_rate"):
-                        per_life = rater["per_family_rate"]
-                    elif age is not None:
-                        for band in rater.get("age_bands", []):
-                            if band["min_age"] <= age <= band["max_age"]:
-                                per_life = band["per_life_rate"]; break
+            # Auto-fill rate from rate card (flat_rate/per_family apply even without age)
+            per_life = await resolve_per_life_from_rater(policy_number, age)
 
             policy_ppl = canonical.get("annual_premium_per_life") or (round((canonical.get("premium", 0) or 0) / max(canonical.get("total_lives_covered", 0) or 1, 1), 2))
             premium = per_life if per_life is not None else policy_ppl
@@ -6585,6 +6855,17 @@ async def startup_storage():
         logging.getLogger(__name__).info("Object storage initialized successfully")
     except Exception as e:
         logging.getLogger(__name__).error(f"Object storage init failed: {e}")
+
+
+@app.on_event("startup")
+async def ensure_indexes():
+    """Create DB indexes for performance (idempotent)."""
+    try:
+        await db.cd_ledger.create_index([("policy_number", 1), ("date", -1)])
+        await db.endorsements.create_index([("policy_number", 1), ("status", 1)])
+        logging.getLogger(__name__).info("DB indexes ensured")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Index creation failed: {e}")
 
 
 @app.on_event("startup")

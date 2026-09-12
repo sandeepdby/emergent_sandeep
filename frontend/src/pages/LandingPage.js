@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import axios from "axios";
 import { API } from "../auth";
+import { QRCodeCanvas } from "qrcode.react";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -507,6 +508,47 @@ export default function LandingPage({ onGetStarted }) {
               </a>
             </motion.div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* SMS/WhatsApp Opt-in QR Section */}
+      <section id="sms-updates" className="py-20 sm:py-24 px-6 sm:px-8 lg:px-12 bg-[#0F1115]">
+        <div className="max-w-5xl mx-auto">
+          <div className="rounded-3xl bg-gradient-to-br from-[#E05D36] to-[#c94a38] p-8 sm:p-12 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+            <div className="text-white">
+              <span className="text-xs tracking-[0.2em] uppercase font-bold text-white/80">Stay Updated</span>
+              <h2 className="text-3xl sm:text-4xl font-bold mt-4 leading-tight">Get alerts on SMS &amp; WhatsApp</h2>
+              <p className="text-white/85 mt-4 text-sm leading-relaxed">
+                Scan the QR code to opt in for endorsement updates, policy alerts and helpful offerings.
+                It only takes a few seconds — and you can unsubscribe anytime by replying STOP.
+              </p>
+              <div className="mt-6 flex flex-col sm:flex-row gap-3">
+                <Link
+                  to="/sms-optin"
+                  className="inline-flex items-center justify-center gap-2 bg-white text-[#c94a38] rounded-full px-6 py-3 font-semibold text-sm hover:bg-white/90 transition-colors"
+                  data-testid="landing-optin-btn"
+                >
+                  <MessageCircle className="w-4 h-4" /> Opt in now
+                </Link>
+              </div>
+              <div className="mt-6 flex items-center gap-2 text-white/85 text-sm">
+                <Phone className="w-4 h-4" />
+                <span>SMS &amp; Calling: <strong data-testid="landing-sms-number">+1 (877) 517-0579</strong></span>
+              </div>
+            </div>
+            <div className="flex justify-center md:justify-end">
+              <div className="bg-white rounded-2xl p-5 shadow-xl" data-testid="landing-optin-qr">
+                <QRCodeCanvas
+                  value={`${typeof window !== "undefined" ? window.location.origin : ""}/sms-optin`}
+                  size={180}
+                  fgColor="#0F1115"
+                  level="M"
+                  includeMargin={false}
+                />
+                <p className="text-center text-[11px] text-stone-500 mt-3 font-medium">Scan to subscribe</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 

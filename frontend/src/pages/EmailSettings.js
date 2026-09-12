@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Mail, Settings, Send, Loader2, AlertCircle, CheckCircle } from "lucide-react";
+import { Mail, Settings, Send, Loader2, AlertCircle, CheckCircle, MessageSquare, Phone } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function EmailSettings() {
@@ -34,6 +34,34 @@ export default function EmailSettings() {
     attach_excel: false,
     attach_pdf: false
   });
+
+  const [smsForm, setSmsForm] = useState({ to_number: "", channel: "both", message: "" });
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState(null);
+
+  const handleSendTestSms = async (e) => {
+    e.preventDefault();
+    try {
+      setSmsSending(true);
+      setSmsResult(null);
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API}/notifications/test-sms`, smsForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSmsResult(response.data);
+      const r = response.data.results || {};
+      const failed = Object.values(r).some(v => v.status === 'failed');
+      if (failed) {
+        toast.warning("Some channels failed — see details below");
+      } else {
+        toast.success("Test message sent");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to send test message");
+    } finally {
+      setSmsSending(false);
+    }
+  };
 
   useEffect(() => {
     fetchConfig();
@@ -313,6 +341,88 @@ export default function EmailSettings() {
           </CardContent>
         </Card>
       </div>
+
+      {/* SMS / WhatsApp Notifications (Twilio) */}
+      <Card data-testid="twilio-test-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5" />
+            SMS &amp; WhatsApp Notifications
+          </CardTitle>
+          <CardDescription>
+            Powered by Twilio. Endorsement and registration events automatically send SMS &amp; WhatsApp alerts to admins and users. Use this to send a test message.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSendTestSms} className="space-y-4 max-w-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Phone Number</Label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    className="pl-9"
+                    value={smsForm.to_number}
+                    onChange={(e) => setSmsForm({ ...smsForm, to_number: e.target.value })}
+                    placeholder="+919876543210 or 9876543210"
+                    required
+                    data-testid="test-sms-number-input"
+                  />
+                </div>
+                <p className="text-xs text-gray-500">10-digit numbers default to +91 (India).</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Channel</Label>
+                <select
+                  className="w-full border border-gray-200 rounded-md h-10 px-3 text-sm bg-white"
+                  value={smsForm.channel}
+                  onChange={(e) => setSmsForm({ ...smsForm, channel: e.target.value })}
+                  data-testid="test-sms-channel-select"
+                >
+                  <option value="both">SMS + WhatsApp</option>
+                  <option value="sms">SMS only</option>
+                  <option value="whatsapp">WhatsApp only</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Message (optional)</Label>
+              <Textarea
+                value={smsForm.message}
+                onChange={(e) => setSmsForm({ ...smsForm, message: e.target.value })}
+                placeholder="Leave blank to send a default test message"
+                rows={2}
+                data-testid="test-sms-message-input"
+              />
+            </div>
+
+            <Button type="submit" disabled={smsSending} data-testid="test-sms-send-btn">
+              {smsSending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+              Send Test Message
+            </Button>
+
+            {smsResult && (
+              <div className="mt-3 p-3 rounded-md bg-gray-50 border text-sm space-y-1" data-testid="test-sms-result">
+                <p className="text-gray-600">Sent to: <strong>{smsResult.normalized_number}</strong></p>
+                {Object.entries(smsResult.results || {}).map(([channel, info]) => (
+                  <div key={channel} className="flex items-center gap-2">
+                    {info.status === 'sent' ? (
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    )}
+                    <span className="capitalize font-medium">{channel}:</span>
+                    <span className={info.status === 'sent' ? 'text-green-700' : 'text-red-600'}>
+                      {info.status}{info.error ? ` — ${info.error}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

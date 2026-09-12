@@ -286,3 +286,25 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - Resume/file upload on career applications
 - Admin panel to view career applications
 - About Us page content
+
+### Twilio SMS + WhatsApp Notifications (DONE - Jun 2026)
+- **Integration**: Twilio SDK. Credentials in backend/.env (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_SMS_NUMBER=+18775170579 toll-free, TWILIO_WHATSAPP_NUMBER=+917618740675, DEFAULT_COUNTRY_CODE=+91)
+- **Helpers**: `normalize_phone` (E.164, defaults +91 for 10-digit), `send_sms_notification`, `send_whatsapp_notification` (async via asyncio.to_thread, best-effort), `get_scoped_admin_phones`
+- **Auto notifications wired into**: endorsement submission (→ scoped admins), approval/rejection (→ submitting HR), new user registration (welcome → new user). Reuses AI-generated whatsapp_message when available, else concise fallback.
+- **Test endpoint**: POST /api/notifications/test-sms (Admin only) — sends real SMS/WhatsApp, returns per-channel status+SID. UI: "SMS & WhatsApp Notifications" test card on Email Settings page.
+- **Verified**: real send to +919886260579 returned SIDs for both channels; HR gets 403.
+
+### Twilio Toll-Free Opt-In Consent + QR (DONE - Jun 2026)
+- **Public opt-in lead form**: /sms-optin page (Name, Phone, Company, Channel, consent checkbox with Twilio-compliant text). POST /api/sms-optin stores to `sms_optins` collection + sends double opt-in confirmation message. Consent required (400 if unchecked).
+- **Landing page QR**: terracotta band with QRCodeCanvas encoding {origin}/sms-optin, "Opt in now" button, and SMS & Calling number +1 (877) 517-0579 displayed.
+- **Post-login consent toggle**: SMS & WhatsApp updates toggle in UserProfileMenu → POST /api/auth/sms-consent. `sms_consent`/`sms_consent_at` stored on user; returned in login + /auth/me.
+- **Admin view**: GET /api/sms-optins lists opt-in leads (Admin only) — proof of consent for Twilio verification.
+- **Consent text**: "I agree to receive service updates, endorsement notifications, and occasional offerings from InsureHub (Aarogya Innovate Pvt Ltd) via SMS and WhatsApp at the number provided. Message & data rates may apply. Message frequency varies. Reply STOP to unsubscribe, HELP for help."
+
+### Rate Card Auto-Fill Bug Fix (DONE - Jun 2026)
+- **Bug**: POST /api/endorsements (single submit) never looked up rate cards — always used policy blended rate. Bulk-import path wrongly nested rater lookup inside `if age is not None`, skipping flat_rate/per_family raters for age-less rows.
+- **Fix**: Extracted shared helper `resolve_per_life_from_rater(policy_number, age)`. Now used in all 3 endorsement paths (single POST, Excel import, employee-directory bulk). flat_rate/per_family resolve without age; age_band matches by age. Only applies when per_life_premium not explicitly provided.
+- **Verified**: flat_rate=9999 rater → single POST returns per_life=9999 (was 6338 policy fallback).
+
+### DB Indexes (DONE - Jun 2026)
+- Startup hook `ensure_indexes`: cd_ledger (policy_number ASC, date DESC), endorsements (policy_number ASC, status ASC).

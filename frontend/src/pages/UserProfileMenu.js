@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, LogOut, KeyRound, Loader2, Camera } from "lucide-react";
+import { User, LogOut, KeyRound, Loader2, Camera, MessageSquare } from "lucide-react";
 
 export default function UserProfileMenu({ user, onLogout }) {
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -26,6 +26,23 @@ export default function UserProfileMenu({ user, onLogout }) {
 
   const [photoUrl, setPhotoUrl] = useState(resolvePhotoUrl(user?.profile_photo));
   const fileRef = useRef(null);
+
+  const [smsConsent, setSmsConsent] = useState(!!user?.sms_consent);
+  const [consentSaving, setConsentSaving] = useState(false);
+
+  const handleToggleConsent = async () => {
+    const next = !smsConsent;
+    setConsentSaving(true);
+    try {
+      await axios.post(`${API}/auth/sms-consent`, { consent: next }, { headers: getAuthHeaders() });
+      setSmsConsent(next);
+      toast.success(next ? "Subscribed to SMS & WhatsApp updates" : "Unsubscribed from SMS & WhatsApp updates");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update preference");
+    } finally {
+      setConsentSaving(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     if (newPassword.length < 6) { toast.error("New password must be at least 6 characters"); return; }
@@ -124,6 +141,32 @@ export default function UserProfileMenu({ user, onLogout }) {
                 <KeyRound className="w-4 h-4 text-stone-400" />
                 Change Password
               </button>
+
+              {/* SMS/WhatsApp consent toggle */}
+              <div className="px-4 py-2.5 border-t border-stone-100" data-testid="sms-consent-row">
+                <div className="flex items-start gap-3">
+                  <MessageSquare className="w-4 h-4 text-stone-400 mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-stone-700">SMS &amp; WhatsApp updates</span>
+                      <button
+                        type="button"
+                        onClick={handleToggleConsent}
+                        disabled={consentSaving}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${smsConsent ? "bg-[#E05A47]" : "bg-stone-300"}`}
+                        data-testid="sms-consent-toggle"
+                        aria-pressed={smsConsent}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${smsConsent ? "translate-x-4" : "translate-x-0.5"}`} />
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-stone-400 leading-snug mt-1">
+                      Receive service updates &amp; offerings. Msg &amp; data rates may apply. Reply STOP to opt out.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <button
                 onClick={() => { setMenuOpen(false); onLogout(); }}
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"

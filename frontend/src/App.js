@@ -468,6 +468,7 @@ import LandingPage from "./pages/LandingPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import TermsOfServicePage from "./pages/TermsOfServicePage";
 import CareersPage from "./pages/CareersPage";
+import SmsOptIn from "./pages/SmsOptIn";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -524,6 +525,7 @@ function App() {
             <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
             <Route path="/terms-of-service" element={<TermsOfServicePage />} />
             <Route path="/careers" element={<CareersPage />} />
+            <Route path="/sms-optin" element={<SmsOptIn />} />
           </Routes>
         </BrowserRouter>
         <Toaster />
