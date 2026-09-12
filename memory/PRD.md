@@ -309,11 +309,15 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 ### DB Indexes (DONE - Jun 2026)
 - Startup hook `ensure_indexes`: cd_ledger (policy_number ASC, date DESC), endorsements (policy_number ASC, status ASC).
 
-### Cloud Storage — HR + Policy Filter & Columns (DONE - Jun 2026)
-- **Bug**: Admin Cloud Storage showed the Assigned HR only on the E-Cards tab, never showed the Policy, and had no "Filter by HR" — so HR/policy assignment details didn't populate.
+### Cloud Storage — HR + Policy Filter & Columns (DONE - Jun 2026)- **Bug**: Admin Cloud Storage showed the Assigned HR only on the E-Cards tab, never showed the Policy, and had no "Filter by HR" — so HR/policy assignment details didn't populate.
 - **Fix (backend)**: GET /api/documents now accepts `assigned_to_hr` query param (Admin only).
 - **Fix (frontend, CloudStorage.js)**: added "Filter by HR" dropdown; Assigned HR + Policy columns now render on ALL category tabs (admin); search now matches policy_number too.
 - **Verified**: filter by HR → 4 docs, by policy → 2, no filter → 8; columns render.
+
+### Bulk Re-tag Documents + Webhook URL + WhatsApp Templates (DONE - Jun 2026)
+- **Bulk Tag (Re-tag Old Files)**: POST /api/documents/bulk-tag (Admin) sets assigned_to_hr and/or policy_number on selected docs ("none" clears). UI: "Tag HR / Policy" button in Cloud Storage bulk bar → dialog with HR + Policy selects ("— Don't change —" default). Verified via curl (policy set while HR preserved, then cleared) + screenshot.
+- **Webhook URL in-app**: Email Settings SMS card shows the copyable Twilio inbound webhook URL ({BACKEND_URL}/api/twilio/inbound) with a Copy button + STOP/HELP setup note.
+- **WhatsApp templates**: `send_whatsapp_template(to, content_sid, variables, fallback_body)` sends via approved template Content SID with numbered variables; falls back to free-form if SID unset. Env: TWILIO_WA_TEMPLATE_SUBMITTED, TWILIO_WA_TEMPLATE_STATUS (empty until approved). Wired into endorsement submit (→admins) and approve/reject (→HR). Template copy to submit: /app/memory/whatsapp_templates.md.
 - **Inbound webhook**: POST /api/twilio/inbound (public, returns TwiML). Handles STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT → adds to `sms_suppressions`, sets sms_consent=false on matching users/opt-ins, replies unsubscribe confirmation. HELP/INFO → help reply. START/YES/UNSTOP → removes suppression, replies resubscribe confirmation.
 - **Suppression enforcement**: `is_suppressed()` checked in send_sms_notification and send_whatsapp_notification — opted-out numbers are silently skipped.
 - **Admin view**: GET /api/sms-suppressions lists opted-out numbers (Admin only).

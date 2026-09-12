@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Upload, FileText, CreditCard, Heart, FolderOpen, Trash2,
@@ -57,6 +58,10 @@ export default function CloudStorage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [showTagDialog, setShowTagDialog] = useState(false);
+  const [tagHr, setTagHr] = useState("keep");
+  const [tagPolicy, setTagPolicy] = useState("keep");
+  const [tagging, setTagging] = useState(false);
   const [policies, setPolicies] = useState([]);
   const [policyFilter, setPolicyFilter] = useState("all");
   const [hrFilter, setHrFilter] = useState("all");
@@ -192,6 +197,29 @@ export default function CloudStorage() {
       fetchDocuments();
     } catch (err) { toast.error("Bulk delete failed"); }
     finally { setBulkDeleting(false); }
+  };
+
+  const handleBulkTag = async () => {
+    if (selectedDocs.length === 0) return;
+    if (tagHr === "keep" && tagPolicy === "keep") {
+      toast.error("Choose an HR and/or Policy to apply");
+      return;
+    }
+    const payload = { doc_ids: selectedDocs };
+    if (tagHr !== "keep") payload.assigned_to_hr = tagHr;
+    if (tagPolicy !== "keep") payload.policy_number = tagPolicy;
+    setTagging(true);
+    try {
+      const res = await axios.post(`${API}/documents/bulk-tag`, payload, { headers: getAuthHeaders() });
+      toast.success(`${res.data.updated} file(s) tagged`);
+      setShowTagDialog(false);
+      setTagHr("keep");
+      setTagPolicy("keep");
+      setSelectedDocs([]);
+      fetchDocuments();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Bulk tag failed");
+    } finally { setTagging(false); }
   };
 
   const handleSendEcardEmail = async (doc) => {
@@ -351,6 +379,12 @@ export default function CloudStorage() {
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => setSelectedDocs([])} className="text-stone-500 text-xs" data-testid="clear-selection-btn">Clear</Button>
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => setShowTagDialog(true)} className="text-xs" data-testid="bulk-tag-btn">
+                <FolderOpen className="w-3.5 h-3.5 mr-1.5" />
+                Tag HR / Policy
+              </Button>
+            )}
             <Button size="sm" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting} data-testid="bulk-delete-btn">
               {bulkDeleting ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 mr-1.5" />}
               Delete Selected
@@ -521,6 +555,51 @@ export default function CloudStorage() {
           );
         })}
       </Tabs>
+
+      {/* Bulk Tag Dialog */}
+      <Dialog open={showTagDialog} onOpenChange={setShowTagDialog}>
+        <DialogContent className="max-w-md" data-testid="bulk-tag-dialog">
+          <DialogHeader>
+            <DialogTitle>Tag {selectedDocs.length} file{selectedDocs.length > 1 ? "s" : ""}</DialogTitle>
+            <DialogDescription>Assign these documents to an HR user and/or a policy so they show up under the right filters.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Assign to HR</label>
+              <Select value={tagHr} onValueChange={setTagHr}>
+                <SelectTrigger data-testid="bulk-tag-hr-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">— Don't change —</SelectItem>
+                  <SelectItem value="none">Clear HR assignment</SelectItem>
+                  {hrUsers.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Tag to Policy</label>
+              <Select value={tagPolicy} onValueChange={setTagPolicy}>
+                <SelectTrigger data-testid="bulk-tag-policy-select"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="keep">— Don't change —</SelectItem>
+                  <SelectItem value="none">Clear policy tag</SelectItem>
+                  {policies.map((p) => (
+                    <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name || "N/A"}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTagDialog(false)}>Cancel</Button>
+            <Button onClick={handleBulkTag} disabled={tagging || (tagHr === "keep" && tagPolicy === "keep")} className="bg-[#E05A47] hover:bg-[#c94a38]" data-testid="bulk-tag-apply-btn">
+              {tagging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Apply Tags
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

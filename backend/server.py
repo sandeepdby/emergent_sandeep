@@ -29,6 +29,7 @@ from reportlab.lib.units import inch
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import requests as http_requests
 import asyncio
+import json
 from twilio.rest import Client as TwilioClient
 
 
@@ -104,6 +105,9 @@ TWILIO_AUTH_TOKEN = os.environ.get('TWILIO_AUTH_TOKEN', '')
 TWILIO_SMS_NUMBER = os.environ.get('TWILIO_SMS_NUMBER', '')
 TWILIO_WHATSAPP_NUMBER = os.environ.get('TWILIO_WHATSAPP_NUMBER', '')
 DEFAULT_COUNTRY_CODE = os.environ.get('DEFAULT_COUNTRY_CODE', '+91')
+# Approved WhatsApp template Content SIDs (HX...). Empty = fall back to free-form body (24h window only).
+TWILIO_WA_TEMPLATE_SUBMITTED = os.environ.get('TWILIO_WA_TEMPLATE_SUBMITTED', '')
+TWILIO_WA_TEMPLATE_STATUS = os.environ.get('TWILIO_WA_TEMPLATE_STATUS', '')
 
 _twilio_client = None
 
@@ -761,6 +765,39 @@ async def send_whatsapp_notification(to_numbers: List[str], message: str):
             logging.info(f"WhatsApp sent to {num}")
         except Exception as e:
             logging.error(f"Failed to send WhatsApp to {num}: {e}")
+
+
+async def send_whatsapp_template(to_numbers: List[str], content_sid: str, variables: dict, fallback_body: str):
+    """Send WhatsApp using an approved template (content_sid) with numbered variables.
+    Falls back to a free-form body when no template SID is configured (works only inside the 24h window)."""
+    if not content_sid:
+        await send_whatsapp_notification(to_numbers, fallback_body)
+        return
+    client = get_twilio_client()
+    if not client or not TWILIO_WHATSAPP_NUMBER or not to_numbers:
+        return
+    cv = json.dumps({str(k): str(v) for k, v in (variables or {}).items()})
+    seen = set()
+    for raw in to_numbers:
+        num = normalize_phone(raw)
+        if not num or num in seen:
+            continue
+        seen.add(num)
+        if await is_suppressed(num):
+            logging.info(f"Skipping suppressed (opted-out) number {num} [WA template]")
+            continue
+        try:
+            await asyncio.to_thread(
+                client.messages.create,
+                from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+                to=f"whatsapp:{num}",
+                content_sid=content_sid,
+                content_variables=cv,
+            )
+            logging.info(f"WhatsApp template sent to {num}")
+        except Exception as e:
+            logging.error(f"WhatsApp template to {num} failed: {e}; falling back to free-form")
+            await send_whatsapp_notification([num], fallback_body)
 
 
 async def get_scoped_admin_phones(hr_user_id: str = None) -> list:
@@ -2565,7 +2602,14 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                 f"{endorsement_data.policy_number}. Premium: INR {prorata_premium:,.2f}. Pending your approval."
             )
             background_tasks.add_task(send_sms_notification, admin_phones, alert_msg)
-            background_tasks.add_task(send_whatsapp_notification, admin_phones, wa_msg or alert_msg)
+            sub_vars = {
+                "1": current_user.full_name,
+                "2": endorsement_data.member_name,
+                "3": endorsement_data.endorsement_type.value,
+                "4": endorsement_data.policy_number,
+                "5": f"INR {prorata_premium:,.2f}",
+            }
+            background_tasks.add_task(send_whatsapp_template, admin_phones, TWILIO_WA_TEMPLATE_SUBMITTED, sub_vars, wa_msg or alert_msg)
     
     await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "endorsement", endorsement.id, f"Created endorsement for {endorsement_data.member_name} on {endorsement_data.policy_number}")
     return endorsement
@@ -3047,7 +3091,14 @@ async def approve_reject_endorsement(
                 f"Premium: INR {endorsement['prorata_premium']:,.2f}."
             )
             background_tasks.add_task(send_sms_notification, [submitter['phone']], result_msg)
-            background_tasks.add_task(send_whatsapp_notification, [submitter['phone']], wa_msg or result_msg)
+            status_vars = {
+                "1": submitter.get('full_name', 'HR User'),
+                "2": endorsement['member_name'],
+                "3": endorsement['policy_number'],
+                "4": status_text,
+                "5": f"INR {endorsement['prorata_premium']:,.2f}",
+            }
+            background_tasks.add_task(send_whatsapp_template, [submitter['phone']], TWILIO_WA_TEMPLATE_STATUS, status_vars, wa_msg or result_msg)
     
     updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if isinstance(updated_endorsement['created_at'], str):
@@ -7447,6 +7498,67 @@ async def bulk_delete_documents(
             deleted += 1
     await log_audit(current_user.id, current_user.username, current_user.role.value, "BULK_DELETE", "documents", ",".join(data.doc_ids[:5]), f"Bulk deleted {deleted} documents")
     return {"deleted": deleted, "total_requested": len(data.doc_ids)}
+
+
+class BulkTagDocs(BaseModel):
+    doc_ids: List[str]
+    assigned_to_hr: Optional[str] = None  # HR user id, or "none" to clear
+    policy_number: Optional[str] = None   # policy number, or "none" to clear
+
+
+@api_router.post("/documents/bulk-tag")
+async def bulk_tag_documents(
+    data: BulkTagDocs,
+    current_user: User = Depends(get_current_user)
+):
+    """Bulk assign/re-tag documents with an HR user and/or policy (Admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can tag documents")
+    if not data.doc_ids:
+        raise HTTPException(status_code=400, detail="No documents selected")
+
+    set_fields = {}
+
+    # Resolve HR assignment
+    if data.assigned_to_hr is not None:
+        if data.assigned_to_hr in ("none", ""):
+            set_fields.update({
+                "assigned_to_hr": None,
+                "assigned_to_hr_name": None,
+                "assigned_to_hr_email": None,
+                "assigned_to_hr_phone": None,
+            })
+        else:
+            hr_user = await db.users.find_one({"id": data.assigned_to_hr, "role": "HR"}, {"_id": 0})
+            if not hr_user:
+                raise HTTPException(status_code=404, detail="HR user not found")
+            set_fields.update({
+                "assigned_to_hr": data.assigned_to_hr,
+                "assigned_to_hr_name": hr_user.get("full_name", ""),
+                "assigned_to_hr_email": hr_user.get("email", ""),
+                "assigned_to_hr_phone": hr_user.get("phone", ""),
+            })
+
+    # Resolve policy tag
+    if data.policy_number is not None:
+        if data.policy_number in ("none", ""):
+            set_fields["policy_number"] = None
+        else:
+            policy = await db.policies.find_one({"policy_number": data.policy_number}, {"_id": 0, "policy_number": 1})
+            if not policy:
+                raise HTTPException(status_code=404, detail="Policy not found")
+            set_fields["policy_number"] = policy["policy_number"]
+
+    if not set_fields:
+        raise HTTPException(status_code=400, detail="Provide an HR user and/or policy to tag")
+
+    result = await db.documents.update_many(
+        {"id": {"$in": data.doc_ids}, "is_deleted": False},
+        {"$set": set_fields}
+    )
+    await log_audit(current_user.id, current_user.username, current_user.role.value, "BULK_TAG", "documents",
+                    ",".join(data.doc_ids[:5]), f"Bulk tagged {result.modified_count} documents")
+    return {"updated": result.modified_count, "total_requested": len(data.doc_ids)}
 
 
 @api_router.post("/documents/{doc_id}/send-ecard")

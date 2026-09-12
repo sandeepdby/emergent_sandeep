@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Mail, Settings, Send, Loader2, AlertCircle, CheckCircle, MessageSquare, Phone } from "lucide-react";
+import { Mail, Settings, Send, Loader2, AlertCircle, CheckCircle, MessageSquare, Phone, ShieldCheck, Copy } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function EmailSettings() {
@@ -38,6 +38,14 @@ export default function EmailSettings() {
   const [smsForm, setSmsForm] = useState({ to_number: "", channel: "both", message: "" });
   const [smsSending, setSmsSending] = useState(false);
   const [smsResult, setSmsResult] = useState(null);
+
+  const webhookUrl = `${process.env.REACT_APP_BACKEND_URL || ""}/api/twilio/inbound`;
+  const copyWebhook = () => {
+    navigator.clipboard?.writeText(webhookUrl).then(
+      () => toast.success("Webhook URL copied"),
+      () => toast.error("Copy failed — select and copy manually")
+    );
+  };
 
   const handleSendTestSms = async (e) => {
     e.preventDefault();
@@ -421,6 +429,28 @@ export default function EmailSettings() {
               </div>
             )}
           </form>
+
+          {/* Inbound webhook URL for STOP/HELP compliance */}
+          <div className="mt-6 pt-6 border-t max-w-2xl">
+            <p className="text-sm font-medium text-gray-800 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" /> STOP / HELP Auto-Replies
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              To enable automatic STOP-to-unsubscribe and HELP replies, paste this URL into your Twilio number's
+              <strong> "A message comes in" (Messaging) webhook</strong> (HTTP POST):
+            </p>
+            <div className="flex items-center gap-2 mt-2">
+              <code className="flex-1 text-xs bg-gray-50 border rounded-md px-3 py-2 font-mono break-all" data-testid="twilio-webhook-url">
+                {webhookUrl}
+              </code>
+              <Button type="button" variant="outline" size="sm" onClick={copyWebhook} data-testid="copy-webhook-btn">
+                <Copy className="w-3.5 h-3.5 mr-1.5" /> Copy
+              </Button>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-2">
+              US toll-free numbers also auto-handle STOP at the carrier level. Opted-out numbers are automatically skipped on all sends.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
