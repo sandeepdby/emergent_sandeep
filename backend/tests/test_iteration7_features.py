@@ -502,7 +502,7 @@ def cleanup(admin_headers):
             if policy["policy_number"].startswith("TEST-"):
                 requests.delete(f"{BASE_URL}/api/policies/{policy['id']}", headers=admin_headers)
                 print(f"Cleaned up policy: {policy['policy_number']}")
-    except:
+    except Exception:
         pass
 
 

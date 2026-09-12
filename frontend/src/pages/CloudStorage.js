@@ -57,6 +57,9 @@ export default function CloudStorage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [policies, setPolicies] = useState([]);
+  const [policyFilter, setPolicyFilter] = useState("all");
+  const [uploadPolicy, setUploadPolicy] = useState("");
 
   const userData = JSON.parse(localStorage.getItem("user") || "{}");
   const isAdmin = userData.role === "Admin";
@@ -64,7 +67,11 @@ export default function CloudStorage() {
   const fetchDocuments = useCallback(async () => {
     try {
       setError(null);
-      const res = await axios.get(`${API}/documents`, { headers: getAuthHeaders() });
+      let url = `${API}/documents`;
+      if (policyFilter && policyFilter !== "all") {
+        url += `?policy_number=${encodeURIComponent(policyFilter)}`;
+      }
+      const res = await axios.get(url, { headers: getAuthHeaders() });
       setDocuments(res.data);
     } catch (err) {
       setError("Failed to load documents");
@@ -72,7 +79,7 @@ export default function CloudStorage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [policyFilter]);
 
   const fetchHrUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -87,7 +94,10 @@ export default function CloudStorage() {
   useEffect(() => {
     fetchDocuments();
     fetchHrUsers();
-  }, [fetchDocuments, fetchHrUsers]);
+    if (isAdmin) {
+      axios.get(`${API}/policies`, { headers: getAuthHeaders() }).then(r => setPolicies(r.data || [])).catch(() => {});
+    }
+  }, [fetchDocuments, fetchHrUsers, isAdmin]);
 
   const handleUpload = async (fileList, category) => {
     const files = Array.from(fileList);
@@ -101,6 +111,9 @@ export default function CloudStorage() {
     let uploadUrl = `${API}/documents/bulk-upload?category=${encodeURIComponent(category)}`;
     if (isAdmin && selectedHr && selectedHr !== "none") {
       uploadUrl += `&assigned_to_hr=${encodeURIComponent(selectedHr)}`;
+    }
+    if (uploadPolicy && uploadPolicy !== "none") {
+      uploadUrl += `&policy_number=${encodeURIComponent(uploadPolicy)}`;
     }
 
     try {
@@ -241,24 +254,49 @@ export default function CloudStorage() {
       {isAdmin && (
         <Card className="border-blue-200 bg-blue-50/30">
           <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assign uploads to HR:</label>
-              <Select value={selectedHr} onValueChange={setSelectedHr}>
-                <SelectTrigger className="max-w-xs" data-testid="cloud-hr-select">
-                  <SelectValue placeholder="All users (no assignment)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No HR assignment</SelectItem>
-                  {hrUsers.map((u) => (
-                    <SelectItem key={u.id} value={u.id}>{u.full_name} ({u.email})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {selectedHr && selectedHr !== "none" && (
-                <Badge variant="secondary" className="text-xs">
-                  Uploads will be visible to selected HR
-                </Badge>
-              )}
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Assign to HR:</label>
+                <Select value={selectedHr} onValueChange={setSelectedHr}>
+                  <SelectTrigger className="w-48" data-testid="cloud-hr-select">
+                    <SelectValue placeholder="No HR assignment" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No HR assignment</SelectItem>
+                    {hrUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Upload to Policy:</label>
+                <Select value={uploadPolicy} onValueChange={setUploadPolicy}>
+                  <SelectTrigger className="w-56" data-testid="cloud-upload-policy-select">
+                    <SelectValue placeholder="No policy tag" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No policy tag</SelectItem>
+                    {policies.map((p) => (
+                      <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name || "N/A"}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 ml-auto">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Policy:</label>
+                <Select value={policyFilter} onValueChange={setPolicyFilter}>
+                  <SelectTrigger className="w-56" data-testid="cloud-policy-filter">
+                    <SelectValue placeholder="All Policies" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Policies</SelectItem>
+                    {policies.map((p) => (
+                      <SelectItem key={p.id} value={p.policy_number}>{p.policy_number} — {p.policy_holder_name || "N/A"}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>

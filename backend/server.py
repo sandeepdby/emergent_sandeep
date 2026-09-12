@@ -404,12 +404,18 @@ class AgeBand(BaseModel):
 class RaterCreate(BaseModel):
     name: str
     policy_number: str
-    age_bands: List[AgeBand]
+    rate_type: str = "age_band"  # "age_band", "flat_rate", "per_family"
+    flat_rate: Optional[float] = None  # Used when rate_type is "flat_rate"
+    per_family_rate: Optional[float] = None  # Used when rate_type is "per_family"
+    age_bands: List[AgeBand] = []
     assigned_hr_users: List[str] = []  # list of user IDs
 
 class RaterUpdate(BaseModel):
     name: Optional[str] = None
     policy_number: Optional[str] = None
+    rate_type: Optional[str] = None
+    flat_rate: Optional[float] = None
+    per_family_rate: Optional[float] = None
     age_bands: Optional[List[AgeBand]] = None
     assigned_hr_users: Optional[List[str]] = None
 
@@ -558,7 +564,7 @@ def parse_date(date_str: str) -> str:
     try:
         parsed_date = pd.to_datetime(date_str)
         return parsed_date.strftime("%Y-%m-%d")
-    except:
+    except Exception:
         return None
 
 
@@ -2917,13 +2923,19 @@ async def import_endorsements_from_excel(
                         pass
 
                 # Auto-fill from Rate Card if per_life is still None and age is available
-                if per_life is None and age is not None:
-                    rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1})
+                if per_life is None:
+                    rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1, "rate_type": 1, "flat_rate": 1, "per_family_rate": 1})
                     if rater:
-                        for band in rater.get("age_bands", []):
-                            if band["min_age"] <= age <= band["max_age"]:
-                                per_life = band["per_life_rate"]
-                                break
+                        rt = rater.get("rate_type", "age_band")
+                        if rt == "flat_rate" and rater.get("flat_rate"):
+                            per_life = rater["flat_rate"]
+                        elif rt == "per_family" and rater.get("per_family_rate"):
+                            per_life = rater["per_family_rate"]
+                        elif age is not None:
+                            for band in rater.get("age_bands", []):
+                                if band["min_age"] <= age <= band["max_age"]:
+                                    per_life = band["per_life_rate"]
+                                    break
 
                 premium_for_calc = per_life if per_life is not None else (policy.get('annual_premium_per_life') or (round((policy.get('premium', 0) or 0) / max(policy.get('total_lives_covered', 0) or 1, 1), 2)))
                 
@@ -4532,7 +4544,7 @@ async def normalize_cd_ledger_policies(current_user: User = Depends(get_current_
 
     import re
     all_policies = await db.policies.find({}, {"_id": 0, "policy_number": 1, "policy_holder_name": 1}).to_list(1000)
-    all_entries = await db.cd_ledger.find({"policy_number": {"$ne": None, "$ne": ""}}, {"_id": 0, "id": 1, "policy_number": 1}).to_list(50000)
+    all_entries = await db.cd_ledger.find({"policy_number": {"$nin": [None, ""]}}, {"_id": 0, "id": 1, "policy_number": 1}).to_list(50000)
 
     fixed_count = 0
     skip_words = {"pvt", "ltd", "llp", "inc", "corp", "private", "limited", "company", "group", "the"}
@@ -4769,12 +4781,12 @@ async def upload_active_members(
             age = None
             if "age" in df.columns and pd.notna(row.get("age")) and str(row.get("age")).strip() not in ("", "nan"):
                 try: age = int(float(row["age"]))
-                except: pass
+                except Exception: pass
 
             gender = None
             if "gender" in df.columns and pd.notna(row.get("gender")):
                 try: gender = Gender(str(row["gender"]).strip()).value
-                except: pass
+                except Exception: pass
 
             emp_id = str(row.get("employee_id", "")).strip() if pd.notna(row.get("employee_id")) else None
             if emp_id == "nan": emp_id = None
@@ -4785,18 +4797,24 @@ async def upload_active_members(
             si = None
             if "sum_insured" in df.columns and pd.notna(row.get("sum_insured")) and str(row.get("sum_insured")).strip() not in ("", "nan"):
                 try: si = float(row["sum_insured"])
-                except: pass
+                except Exception: pass
             cov = str(row.get("coverage_type", "")).strip() if pd.notna(row.get("coverage_type")) else None
             if cov == "nan": cov = None
 
             # Auto-fill rate from rate card
             per_life = None
             if age is not None:
-                rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1})
+                rater = await db.raters.find_one({"policy_number": policy_number}, {"_id": 0, "age_bands": 1, "rate_type": 1, "flat_rate": 1, "per_family_rate": 1})
                 if rater:
-                    for band in rater.get("age_bands", []):
-                        if band["min_age"] <= age <= band["max_age"]:
-                            per_life = band["per_life_rate"]; break
+                    rt = rater.get("rate_type", "age_band")
+                    if rt == "flat_rate" and rater.get("flat_rate"):
+                        per_life = rater["flat_rate"]
+                    elif rt == "per_family" and rater.get("per_family_rate"):
+                        per_life = rater["per_family_rate"]
+                    elif age is not None:
+                        for band in rater.get("age_bands", []):
+                            if band["min_age"] <= age <= band["max_age"]:
+                                per_life = band["per_life_rate"]; break
 
             policy_ppl = canonical.get("annual_premium_per_life") or (round((canonical.get("premium", 0) or 0) / max(canonical.get("total_lives_covered", 0) or 1, 1), 2))
             premium = per_life if per_life is not None else policy_ppl
@@ -4804,7 +4822,7 @@ async def upload_active_members(
             # Calculate pro-rata
             try:
                 days_from, days_in, remaining, prorata = calculate_prorata_premium(canonical["inception_date"], canonical["expiry_date"], today, premium, "Addition")
-            except:
+            except Exception:
                 days_from, days_in, remaining, prorata = 0, 365, 365, premium
 
             endorsement = Endorsement(
@@ -4854,7 +4872,7 @@ async def upload_active_members(
                 </div>"""
                 excel_attachment = [(file.filename or "member_upload.xlsx", contents)]
                 background_tasks.add_task(send_email_notification, emails, f"InsureHub — {success_count} Members Uploaded via Directory", body, None, None, None, excel_attachment)
-        except: pass
+        except Exception: pass
 
     await log_audit(current_user.id, current_user.username, current_user.role.value, "UPLOAD", "employee_directory", None,
                     f"Uploaded {success_count} members ({error_count} errors)")
@@ -4949,6 +4967,9 @@ async def create_rater(rater: RaterCreate, current_user: User = Depends(get_curr
         "policy_number": rater.policy_number,
         "policy_type": policy.get("policy_type", ""),
         "insurer_name": policy.get("insurer_name") or policy.get("insurance_company") or "",
+        "rate_type": rater.rate_type or "age_band",
+        "flat_rate": rater.flat_rate,
+        "per_family_rate": rater.per_family_rate,
         "age_bands": [ab.model_dump() for ab in rater.age_bands],
         "assigned_hr_users": rater.assigned_hr_users,
         "created_by": current_user.id,
@@ -6828,6 +6849,7 @@ async def upload_document(
     file: UploadFile = File(...),
     category: str = Query(...),
     assigned_to_hr: Optional[str] = Query(None),
+    policy_number: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user)
 ):
     """Upload a document to cloud storage. Admin can assign to HR user."""
@@ -6867,6 +6889,7 @@ async def upload_document(
         "uploaded_by_name": current_user.full_name,
         "uploaded_by_role": current_user.role,
         "assigned_to_hr": assigned_to_hr if assigned_to_hr and current_user.role == UserRole.ADMIN else None,
+        "policy_number": policy_number or None,
         "is_deleted": False,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -6896,6 +6919,7 @@ async def bulk_upload_documents(
     files: List[UploadFile] = File(...),
     category: str = Query(...),
     assigned_to_hr: Optional[str] = Query(None),
+    policy_number: Optional[str] = Query(None),
     current_user: User = Depends(get_current_user)
 ):
     """Upload multiple files or a ZIP file. ZIP files are extracted and each file uploaded individually."""
@@ -6931,6 +6955,7 @@ async def bulk_upload_documents(
             "uploaded_by_name": current_user.full_name,
             "uploaded_by_role": current_user.role,
             "assigned_to_hr": assigned_to_hr if assigned_to_hr and current_user.role == UserRole.ADMIN else None,
+            "policy_number": policy_number or None,
             "is_deleted": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -6986,12 +7011,15 @@ async def bulk_upload_documents(
 @api_router.get("/documents")
 async def list_documents(
     category: Optional[str] = None,
+    policy_number: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """List documents. HR users see only documents assigned to them or uploaded by them."""
     query = {"is_deleted": False}
     if category:
         query["category"] = category
+    if policy_number:
+        query["policy_number"] = policy_number
     if current_user.role == UserRole.HR:
         query["$or"] = [
             {"assigned_to_hr": current_user.id},

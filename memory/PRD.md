@@ -262,6 +262,19 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 - **Endorsement Import**: Green WhatsApp button appears in import results section after successful import
 - **Batch Approve/Reject**: WhatsApp share dialog opens after successful batch operation with "Open WhatsApp" button
 
+### Cloud Storage Policy Filter (DONE - Sep 2026)
+- **Feature**: Documents can now be tagged to a specific policy during upload and filtered by policy
+- **Upload to Policy**: New dropdown when uploading to tag documents to a specific policy_number
+- **Filter by Policy**: New dropdown to filter document list by policy
+- **Endpoints**: GET /api/documents now accepts `policy_number` query param; POST upload/bulk-upload accept `policy_number`
+
+### Rate Cards — Flat Rate & Per Family (DONE - Sep 2026)
+- **Feature**: Rate cards now support 3 rate types: Age Band (default), Per Life Flat Rate, Per Family Rate
+- **Flat Rate**: Single fixed premium per life regardless of age
+- **Per Family**: Single rate per family unit
+- **Data Model**: `rate_type`, `flat_rate`, `per_family_rate` fields added to raters collection
+- **Auto-fill**: Endorsement rate lookup handles all 3 types — flat rate and per-family rates don't need age
+
 ### P0 - Critical Tech Debt
 - Backend modularization: server.py (~6450 lines) needs splitting into /routes, /models, /services
 
