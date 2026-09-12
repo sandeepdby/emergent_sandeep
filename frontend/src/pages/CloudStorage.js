@@ -59,6 +59,7 @@ export default function CloudStorage() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [policies, setPolicies] = useState([]);
   const [policyFilter, setPolicyFilter] = useState("all");
+  const [hrFilter, setHrFilter] = useState("all");
   const [uploadPolicy, setUploadPolicy] = useState("");
 
   const userData = JSON.parse(localStorage.getItem("user") || "{}");
@@ -67,10 +68,11 @@ export default function CloudStorage() {
   const fetchDocuments = useCallback(async () => {
     try {
       setError(null);
-      let url = `${API}/documents`;
-      if (policyFilter && policyFilter !== "all") {
-        url += `?policy_number=${encodeURIComponent(policyFilter)}`;
-      }
+      const params = new URLSearchParams();
+      if (policyFilter && policyFilter !== "all") params.append("policy_number", policyFilter);
+      if (hrFilter && hrFilter !== "all") params.append("assigned_to_hr", hrFilter);
+      const qs = params.toString();
+      const url = `${API}/documents${qs ? `?${qs}` : ""}`;
       const res = await axios.get(url, { headers: getAuthHeaders() });
       setDocuments(res.data);
     } catch (err) {
@@ -79,7 +81,7 @@ export default function CloudStorage() {
     } finally {
       setLoading(false);
     }
-  }, [policyFilter]);
+  }, [policyFilter, hrFilter]);
 
   const fetchHrUsers = useCallback(async () => {
     if (!isAdmin) return;
@@ -284,6 +286,20 @@ export default function CloudStorage() {
                 </Select>
               </div>
               <div className="flex items-center gap-2 ml-auto">
+                <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by HR:</label>
+                <Select value={hrFilter} onValueChange={setHrFilter}>
+                  <SelectTrigger className="w-48" data-testid="cloud-hr-filter">
+                    <SelectValue placeholder="All HR Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All HR Users</SelectItem>
+                    {hrUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-gray-700 whitespace-nowrap">Filter by Policy:</label>
                 <Select value={policyFilter} onValueChange={setPolicyFilter}>
                   <SelectTrigger className="w-56" data-testid="cloud-policy-filter">
@@ -375,7 +391,8 @@ export default function CloudStorage() {
             const q = searchQuery.toLowerCase();
             return (d.original_filename || "").toLowerCase().includes(q)
               || (d.uploaded_by_name || "").toLowerCase().includes(q)
-              || (d.assigned_to_hr_name || "").toLowerCase().includes(q);
+              || (d.assigned_to_hr_name || "").toLowerCase().includes(q)
+              || (d.policy_number || "").toLowerCase().includes(q);
           });
           const isEcard = cat.key === "E-Cards";
           const catIds = catDocs.map(d => d.id);
@@ -416,7 +433,8 @@ export default function CloudStorage() {
                               <th className="px-4 py-3 font-medium text-gray-600">File Name</th>
                               <th className="px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Size</th>
                               <th className="px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Uploaded By</th>
-                              {isEcard && <th className="px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Assigned HR</th>}
+                              {isAdmin && <th className="px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Assigned HR</th>}
+                              {isAdmin && <th className="px-4 py-3 font-medium text-gray-600 hidden lg:table-cell">Policy</th>}
                               <th className="px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Date</th>
                               <th className="px-4 py-3 font-medium text-gray-600 text-right">Actions</th>
                             </tr>
@@ -437,10 +455,17 @@ export default function CloudStorage() {
                                 </td>
                                 <td className="px-4 py-3 text-gray-500 hidden sm:table-cell">{formatFileSize(doc.size)}</td>
                                 <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{doc.uploaded_by_name || "--"}</td>
-                                {isEcard && (
+                                {isAdmin && (
                                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">
                                     {doc.assigned_to_hr_name ? (
                                       <Badge variant="outline" className="text-xs">{doc.assigned_to_hr_name}</Badge>
+                                    ) : "--"}
+                                  </td>
+                                )}
+                                {isAdmin && (
+                                  <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">
+                                    {doc.policy_number ? (
+                                      <Badge variant="outline" className="text-xs font-mono">{doc.policy_number}</Badge>
                                     ) : "--"}
                                   </td>
                                 )}

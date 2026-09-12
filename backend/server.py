@@ -7359,6 +7359,7 @@ async def bulk_upload_documents(
 async def list_documents(
     category: Optional[str] = None,
     policy_number: Optional[str] = None,
+    assigned_to_hr: Optional[str] = None,
     current_user: User = Depends(get_current_user)
 ):
     """List documents. HR users see only documents assigned to them or uploaded by them."""
@@ -7367,6 +7368,8 @@ async def list_documents(
         query["category"] = category
     if policy_number:
         query["policy_number"] = policy_number
+    if assigned_to_hr and current_user.role == UserRole.ADMIN:
+        query["assigned_to_hr"] = assigned_to_hr
     if current_user.role == UserRole.HR:
         query["$or"] = [
             {"assigned_to_hr": current_user.id},

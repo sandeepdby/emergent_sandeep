@@ -309,7 +309,11 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 ### DB Indexes (DONE - Jun 2026)
 - Startup hook `ensure_indexes`: cd_ledger (policy_number ASC, date DESC), endorsements (policy_number ASC, status ASC).
 
-### STOP/HELP Compliance Webhook (DONE - Jun 2026)
+### Cloud Storage — HR + Policy Filter & Columns (DONE - Jun 2026)
+- **Bug**: Admin Cloud Storage showed the Assigned HR only on the E-Cards tab, never showed the Policy, and had no "Filter by HR" — so HR/policy assignment details didn't populate.
+- **Fix (backend)**: GET /api/documents now accepts `assigned_to_hr` query param (Admin only).
+- **Fix (frontend, CloudStorage.js)**: added "Filter by HR" dropdown; Assigned HR + Policy columns now render on ALL category tabs (admin); search now matches policy_number too.
+- **Verified**: filter by HR → 4 docs, by policy → 2, no filter → 8; columns render.
 - **Inbound webhook**: POST /api/twilio/inbound (public, returns TwiML). Handles STOP/STOPALL/UNSUBSCRIBE/CANCEL/END/QUIT → adds to `sms_suppressions`, sets sms_consent=false on matching users/opt-ins, replies unsubscribe confirmation. HELP/INFO → help reply. START/YES/UNSTOP → removes suppression, replies resubscribe confirmation.
 - **Suppression enforcement**: `is_suppressed()` checked in send_sms_notification and send_whatsapp_notification — opted-out numbers are silently skipped.
 - **Admin view**: GET /api/sms-suppressions lists opted-out numbers (Admin only).
