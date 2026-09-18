@@ -16,6 +16,20 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
+### Admin Force Password Reset (DONE - Sep 2026)
+- **Endpoint**: POST /api/users/reset-password (Admin/Master Admin only) — sets another user's password by `email` or `user_id`. Validates min 6 chars + 72-byte bcrypt limit, reuses get_password_hash, audit-logged (ADMIN_RESET_PASSWORD). Email lookup is exact then case-insensitive.
+- **UI**: User Management → key icon per row opens a Reset Password dialog with two options: (1) set a new password directly, (2) email a reset code via existing /auth/forgot-password flow.
+- **Verified in preview**: reset temp user → login with new password 200, old password 401, HR blocked 403.
+- **Note**: prachi@meron.ai is a PRODUCTION-only user (not in preview) — after redeploy, Master Admin can set her password to Password123 from User Management.
+
+
+- **Symptom**: Production showed all modules broken/empty across all roles (Analytics, Cloud Storage, CD Ledger, Dashboard, endorsements). Preview was healthy.
+- **RCA (deployer agent)**: Some prod records held non-finite floats (NaN/Infinity from legacy divide-by-zero where days_in_policy_year=0). FastAPI's default JSONResponse uses json.dumps(allow_nan=False) → `ValueError: Out of range float values are not JSON compliant` → HTTP 500 on every endpoint touching such a record. Pod/DB/secrets all confirmed healthy; NOT a deploy/DB issue.
+- **Fix (server.py)**: (1) `SafeJSONResponse` set as FastAPI `default_response_class` — recursively converts NaN/Inf → null on ALL responses (StreamingResponse/Response file downloads unaffected). (2) Startup hook `sanitize_nonfinite_data` repairs stored NaN/Inf → 0.0 in endorsements/policies/cd_ledger/claims on every boot (idempotent). Write-path divisors already guarded.
+- **Verified in preview**: injected NaN+Infinity into an endorsement → endpoints returned 200 (value null); after restart, cleanup logged "Sanitized non-finite floats in 1 documents" and record repaired to 0.0.
+- **ACTION**: Must redeploy to production for the fix to take effect.
+
+
 ### Phase 1 - Core Portal (DONE)
 - HR & Admin registration/login with JWT auth
 - Endorsement submission (Addition, Deletion, Correction)

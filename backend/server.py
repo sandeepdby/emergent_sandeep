@@ -1,11 +1,12 @@
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query, Body, Request
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import math
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional
@@ -119,7 +120,25 @@ def get_twilio_client():
     return _twilio_client
 
 # Create the main app
-app = FastAPI()
+def clean_floats(obj):
+    """Recursively replace non-finite floats (NaN/Inf) with None so responses are JSON-compliant."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: clean_floats(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [clean_floats(v) for v in obj]
+    return obj
+
+
+class SafeJSONResponse(JSONResponse):
+    """Default response class that sanitizes non-finite floats before serialization.
+    Prevents 'Out of range float values are not JSON compliant' 500s from bad stored data."""
+    def render(self, content) -> bytes:
+        return super().render(clean_floats(content))
+
+
+app = FastAPI(default_response_class=SafeJSONResponse)
 api_router = APIRouter(prefix="/api")
 
 
@@ -1887,6 +1906,47 @@ async def promote_user_to_admin(user_id: str, current_user: User = Depends(get_c
     await db.users.update_one({"id": user_id}, {"$set": {"role": "Admin"}})
     await log_audit(current_user.id, current_user.username, current_user.role.value, "PROMOTE", "user", user_id, f"Promoted '{target.get('username')}' to Admin")
     return {"message": f"User '{target.get('username')}' promoted to Admin"}
+
+
+class AdminSetPasswordRequest(BaseModel):
+    email: Optional[str] = None
+    user_id: Optional[str] = None
+    new_password: str
+
+
+@api_router.post("/users/reset-password")
+async def admin_reset_user_password(req: AdminSetPasswordRequest, current_user: User = Depends(get_current_user)):
+    """Admin/Master Admin: force-reset another user's password by email or user_id."""
+    import re as _re
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can reset passwords")
+    if not req.new_password or len(req.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(req.new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be 72 bytes or fewer")
+
+    target = None
+    if req.user_id:
+        target = await db.users.find_one({"id": req.user_id}, {"_id": 0})
+    elif req.email:
+        email = req.email.strip()
+        target = await db.users.find_one({"email": email}, {"_id": 0})
+        if not target:
+            target = await db.users.find_one(
+                {"email": {"$regex": f"^{_re.escape(email)}$", "$options": "i"}}, {"_id": 0}
+            )
+    else:
+        raise HTTPException(status_code=400, detail="Provide email or user_id")
+
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_hash = get_password_hash(req.new_password)
+    await db.users.update_one({"id": target["id"]}, {"$set": {"password_hash": new_hash}})
+    await log_audit(current_user.id, current_user.username, current_user.role.value,
+                    "ADMIN_RESET_PASSWORD", "user", target["id"],
+                    f"Reset password for {target.get('username')} ({target.get('email')})")
+    return {"message": f"Password reset for {target.get('username') or target.get('email')}"}
 
 
 @api_router.get("/users/{user_id}/contact")
@@ -6983,6 +7043,48 @@ async def ensure_indexes():
         logging.getLogger(__name__).info("DB indexes ensured")
     except Exception as e:
         logging.getLogger(__name__).error(f"Index creation failed: {e}")
+
+
+def _sanitize_doc(obj):
+    """Return (sanitized_obj, changed) replacing non-finite floats with 0.0."""
+    if isinstance(obj, float):
+        return (0.0, True) if not math.isfinite(obj) else (obj, False)
+    if isinstance(obj, dict):
+        changed = False
+        out = {}
+        for k, v in obj.items():
+            nv, ch = _sanitize_doc(v)
+            out[k] = nv
+            changed = changed or ch
+        return out, changed
+    if isinstance(obj, list):
+        changed = False
+        out = []
+        for v in obj:
+            nv, ch = _sanitize_doc(v)
+            out.append(nv)
+            changed = changed or ch
+        return out, changed
+    return obj, False
+
+
+@app.on_event("startup")
+async def sanitize_nonfinite_data():
+    """One-time repair: replace stored non-finite floats (NaN/Inf) in key collections with 0.0."""
+    total_fixed = 0
+    try:
+        for coll_name in ["endorsements", "policies", "cd_ledger", "claims"]:
+            coll = db[coll_name]
+            async for doc in coll.find({}):
+                sanitized, changed = _sanitize_doc(doc)
+                if changed:
+                    _id = sanitized.pop("_id", None)
+                    await coll.update_one({"_id": doc["_id"]}, {"$set": {k: v for k, v in sanitized.items() if k != "_id"}})
+                    total_fixed += 1
+        if total_fixed:
+            logging.getLogger(__name__).info(f"Sanitized non-finite floats in {total_fixed} documents")
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Non-finite data sanitize failed: {e}")
 
 
 @app.on_event("startup")

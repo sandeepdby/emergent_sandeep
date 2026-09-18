@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User, ArrowUpCircle } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User, ArrowUpCircle, KeyRound } from "lucide-react";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -20,6 +20,43 @@ export default function UserManagement() {
   const [formData, setFormData] = useState({
     username: "", password: "", full_name: "", email: "", phone: "", role: "HR",
   });
+  const [resetUser, setResetUser] = useState(null);
+  const [resetPwd, setResetPwd] = useState("");
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!resetUser) return;
+    if (resetPwd.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+    setResetting(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(`${API}/users/reset-password`, { user_id: resetUser.id, new_password: resetPwd }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      toast.success(`Password reset for ${resetUser.username}`);
+      setResetUser(null);
+      setResetPwd("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to reset password");
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleSendResetLink = async () => {
+    if (!resetUser?.email) { toast.error("This user has no email on file"); return; }
+    setResetting(true);
+    try {
+      await axios.post(`${API}/auth/forgot-password`, { email: resetUser.email });
+      toast.success(`Reset code emailed to ${resetUser.email}`);
+      setResetUser(null);
+      setResetPwd("");
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to send reset link");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -157,6 +194,9 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => { setResetUser(u); setResetPwd(""); }} className="text-amber-600 hover:text-amber-800" data-testid={`reset-pwd-${u.id}`} title="Reset Password">
+                          <KeyRound className="w-4 h-4" />
+                        </Button>
                         {u.role === "HR" && (
                           <Button variant="ghost" size="sm" onClick={() => handlePromote(u.id, u.username)} className="text-indigo-600 hover:text-indigo-800" data-testid={`promote-user-${u.id}`} title="Promote to Admin">
                             <ArrowUpCircle className="w-4 h-4" />
@@ -225,6 +265,48 @@ export default function UserManagement() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetUser} onOpenChange={(open) => { if (!open) { setResetUser(null); setResetPwd(""); } }}>
+        <DialogContent className="max-w-md" data-testid="reset-password-dialog">
+          <DialogHeader>
+            <DialogTitle>Reset Password{resetUser ? ` — ${resetUser.full_name}` : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">
+              User: <span className="font-mono">{resetUser?.username}</span>
+              {resetUser?.email ? <> · {resetUser.email}</> : null}
+            </p>
+
+            <div className="space-y-2 p-3 rounded-lg border">
+              <Label className="text-xs font-semibold">Option 1 — Set a new password directly</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={resetPwd}
+                  onChange={(e) => setResetPwd(e.target.value)}
+                  placeholder="New password (min 6 chars)"
+                  data-testid="reset-new-password-input"
+                />
+                <Button onClick={handleResetPassword} disabled={resetting || resetPwd.length < 6} className="bg-[#E05A47] hover:bg-[#c94a38] whitespace-nowrap" data-testid="reset-set-password-btn">
+                  {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Set Password"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2 p-3 rounded-lg border">
+              <Label className="text-xs font-semibold">Option 2 — Email a reset link to the user</Label>
+              <Button variant="outline" onClick={handleSendResetLink} disabled={resetting || !resetUser?.email} className="w-full" data-testid="reset-send-link-btn">
+                {resetting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
+                Send reset code to {resetUser?.email || "email"}
+              </Button>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setResetUser(null); setResetPwd(""); }}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
