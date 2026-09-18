@@ -16,7 +16,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
-### SMS Consent Admin View + Reset Code Note (DONE - Sep 2026)
+### Endorsement Email Recipients + Excel on Approval (DONE - Sep 2026)
+- **Requirement**: On endorsement submit AND approve/reject, email the HR submitter with the uploaded Excel attached; limit recipients to "User + respective admin".
+- **Change (server.py, submit ~2607 & approve ~3143)**: recipients now = HR submitter email + their assigned admin (`managed_by_admin_id`) email. New helper `get_assigned_admin_email` falls back to master admin only when the HR has no assigned admin (so an approver is always notified). Removed fixed recipients ks@/connect@aarogya-assist.com from these emails. Master admin no longer force-added. `consulting@aarogya-assist.com` still CC'd via the global GLOBAL_CC (unchanged). Approval email now generates + attaches the endorsement Excel (previously none). Scope: endorsement submit/approve emails only; all other system emails unchanged.
+- **Verified**: live submit + approve as masteradmin → HTTP 200, log recipients `['sandeepdby@gmail.com']` (ks@/connect@ gone), Excel generated without error on both paths; helper returns master fallback for arpita (no assigned admin) and assigned-admin email otherwise.
+
+
 - **Opt-Out Admin View** (ConsentManagement.js, route /admin/consent, nav "SMS Consent"): two tabs — Opted In (from /api/sms-optins) and Opted Out/STOP (from /api/sms-suppressions) — with summary cards, search, and **CSV export** per tab for Twilio toll-free verification. Verified with seeded data + screenshots.
 - **Reset code note**: User Management reset dialog Option 2 now shows "The emailed reset code is valid for 1 hour" (matches backend enforcement).
 

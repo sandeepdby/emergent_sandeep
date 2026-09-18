@@ -546,6 +546,20 @@ async def get_scoped_admin_emails(hr_user_id: str = None) -> list:
     return list(set(emails))
 
 
+async def get_assigned_admin_email(hr_user_id: str = None) -> Optional[str]:
+    """Return the managing admin's email (managed_by_admin_id) for an HR user.
+    Falls back to the master admin's email if the HR has no assigned admin, so an approver is always notified."""
+    if hr_user_id:
+        hr_user = await db.users.find_one({"id": hr_user_id}, {"_id": 0, "managed_by_admin_id": 1})
+        if hr_user and hr_user.get("managed_by_admin_id"):
+            admin = await db.users.find_one({"id": hr_user["managed_by_admin_id"], "role": "Admin"}, {"_id": 0, "email": 1})
+            if admin and admin.get("email"):
+                return admin["email"]
+    master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "email": 1})
+    if master and master.get("email"):
+        return master["email"]
+    return None
+
 
 def calculate_prorata_premium(
     inception_date_str: str,
@@ -2600,14 +2614,16 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
     except Exception as ex:
         logging.error(f"Failed to generate Excel attachment: {ex}")
     
-    # Fixed notification recipients
-    FIXED_NOTIFY_EMAILS = ["ks@aarogya-assist.com", "connect@aarogya-assist.com"]
-    
-    # Send to assigned admin + master admin (scoped) + fixed recipients
+    # Recipients: HR submitter + their assigned admin ONLY (consulting@ is auto-CC'd globally)
     if SMTP_USERNAME:
-        scoped_emails = await get_scoped_admin_emails(current_user.id)
-        all_notify_emails = list(set(FIXED_NOTIFY_EMAILS + scoped_emails))
-        
+        notify_recipients = []
+        if current_user.email:
+            notify_recipients.append(current_user.email)
+        assigned_admin_email = await get_assigned_admin_email(current_user.id)
+        if assigned_admin_email:
+            notify_recipients.append(assigned_admin_email)
+        all_notify_emails = list(set(notify_recipients))
+
         if all_notify_emails:
             # Try AI-generated content first
             ai_content = await generate_ai_notification("endorsement_submitted", {
@@ -3140,7 +3156,45 @@ async def approve_reject_endorsement(
                     </div>
                 </div>
                 """
-            background_tasks.add_task(send_email_notification, [submitter['email']], notify_subject, notify_body)
+            # Recipients: HR submitter + their assigned admin ONLY (consulting@ auto-CC'd)
+            approve_recipients = [submitter['email']]
+            assigned_admin_email = await get_assigned_admin_email(endorsement['submitted_by'])
+            if assigned_admin_email:
+                approve_recipients.append(assigned_admin_email)
+            approve_recipients = list(set(approve_recipients))
+
+            # Generate Excel attachment for the endorsement
+            approve_excel = None
+            try:
+                erow = [{
+                    'Policy Number': endorsement.get('policy_number', ''),
+                    'Member Name': endorsement.get('member_name', ''),
+                    'Employee ID': endorsement.get('employee_id', ''),
+                    'DOB': endorsement.get('dob', ''),
+                    'Age': endorsement.get('age', ''),
+                    'Gender': endorsement.get('gender', ''),
+                    'Relationship Type': endorsement.get('relationship_type', ''),
+                    'Endorsement Type': endorsement.get('endorsement_type', ''),
+                    'Date of Joining': endorsement.get('date_of_joining', ''),
+                    'Date of Leaving': endorsement.get('date_of_leaving', ''),
+                    'Sum Insured': endorsement.get('sum_insured', ''),
+                    'Pro-rata Premium': endorsement.get('prorata_premium', ''),
+                    'Endorsement Date': endorsement.get('endorsement_date', ''),
+                    'Effective Date': endorsement.get('effective_date', ''),
+                    'Status': status_text,
+                    'Remarks': approval.remarks or endorsement.get('remarks', '') or '',
+                    'Processed By': current_user.full_name,
+                }]
+                ebuf = io.BytesIO()
+                with pd.ExcelWriter(ebuf, engine='openpyxl') as writer:
+                    pd.DataFrame(erow).to_excel(writer, index=False, sheet_name='Endorsement')
+                ebuf.seek(0)
+                _mname = str(endorsement.get('member_name', 'member')).replace(' ', '_')
+                approve_excel = [(f"Endorsement_{_mname}_{status_text}.xlsx", ebuf.read())]
+            except Exception as ex:
+                logging.error(f"Failed to generate approval Excel attachment: {ex}")
+
+            background_tasks.add_task(send_email_notification, approve_recipients, notify_subject, notify_body, None, None, None, approve_excel)
 
         # SMS + WhatsApp to the HR who submitted
         if submitter.get('phone'):
