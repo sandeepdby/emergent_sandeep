@@ -302,6 +302,7 @@ export default function UserManagement() {
                 {resetting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}
                 Send reset code to {resetUser?.email || "email"}
               </Button>
+              <p className="text-[11px] text-amber-600">The emailed reset code is valid for 1 hour — let the user know to use it promptly.</p>
             </div>
           </div>
           <DialogFooter>

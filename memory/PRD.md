@@ -16,8 +16,11 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
-### Admin Force Password Reset (DONE - Sep 2026)
-- **Endpoint**: POST /api/users/reset-password (Admin/Master Admin only) — sets another user's password by `email` or `user_id`. Validates min 6 chars + 72-byte bcrypt limit, reuses get_password_hash, audit-logged (ADMIN_RESET_PASSWORD). Email lookup is exact then case-insensitive.
+### SMS Consent Admin View + Reset Code Note (DONE - Sep 2026)
+- **Opt-Out Admin View** (ConsentManagement.js, route /admin/consent, nav "SMS Consent"): two tabs — Opted In (from /api/sms-optins) and Opted Out/STOP (from /api/sms-suppressions) — with summary cards, search, and **CSV export** per tab for Twilio toll-free verification. Verified with seeded data + screenshots.
+- **Reset code note**: User Management reset dialog Option 2 now shows "The emailed reset code is valid for 1 hour" (matches backend enforcement).
+
+### Admin Force Password Reset (DONE - Sep 2026)- **Endpoint**: POST /api/users/reset-password (Admin/Master Admin only) — sets another user's password by `email` or `user_id`. Validates min 6 chars + 72-byte bcrypt limit, reuses get_password_hash, audit-logged (ADMIN_RESET_PASSWORD). Email lookup is exact then case-insensitive.
 - **UI**: User Management → key icon per row opens a Reset Password dialog with two options: (1) set a new password directly, (2) email a reset code via existing /auth/forgot-password flow.
 - **Verified in preview**: reset temp user → login with new password 200, old password 401, HR blocked 403.
 - **Note**: prachi@meron.ai is a PRODUCTION-only user (not in preview) — after redeploy, Master Admin can set her password to Password123 from User Management.

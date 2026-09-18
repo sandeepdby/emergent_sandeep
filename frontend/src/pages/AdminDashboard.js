@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
-import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu, Table2, Contact } from "lucide-react";
+import { CheckSquare, Download, Layers, ClipboardList, BarChart3, Mail, CloudUpload, Wallet, FileSpreadsheet, Users, FileCheck, ScrollText, Link2, Quote, BookOpen, ChevronLeft, ChevronRight, Menu, Table2, Contact, MessageSquare } from "lucide-react";
 import { AuthContext } from "../auth";
 import UserProfileMenu from "./UserProfileMenu";
 import ApproveEndorsements from "./ApproveEndorsements";
@@ -20,6 +20,7 @@ import TestimonialsManagement from "./TestimonialsManagement";
 import PolicyExplainer from "./PolicyExplainer";
 import Raters from "./Raters";
 import EmployeeDirectory from "./EmployeeDirectory";
+import ConsentManagement from "./ConsentManagement";
 
 const navGroups = [
   {
@@ -61,6 +62,7 @@ const navGroups = [
       { path: "/admin/users", label: "User Management", icon: Users },
       { path: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
       { path: "/admin/email", label: "Email Settings", icon: Mail },
+      { path: "/admin/consent", label: "SMS Consent", icon: MessageSquare },
       { path: "/admin/testimonials", label: "Testimonials", icon: Quote },
     ],
   },
@@ -189,6 +191,7 @@ class AdminDashboard extends React.Component {
               <Route path="/raters" element={<Raters isAdmin={true} />} />
               <Route path="/download" element={<DownloadApproved />} />
               <Route path="/email" element={<EmailSettings />} />
+              <Route path="/consent" element={<ConsentManagement />} />
               <Route path="/storage" element={<CloudStorage />} />
               <Route path="/users" element={<UserManagement />} />
               <Route path="/audit-log" element={<AuditLog />} />
