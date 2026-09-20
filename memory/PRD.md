@@ -16,7 +16,13 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
-### HR Submitter Confirmation (Email + SMS + WhatsApp) (DONE - Sep 2026)
+### Notify User + Admin on All Events (DONE - Sep 2026)
+- Unified recipient rule for submission, approval AND rejection: **SMS + WhatsApp go to both the HR user and their respective admin**, and the **email (with endorsement Excel) also goes to both** (consulting@ CC retained).
+- Added `get_assigned_admin_phone` (assigned admin phone, master fallback). Submission admin SMS/WhatsApp now targets the assigned admin (was scoped master+assigned). Approval/rejection now sends SMS + WhatsApp to submitter AND assigned admin (previously submitter only); approval block made self-contained (safe if submitter has no email). Neutral message wording works for both recipients.
+- Verified in preview: submit + approve → HTTP 200, email(submitter+admin) + SMS + WhatsApp firing on both, no errors.
+- NEEDS REDEPLOY to reach production.
+
+
 - On endorsement submit (POST /api/endorsements — used by both single and family-batch flows), the HR submitter now receives: email (already added), plus a **SMS + WhatsApp confirmation** to current_user.phone ("submitted successfully… pending approval"). Admins still get their separate alert SMS/WhatsApp. WhatsApp confirmation is free-form (send_whatsapp_notification).
 - Verified in preview: submission log shows submitter email + admin SMS/WhatsApp + HR confirmation SMS/WhatsApp firing.
 - NOTE: "email not reaching HR" on production is because the earlier submitter-email change hadn't been redeployed — a redeploy applies both.

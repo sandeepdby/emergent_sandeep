@@ -561,6 +561,21 @@ async def get_assigned_admin_email(hr_user_id: str = None) -> Optional[str]:
     return None
 
 
+async def get_assigned_admin_phone(hr_user_id: str = None) -> Optional[str]:
+    """Return the managing admin's phone (managed_by_admin_id) for an HR user.
+    Falls back to the master admin's phone if the HR has no assigned admin."""
+    if hr_user_id:
+        hr_user = await db.users.find_one({"id": hr_user_id}, {"_id": 0, "managed_by_admin_id": 1})
+        if hr_user and hr_user.get("managed_by_admin_id"):
+            admin = await db.users.find_one({"id": hr_user["managed_by_admin_id"], "role": "Admin"}, {"_id": 0, "phone": 1})
+            if admin and admin.get("phone"):
+                return admin["phone"]
+    master = await db.users.find_one({"username": "masteradmin"}, {"_id": 0, "phone": 1})
+    if master and master.get("phone"):
+        return master["phone"]
+    return None
+
+
 def calculate_prorata_premium(
     inception_date_str: str,
     expiry_date_str: str,
@@ -2668,8 +2683,9 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                 """
             background_tasks.add_task(send_email_notification, all_notify_emails, notify_subject, notify_body, None, None, None, excel_attachment)
 
-        # SMS + WhatsApp alert to scoped admins
-        admin_phones = await get_scoped_admin_phones(current_user.id)
+        # SMS + WhatsApp alert to the respective admin
+        admin_phone = await get_assigned_admin_phone(current_user.id)
+        admin_phones = [admin_phone] if admin_phone else []
         if admin_phones:
             wa_msg = ai_content.get('whatsapp_message') if ai_content else None
             alert_msg = (
@@ -3207,23 +3223,31 @@ async def approve_reject_endorsement(
 
             background_tasks.add_task(send_email_notification, approve_recipients, notify_subject, notify_body, None, None, None, approve_excel)
 
-        # SMS + WhatsApp to the HR who submitted
-        if submitter.get('phone'):
-            wa_msg = ai_content.get('whatsapp_message') if ai_content else None
+        # SMS + WhatsApp to the HR submitter AND the respective admin
+        if submitter:
+            _status = "Approved" if approval.status == EndorsementStatus.APPROVED else "Rejected"
             result_msg = (
-                f"InsureHub: Your endorsement for {endorsement['member_name']} on policy "
-                f"{endorsement['policy_number']} has been {status_text}. "
+                f"InsureHub: Endorsement for {endorsement['member_name']} on policy "
+                f"{endorsement['policy_number']} has been {_status}. "
                 f"Premium: INR {endorsement['prorata_premium']:,.2f}."
             )
-            background_tasks.add_task(send_sms_notification, [submitter['phone']], result_msg)
             status_vars = {
                 "1": submitter.get('full_name', 'HR User'),
                 "2": endorsement['member_name'],
                 "3": endorsement['policy_number'],
-                "4": status_text,
+                "4": _status,
                 "5": f"INR {endorsement['prorata_premium']:,.2f}",
             }
-            background_tasks.add_task(send_whatsapp_template, [submitter['phone']], TWILIO_WA_TEMPLATE_STATUS, status_vars, wa_msg or result_msg)
+            notify_phones = []
+            if submitter.get('phone'):
+                notify_phones.append(submitter['phone'])
+            _admin_phone = await get_assigned_admin_phone(endorsement['submitted_by'])
+            if _admin_phone:
+                notify_phones.append(_admin_phone)
+            notify_phones = list(set(notify_phones))
+            if notify_phones:
+                background_tasks.add_task(send_sms_notification, notify_phones, result_msg)
+                background_tasks.add_task(send_whatsapp_template, notify_phones, TWILIO_WA_TEMPLATE_STATUS, status_vars, result_msg)
     
     updated_endorsement = await db.endorsements.find_one({"id": endorsement_id}, {"_id": 0})
     if isinstance(updated_endorsement['created_at'], str):
