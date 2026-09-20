@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User, ArrowUpCircle, KeyRound } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Users, ShieldCheck, User, ArrowUpCircle, KeyRound, Pencil, AlertTriangle } from "lucide-react";
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -23,6 +23,31 @@ export default function UserManagement() {
   const [resetUser, setResetUser] = useState(null);
   const [resetPwd, setResetPwd] = useState("");
   const [resetting, setResetting] = useState(false);
+
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ full_name: "", email: "", phone: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  const openEdit = (u) => {
+    setEditUser(u);
+    setEditForm({ full_name: u.full_name || "", email: u.email || "", phone: u.phone || "" });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editUser) return;
+    setSavingEdit(true);
+    try {
+      const token = localStorage.getItem("token");
+      await axios.patch(`${API}/users/${editUser.id}`, editForm, { headers: { Authorization: `Bearer ${token}` } });
+      toast.success(`Updated ${editUser.username}`);
+      setEditUser(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to update user");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleResetPassword = async () => {
     if (!resetUser) return;
@@ -127,6 +152,7 @@ export default function UserManagement() {
 
   const admins = users.filter(u => u.role === "Admin");
   const hrs = users.filter(u => u.role === "HR");
+  const missingPhone = users.filter(u => !u.phone);
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>;
@@ -155,6 +181,15 @@ export default function UserManagement() {
           </CardContent>
         </Card>
       </div>
+
+      {missingPhone.length > 0 && (
+        <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-300 bg-amber-50" data-testid="missing-phone-banner">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-800">
+            <strong>{missingPhone.length}</strong> account{missingPhone.length > 1 ? "s are" : " is"} missing a phone number — SMS & WhatsApp alerts won't reach {missingPhone.length > 1 ? "them" : "them"}. Add numbers via the edit (pencil) action: {missingPhone.slice(0, 6).map(u => u.username).join(", ")}{missingPhone.length > 6 ? "…" : ""}.
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -185,7 +220,9 @@ export default function UserManagement() {
                     <TableCell className="font-mono text-sm">{u.username}</TableCell>
                     <TableCell className="font-medium">{u.full_name}</TableCell>
                     <TableCell className="text-sm">{u.email}</TableCell>
-                    <TableCell className="text-sm">{u.phone || "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      {u.phone ? u.phone : <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-600">No phone</Badge>}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Badge variant={u.role === "Admin" ? "default" : "secondary"}>{u.role}</Badge>
@@ -194,6 +231,9 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)} className="text-blue-600 hover:text-blue-800" data-testid={`edit-user-${u.id}`} title="Edit user">
+                          <Pencil className="w-4 h-4" />
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => { setResetUser(u); setResetPwd(""); }} className="text-amber-600 hover:text-amber-800" data-testid={`reset-pwd-${u.id}`} title="Reset Password">
                           <KeyRound className="w-4 h-4" />
                         </Button>
@@ -307,6 +347,36 @@ export default function UserManagement() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setResetUser(null); setResetPwd(""); }}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={!!editUser} onOpenChange={(open) => { if (!open) setEditUser(null); }}>
+        <DialogContent className="max-w-md" data-testid="edit-user-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit User{editUser ? ` — ${editUser.username}` : ""}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Full Name</Label>
+              <Input value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} data-testid="edit-fullname-input" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} placeholder="user@company.com" data-testid="edit-email-input" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Phone (for SMS & WhatsApp)</Label>
+              <Input value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} placeholder="+91 98765 43210" data-testid="edit-phone-input" />
+              <p className="text-[11px] text-gray-400">10-digit numbers default to +91. Required for SMS/WhatsApp alerts.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit} className="bg-[#E05A47] hover:bg-[#c94a38]" data-testid="edit-save-btn">
+              {savingEdit ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null} Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -726,9 +726,13 @@ async def send_email_notification(
             server.sendmail(msg['From'], all_recipients, msg.as_string())
         
         logging.info(f"Email sent successfully to {to_emails}")
+        for _r in (to_emails or []):
+            await log_notification("email", _r, "sent", message=body, subject=subject)
         return True
     except Exception as e:
         logging.error(f"Failed to send email: {e}")
+        for _r in (to_emails or []):
+            await log_notification("email", _r, "failed", message=body, subject=subject, error=e)
         return False
 
 
@@ -755,6 +759,39 @@ def normalize_phone(number) -> Optional[str]:
     return f"+{n}"
 
 
+async def log_notification(channel: str, recipient: str, status: str, message: str = None,
+                           subject: str = None, sid: str = None, error=None, context: str = None):
+    """Record a sent/failed/skipped notification for the per-user notification log."""
+    try:
+        user = None
+        if channel == "email" and recipient:
+            user = await db.users.find_one({"email": recipient}, {"_id": 0, "id": 1, "full_name": 1})
+        elif recipient:
+            n = normalize_phone(recipient)
+            if n:
+                async for c in db.users.find({"phone": {"$nin": [None, ""]}}, {"_id": 0, "id": 1, "full_name": 1, "phone": 1}):
+                    if normalize_phone(c.get("phone")) == n:
+                        user = c
+                        break
+        entry = {
+            "id": str(uuid.uuid4()),
+            "channel": channel,
+            "recipient": recipient,
+            "recipient_user_id": user.get("id") if user else None,
+            "recipient_name": user.get("full_name") if user else None,
+            "status": status,
+            "subject": subject,
+            "message_preview": (message[:280] if message else None),
+            "provider_sid": sid,
+            "error": (str(error)[:300] if error else None),
+            "context": context,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.notification_logs.insert_one(entry)
+    except Exception as e:
+        logging.error(f"Failed to log notification: {e}")
+
+
 async def is_suppressed(number: str) -> bool:
     """Return True if a normalized number has opted out (STOP)."""
     n = normalize_phone(number)
@@ -776,17 +813,20 @@ async def send_sms_notification(to_numbers: List[str], message: str):
         seen.add(num)
         if await is_suppressed(num):
             logging.info(f"Skipping suppressed (opted-out) number {num} [SMS]")
+            await log_notification("sms", num, "skipped", message=message, error="opted out (STOP)")
             continue
         try:
-            await asyncio.to_thread(
+            _m = await asyncio.to_thread(
                 client.messages.create,
                 body=message,
                 from_=TWILIO_SMS_NUMBER,
                 to=num,
             )
             logging.info(f"SMS sent to {num}")
+            await log_notification("sms", num, "sent", message=message, sid=getattr(_m, "sid", None))
         except Exception as e:
             logging.error(f"Failed to send SMS to {num}: {e}")
+            await log_notification("sms", num, "failed", message=message, error=e)
 
 
 async def send_whatsapp_notification(to_numbers: List[str], message: str):
@@ -802,17 +842,20 @@ async def send_whatsapp_notification(to_numbers: List[str], message: str):
         seen.add(num)
         if await is_suppressed(num):
             logging.info(f"Skipping suppressed (opted-out) number {num} [WhatsApp]")
+            await log_notification("whatsapp", num, "skipped", message=message, error="opted out (STOP)")
             continue
         try:
-            await asyncio.to_thread(
+            _m = await asyncio.to_thread(
                 client.messages.create,
                 body=message,
                 from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
                 to=f"whatsapp:{num}",
             )
             logging.info(f"WhatsApp sent to {num}")
+            await log_notification("whatsapp", num, "sent", message=message, sid=getattr(_m, "sid", None))
         except Exception as e:
             logging.error(f"Failed to send WhatsApp to {num}: {e}")
+            await log_notification("whatsapp", num, "failed", message=message, error=e)
 
 
 async def send_whatsapp_template(to_numbers: List[str], content_sid: str, variables: dict, fallback_body: str):
@@ -833,9 +876,10 @@ async def send_whatsapp_template(to_numbers: List[str], content_sid: str, variab
         seen.add(num)
         if await is_suppressed(num):
             logging.info(f"Skipping suppressed (opted-out) number {num} [WA template]")
+            await log_notification("whatsapp", num, "skipped", message=fallback_body, error="opted out (STOP)")
             continue
         try:
-            await asyncio.to_thread(
+            _m = await asyncio.to_thread(
                 client.messages.create,
                 from_=f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
                 to=f"whatsapp:{num}",
@@ -843,6 +887,7 @@ async def send_whatsapp_template(to_numbers: List[str], content_sid: str, variab
                 content_variables=cv,
             )
             logging.info(f"WhatsApp template sent to {num}")
+            await log_notification("whatsapp", num, "sent", message=fallback_body, sid=getattr(_m, "sid", None), context="template")
         except Exception as e:
             logging.error(f"WhatsApp template to {num} failed: {e}; falling back to free-form")
             await send_whatsapp_notification([num], fallback_body)
@@ -1352,6 +1397,33 @@ async def list_sms_suppressions(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Only admins can view suppressions")
     items = await db.sms_suppressions.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return items
+
+
+@api_router.get("/notification-logs")
+async def list_notification_logs(
+    channel: Optional[str] = None,
+    status: Optional[str] = None,
+    q: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 500,
+    current_user: User = Depends(get_current_user)
+):
+    """Per-user history of email/SMS/WhatsApp alerts with delivery status (Admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can view notification logs")
+    import re as _re
+    query = {}
+    if channel and channel != "all":
+        query["channel"] = channel
+    if status and status != "all":
+        query["status"] = status
+    if user_id:
+        query["recipient_user_id"] = user_id
+    if q:
+        rx = {"$regex": _re.escape(q), "$options": "i"}
+        query["$or"] = [{"recipient": rx}, {"recipient_name": rx}, {"subject": rx}, {"message_preview": rx}]
+    logs = await db.notification_logs.find(query, {"_id": 0}).sort("created_at", -1).to_list(min(limit, 2000))
+    return logs
 
 
 # ==================== CAREER APPLICATION ENDPOINT ====================
@@ -1941,6 +2013,35 @@ class AdminSetPasswordRequest(BaseModel):
     email: Optional[str] = None
     user_id: Optional[str] = None
     new_password: str
+
+
+class UserUpdateRequest(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@api_router.patch("/users/{user_id}")
+async def update_user(user_id: str, req: UserUpdateRequest, current_user: User = Depends(get_current_user)):
+    """Admin: update a user's name, email, and/or phone."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can edit users")
+    target = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    updates = {}
+    if req.full_name is not None:
+        updates["full_name"] = req.full_name.strip()
+    if req.email is not None:
+        updates["email"] = req.email.strip()
+    if req.phone is not None:
+        updates["phone"] = req.phone.strip()
+    if not updates:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    await db.users.update_one({"id": user_id}, {"$set": updates})
+    await log_audit(current_user.id, current_user.username, current_user.role.value,
+                    "UPDATE_USER", "user", user_id, f"Updated {', '.join(updates.keys())}")
+    return {"message": "User updated", **updates}
 
 
 @api_router.post("/users/reset-password")

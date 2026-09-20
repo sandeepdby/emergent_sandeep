@@ -16,7 +16,13 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
-### Notify User + Admin on All Events (DONE - Sep 2026)
+### Notification Log + User Edit + WhatsApp Template SIDs (DONE - Sep 2026)
+- **Notification Log**: every email/SMS/WhatsApp send is recorded to `notification_logs` (channel, recipient, resolved recipient_user_id/name, status sent/failed/skipped, provider SID, error, subject/preview, timestamp) via a central `log_notification` helper wired into all 4 send functions. GET /api/notification-logs (admin, filters: channel/status/q/user_id). UI: "Sent Log" tab on the SMS Consent page with channel/status filters, search, delivery-status badges, and CSV export.
+- **WhatsApp Template SIDs**: TWILIO_WA_TEMPLATE_SUBMITTED and TWILIO_WA_TEMPLATE_STATUS both set to HX28a70cf88ef1162aa3ceddbee18f942f (user's approved template, used for both events). Verified: template send succeeded (MM… SID, no fallback) with the 5 content variables.
+- **User Edit + missing-phone flag**: PATCH /api/users/{id} (admin) updates full_name/email/phone. UI: Edit (pencil) action in User Management with a dialog; rows without a phone show a "No phone" badge; an amber banner lists accounts missing a phone number (SMS/WhatsApp can't reach them).
+- Verified in preview: PATCH updates phone (200), notification-logs returns entries with SIDs + resolved names, both pages render (screenshots). Recurring visual-edits Babel plugin error appeared during build; cleared on frontend restart.
+
+
 - Unified recipient rule for submission, approval AND rejection: **SMS + WhatsApp go to both the HR user and their respective admin**, and the **email (with endorsement Excel) also goes to both** (consulting@ CC retained).
 - Added `get_assigned_admin_phone` (assigned admin phone, master fallback). Submission admin SMS/WhatsApp now targets the assigned admin (was scoped master+assigned). Approval/rejection now sends SMS + WhatsApp to submitter AND assigned admin (previously submitter only); approval block made self-contained (safe if submitter has no email). Neutral message wording works for both recipients.
 - Verified in preview: submit + approve → HTTP 200, email(submitter+admin) + SMS + WhatsApp firing on both, no errors.
