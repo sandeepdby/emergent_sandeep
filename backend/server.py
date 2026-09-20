@@ -2686,6 +2686,17 @@ async def create_endorsement(endorsement_data: EndorsementCreate, background_tas
                 "5": f"INR {prorata_premium:,.2f}",
             }
             background_tasks.add_task(send_whatsapp_template, admin_phones, TWILIO_WA_TEMPLATE_SUBMITTED, sub_vars, wa_msg or alert_msg)
+
+        # SMS + WhatsApp confirmation to the HR user who submitted
+        if current_user.phone:
+            first_name = (current_user.full_name or "there").split(" ")[0]
+            confirm_msg = (
+                f"InsureHub: Hi {first_name}, your endorsement for {endorsement_data.member_name} "
+                f"({endorsement_data.endorsement_type.value}) on policy {endorsement_data.policy_number} "
+                f"was submitted successfully. Premium: INR {prorata_premium:,.2f}. It is now pending approval."
+            )
+            background_tasks.add_task(send_sms_notification, [current_user.phone], confirm_msg)
+            background_tasks.add_task(send_whatsapp_notification, [current_user.phone], confirm_msg)
     
     await log_audit(current_user.id, current_user.username, current_user.role.value, "CREATE", "endorsement", endorsement.id, f"Created endorsement for {endorsement_data.member_name} on {endorsement_data.policy_number}")
     return endorsement

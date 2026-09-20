@@ -16,8 +16,12 @@ Build an AI-powered insurance endorsement management portal (InsureHub) for Aaro
 
 ## Implemented Features
 
-### Endorsement Email Recipients + Excel on Approval (DONE - Sep 2026)
-- **Requirement**: On endorsement submit AND approve/reject, email the HR submitter with the uploaded Excel attached; limit recipients to "User + respective admin".
+### HR Submitter Confirmation (Email + SMS + WhatsApp) (DONE - Sep 2026)
+- On endorsement submit (POST /api/endorsements — used by both single and family-batch flows), the HR submitter now receives: email (already added), plus a **SMS + WhatsApp confirmation** to current_user.phone ("submitted successfully… pending approval"). Admins still get their separate alert SMS/WhatsApp. WhatsApp confirmation is free-form (send_whatsapp_notification).
+- Verified in preview: submission log shows submitter email + admin SMS/WhatsApp + HR confirmation SMS/WhatsApp firing.
+- NOTE: "email not reaching HR" on production is because the earlier submitter-email change hadn't been redeployed — a redeploy applies both.
+
+### Endorsement Email Recipients + Excel on Approval (DONE - Sep 2026)- **Requirement**: On endorsement submit AND approve/reject, email the HR submitter with the uploaded Excel attached; limit recipients to "User + respective admin".
 - **Change (server.py, submit ~2607 & approve ~3143)**: recipients now = HR submitter email + their assigned admin (`managed_by_admin_id`) email. New helper `get_assigned_admin_email` falls back to master admin only when the HR has no assigned admin (so an approver is always notified). Removed fixed recipients ks@/connect@aarogya-assist.com from these emails. Master admin no longer force-added. `consulting@aarogya-assist.com` still CC'd via the global GLOBAL_CC (unchanged). Approval email now generates + attaches the endorsement Excel (previously none). Scope: endorsement submit/approve emails only; all other system emails unchanged.
 - **Verified**: live submit + approve as masteradmin → HTTP 200, log recipients `['sandeepdby@gmail.com']` (ks@/connect@ gone), Excel generated without error on both paths; helper returns master fallback for arpita (no assigned admin) and assigned-admin email otherwise.
 
